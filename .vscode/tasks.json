@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "OpenVARA: format check",
+      "type": "shell",
+      "command": "cargo fmt --check",
+      "options": {
+        "cwd": "${workspaceFolder}/rust"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OpenVARA: clippy",
+      "type": "shell",
+      "command": "cargo clippy --all-targets -- -D warnings",
+      "options": {
+        "cwd": "${workspaceFolder}/rust"
+      },
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "OpenVARA: test",
+      "type": "shell",
+      "command": "cargo test",
+      "options": {
+        "cwd": "${workspaceFolder}/rust"
+      },
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "OpenVARA: cross-target check",
+      "type": "shell",
+      "command": "for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-pc-windows-msvc x86_64-pc-windows-msvc aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do cargo check --target \"$target\" || exit 1; done",
+      "options": {
+        "cwd": "${workspaceFolder}/rust"
+      },
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "OpenVARA: verify",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "OpenVARA: format check",
+        "OpenVARA: clippy",
+        "OpenVARA: test",
+        "OpenVARA: cross-target check"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

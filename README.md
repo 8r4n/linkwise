@@ -33,6 +33,10 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
+The repository pins the stable Rust channel and the six supported target
+triples in [`rust-toolchain.toml`](rust-toolchain.toml). VS Code users can run
+the complete sequence through the `OpenVARA: verify` task.
+
 The Rust crate is currently a scaffold. Modem protocol, framing, modulation,
 and audio behavior are not implemented yet. VARA remains the interoperability
 target; OpenVARA is the name of this independent project.
