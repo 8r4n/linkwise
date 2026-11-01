@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "ghidra-mcp": {
+      "type": "stdio",
+      "command": "/Users/bdurepo/Development/vara/.venv/bin/bridge-mcp-ghidra"
+    },
+    "utm": {
+      "type": "stdio",
+      "command": "/Users/bdurepo/.local/bin/uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/neverprepared/mcp-utm.git@5f6bab58061f995b90cd5a5af4101211b6768fd4",
+        "--with",
+        "mcp[cli]>=1.9,<2",
+        "mcp-utm"
+      ]
+    }
+  }
+}

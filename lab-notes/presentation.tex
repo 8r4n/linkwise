@@ -1,0 +1,159 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{seahorse}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\hypersetup{
+  colorlinks=true,
+  urlcolor=blue!60!black,
+  pdftitle={VARA HF Cross-Platform Rust Modem - Progress Briefing},
+  pdfauthor={VARA modem research project}
+}
+
+\title{A Cross-Platform Rust Modem}
+\subtitle{VARA HF interoperability research - progress briefing}
+\author{Engineering research project}
+\institute{Lab update}
+\date{30 October 2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Objective and guardrails}
+  \begin{block}{Goal}
+    Independently implement a modem in Rust that interoperates with VARA HF
+    and can be installed on macOS, Windows, and Linux.
+  \end{block}
+  \begin{itemize}
+    \item Separate a portable protocol/DSP core from OS audio and packaging.
+    \item Use evidence-led compatibility tests; UI strings are leads, not specs.
+    \item Keep the implementation independent of decompiled reference code.
+    \item Limit dynamic radio tests to controlled, non-radiating setups.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Work completed so far}
+  \begin{enumerate}
+    \item Installed Ghidra 12.1.4 and the matching GhidraMCP 7.0.0 extension.
+    \item Extracted the supplied VARA HF v4.9.0 installer payload.
+    \item Imported the installer and actual application into Ghidra; saved
+          Recon bookmarks.
+    \item Installed Rust 1.99.1 and six macOS/Windows/Linux ARM64/x86\_64
+          target libraries.
+    \item Created a dependency-free crate with API, audio, modem, and platform
+          boundaries.
+    \item Organized supplied reference assets and began these lab records.
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{What the reference tells us -- and does not}
+  \begin{itemize}
+    \item The v4.9.0 application is a 32-bit Windows PE executable; Ghidra
+          reports 808 functions.
+    \item UI text documents a TCP Command Port default of 8300.
+    \item Ghidra string references map command/status text (CQFRAME, LISTEN,
+          DRIVELEVEL, VERSION, CONNECTED/DISCONNECTED, BITRATE) to code.
+    \item The binary carries VB6 Winsock/serial-control metadata.
+    \item Audio UI has separate input/output device selection and signal
+          diagnostics.
+    \item Three mode-named data files exist: 500, 2300, and 2750.
+  \end{itemize}
+  \begin{alertblock}{Not yet established}
+    Command framing/direction, socket roles, modem frame format, modulation,
+    coding, sample rates, DSP details, and adaptive-link state machine.
+  \end{alertblock}
+\end{frame}
+
+\begin{frame}{Cross-platform engineering direction}
+  \centering
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Portable Rust core} & \textbf{OS-specific adapters} \\
+    \midrule
+    Link behavior & Audio device enumeration \\
+    Framing (once evidenced) & Capture/playback backends \\
+    Modulation/DSP (once evidenced) & Configuration and installers \\
+    Deterministic fixtures & Native integration testing \\
+    \bottomrule
+  \end{tabular}
+  \vspace{1em}
+
+  Initial compile targets: macOS, Windows, and Linux on ARM64 and x86\_64.
+  Native audio validation is still required on each OS.
+\end{frame}
+
+\begin{frame}{Rust scaffold status}
+  \begin{itemize}
+    \item \texttt{cargo fmt --check}: passed
+    \item \texttt{cargo clippy --all-targets -- -D warnings}: passed
+    \item \texttt{cargo test}: passed (0 tests currently defined)
+    \item \texttt{cargo check}: passed for all six target triples
+    \item Binary supports help/version only; it is not a functioning modem.
+  \end{itemize}
+  \begin{block}{Interpretation}
+    The build matrix is a toolchain/scaffold check, not an interoperability,
+    native-link, or audio-device result.
+  \end{block}
+\end{frame}
+
+\begin{frame}{Next gates}
+  \begin{enumerate}
+    \item User reports written authorization for VARA research; honor its
+          boundaries and do not redistribute the software.
+    \item Continue read-only Ghidra xref/assembly analysis; decompilation is
+          still unavailable for candidate VB6 routines.
+    \item Keep protocol and DSP implementation gated on verified behavior.
+    \item When runtime access returns, capture idle/read-only TCP behavior and
+          controlled audio-loopback observations.
+    \item Fedora Kickstart exited without a usable install; investigate before
+          retrying the optional Wine fallback.
+    \item Implement a narrow Rust path from evidence, then validate natively.
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{Demo readiness: honest status}
+  \begin{columns}[T]
+    \column{0.48\textwidth}
+      \begin{block}{Can show now}
+        \begin{itemize}
+          \item Ghidra project and Recon bookmarks
+          \item Installer extraction and evidence trail
+          \item Rust scaffold and cross-target checks
+          \item Extracted VARA payload in UTM share; Windows guest is stopped
+                and unavailable for runtime validation
+          \item Workspace layout and lab-note source
+        \end{itemize}
+      \end{block}
+    \column{0.48\textwidth}
+      \begin{alertblock}{Cannot yet demonstrate}
+        \begin{itemize}
+          \item A Rust modem link
+          \item VARA runtime interoperability
+          \item Audio-device operation on three OSes
+          \item A confirmed on-air protocol implementation
+        \end{itemize}
+      \end{alertblock}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Research references}
+  \small
+  \begin{itemize}
+    \item Lab ledger: \texttt{lab-notes/lab-notes.tex}
+    \item Ghidra guide:
+          \href{../reference/ghidra/docs/GhidraClass/Beginner/Introduction_to_Ghidra_Student_Guide.html}{local beginner guide}
+    \item VARA v4.9 local ChangeLog:
+          \texttt{reference/vara/extracted-v4.9.0/app/ChangeLog.txt}
+    \item Product overview: \url{https://varamodem.com/}
+    \item UTM Windows guide: \url{https://docs.getutm.app/guides/windows/}
+  \end{itemize}
+\end{frame}
+
+\end{document}

@@ -1,0 +1,37 @@
+# Rust build output
+rust/target/
+
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+
+# LaTeX generated files
+lab-notes/build/
+lab-notes/*.aux
+lab-notes/*.fdb_latexmk
+lab-notes/*.fls
+lab-notes/*.log
+lab-notes/*.nav
+lab-notes/*.out
+lab-notes/*.snm
+lab-notes/*.synctex.gz
+lab-notes/*.toc
+
+# Local/editor/OS files
+.DS_Store
+.vscode/*.log
+
+# Local VM and emulator output
+*.qcow2
+*.qcow2.backing
+*.img
+
+# Large or vendor-supplied reference bundles kept locally, not in Git
+reference/ghidra/installers/
+reference/ghidra/docs/
+reference/ghidra/bridge/
+reference/vara/installers/
+reference/vara/extracted-v4.9.0/
+vara.rep/
+vara.gpr
