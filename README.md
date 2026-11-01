@@ -1,9 +1,10 @@
 # OpenVARA
 
-OpenVARA is an independent, cross-platform Rust modem research project. Its
-long-term goal is to implement a native modem that interoperates with an
-unmodified VARA HF installation on macOS, Windows, and Linux, while providing
-the tooling needed to measure, test, and document that compatibility.
+OpenVARA is an independent, cross-platform Rust modem and automated link
+control research project. Its long-term goal is to implement a native modem
+that interoperates with an unmodified VARA HF installation on macOS, Windows,
+and Linux, while enabling AI systems to manage and optimize Winlink links
+through safe, observable, policy-controlled tools.
 
 VARA HF is the interoperability target. OpenVARA is a separate implementation:
 it is not a redistribution of VARA software, decompiled source, or proprietary
@@ -26,6 +27,46 @@ The propagation work supports the modem work by defining realistic operating
 conditions and repeatable experiments. It does not assume that sporadic-E or
 reentry events are predictable, global, or suitable as automatic transmission
 triggers.
+
+## Automated link-control goal
+
+OpenVARA is intended to become an AI-assisted communications system that can
+maintain the best available VARA HF/Winlink link for a defined objective. An AI
+operator should be able to observe radio and modem state, evaluate available
+gateways, select an appropriate channel, prepare the radio, initiate a bounded
+Winlink session, monitor its progress, and recover from link failure.
+
+The AI should optimize connectivity using measured and live information such
+as:
+
+- current Winlink RMS gateway availability, frequency, mode, distance, and
+  bearing;
+- VOACAP path predictions and estimated reliability;
+- PSK Reporter and DX Maps observations of current 10 m activity;
+- GIRO ionosonde and ionospheric measurements;
+- radio signal, noise, power, PTT, and audio-interface state;
+- VARA modem connection state, negotiated speed, retries, and errors; and
+- historical connection success, duration, and throughput for each gateway.
+
+The intended control architecture is an MCP-compatible orchestration layer
+over Hamlib/`rigctld`, VARA, and Winlink. Read-only tools should expose state
+and observations. Preparation tools should tune the radio and configure the
+modem without transmitting. A separate policy layer should authorize and
+bound any transmit-capable Winlink session.
+
+Connectivity optimization is therefore a closed-loop process:
+
+```text
+observe → predict → rank gateways → prepare radio/modem
+        → authorize bounded session → monitor → learn from result
+```
+
+This goal does not give an AI unrestricted access to PTT or RF transmission.
+Frequency and power limits, legal-band checks, channel-busy checks, PTT
+watchdogs, transmit timeouts, audit logging, exclusive radio leases, and an
+operator-controlled emergency stop are mandatory parts of the design. The AI
+can recommend and manage a link within those controls; it cannot override
+them.
 
 ## Current status
 
@@ -71,12 +112,16 @@ components for:
 - link/session behavior and ARQ;
 - audio input/output and PTT integration;
 - diagnostics, capture analysis, and reproducible regression fixtures.
+- AI-facing link orchestration and MCP tool adapters for radio, modem, and
+  Winlink state.
 
 The proposed architecture keeps protocol and DSP code separate from
 operating-system and device adapters. Candidate waveform parameters and
 features such as bandwidth, sample rate, OFDM structure, adaptive levels, ACK
 signaling, and coding remain research questions until supported by captures and
-interoperability tests.
+interoperability tests. AI control is likewise separated from device drivers:
+the model requests typed operations, while OpenVARA validates them against
+radio capabilities, operating policy, and current link state.
 
 ## Propagation and Winlink research
 
@@ -169,7 +214,11 @@ The planned sequence is intentionally gated by evidence:
 5. Characterize framing, coding, modulation, and data decoding.
 6. Implement a transmitter accepted by an unmodified reference receiver.
 7. Add ARQ, session management, host interfaces, audio, and platform support.
-8. Harden, document, and release only the modes and platforms actually tested.
+8. Add read-only AI/MCP observability for radio, VARA, Winlink, and propagation
+   state.
+9. Add policy-controlled link preparation, gateway ranking, bounded sessions,
+   failure recovery, and historical connectivity optimization.
+10. Harden, document, and release only the modes and platforms actually tested.
 
 The full proposed plan, exit criteria, blockers, and corpus policy are in the
 [lab notes](lab-notes/lab-notes.tex).
