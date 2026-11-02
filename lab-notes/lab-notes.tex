@@ -17,8 +17,8 @@
   linkcolor=blue!55!black,
   urlcolor=blue!55!black,
   citecolor=blue!55!black,
-  pdftitle={VARA HF Cross-Platform Rust Modem - Lab Notes},
-  pdfauthor={VARA modem research project}
+  pdftitle={Linkwise - Radio and Modem Research Lab Notes},
+  pdfauthor={Linkwise project}
 }
 
 \definecolor{verified}{HTML}{176B3A}
@@ -39,7 +39,7 @@
 
 \pagestyle{fancy}
 \fancyhf{}
-\lhead{VARA HF modem research}
+\lhead{Linkwise research}
 \rhead{Lab notes}
 \cfoot{\thepage}
 \setlength{\headheight}{14pt}
@@ -50,7 +50,7 @@
 \newcommand{\pathtext}[1]{\path{#1}}
 \newcommand{\hashtext}[4]{\texttt{\small #1\allowbreak{}#2\allowbreak{}#3\allowbreak{}#4}}
 
-\title{VARA HF Modem: Cross-Platform Rust Reimplementation\\[0.4em]
+\title{Linkwise: Radio, Modem, and Link Management Research\\[0.4em]
 \large Lab notes and evidence ledger}
 \author{Engineering research log}
 \date{30 October 2026}
@@ -398,6 +398,41 @@ Added an unblock plan to sequence reference-runtime recovery, a first
 controlled bidirectional capture, corpus validation, and parallel Rust
 foundation work. The plan is prospective; no VM recovery or signal capture
 was performed in this update. \\
+2026-11-01 &
+Expanded the OpenVARA architecture whitepaper to describe the AI's channel
+planning loop: VOACAP/VOACAPL provides timestamped statistical path and
+frequency/time estimates for eligible Winlink RMS channel records; the
+ranker combines these with RMS status, station profile, reported/measured
+conditions, and prior session outcomes. The paper distinguishes candidate
+channel selection from creating an RMS service or allocating spectrum, and
+states that propagation estimates do not guarantee a live connection. \\
+2026-11-01 &
+Added an isolated research path for predicted satellite reentries. KeepTrack
+v4 documents upcoming reentry predictions sourced from Space-Track TIP
+messages; these estimates are not confirmed event times or measurements of
+ionospheric effects. The proposed workflow records prediction provenance and
+uncertainty, then studies temporal/geographic associations with sporadic-E /
+ionosonde observations and measured link outcomes. Live ranking excludes this
+feature by default; paired baseline, reentry-feature, and shuffled-covariate
+tests with held-out events/paths/seasons are required before an operator may
+enable a bounded contribution. The cited ION 2026 paper examines a possible
+association, not a validated HF prediction method. \\
+2026-11-01 &
+Updated the PlantUML system-context diagram to place reentry data behind a
+shadow-only research/validation gate, and amended the RF simulation design
+with reentry ablation and negative-control experiments. Rebuilt the LaTeX
+whitepaper and all three PlantUML figures successfully. Tectonic emitted
+non-fatal layout warnings (overfull/underfull boxes); the PDF was generated.
+This is a document/design update only: no VOACAP runs, radio tests, link
+measurements, or validation experiments were performed. \\
+2026-11-01 &
+Renamed the project from OpenVARA to Linkwise to better represent its full
+scope: modem interoperability research, radio control, propagation-informed
+Winlink link management, and AI-assisted connectivity optimization. Updated
+the maintained documentation, PlantUML sources, Rust package/binary, editor
+tasks, and whitepaper filename. Earlier chronicle entries retain the project
+name used when those records were written; the reference material itself was
+not renamed. \\
 \bottomrule
 \end{longtable}
 

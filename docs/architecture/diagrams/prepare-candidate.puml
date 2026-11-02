@@ -1,0 +1,72 @@
+@startuml Linkwise_Prepare_Candidate
+autonumber
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam sequenceMessageAlign center
+
+actor "AI host / operator" as Caller
+participant "MCP server" as MCP
+participant "PrepareCandidate" as UC
+participant "Station command actor" as Actor
+participant "Radio lease" as Lease
+participant "Eligibility + policy" as Policy
+participant "Winlink/modem adapters" as Clients
+participant "PTT arbiter" as PTT
+participant "Hamlib adapter" as Radio
+participant "Audit/event store" as Audit
+
+Caller -> MCP : link_prepare_candidate(candidateId, requestedPower)
+MCP -> UC : PrepareRequest + RequestContext
+UC -> Actor : enqueue(command, deadline, idempotencyKey)
+Actor -> Lease : acquire(stationId, owner, deadline)
+alt lease unavailable
+  Lease --> Actor : LEASE_BUSY
+  Actor --> UC : rejected, no device mutation
+else lease acquired
+  Lease --> Actor : leaseId + stateRevision
+  Actor -> Policy : validate profile, candidate age, mode/power, objective
+  Policy --> Actor : allowed / denied + rule IDs
+  alt policy denied
+    Actor -> Audit : append(PrepareDenied)
+    Actor -> Lease : release(leaseId)
+    Actor --> UC : POLICY_DENIED
+  else policy allows preparation
+    Actor -> Clients : observe modem/client busy state
+    Clients --> Actor : idle / busy / unknown
+    Actor -> PTT : observe() and require release-confirmed
+    PTT --> Actor : PTT observation
+    alt busy, unknown, or PTT not released
+      Actor -> Audit : append(PreparationBlocked)
+      Actor -> Lease : release(leaseId)
+      Actor --> UC : SESSION_BUSY or PTT_RELEASE_UNCONFIRMED
+    else safe to configure
+      Actor -> Radio : snapshot()
+      Radio --> Actor : prior readback + revision
+      Actor -> Radio : apply(typed frequency/mode/power, lease)
+      Radio --> Actor : per-field requested/readback result
+      Actor -> Radio : snapshot()
+      Radio --> Actor : verified state
+      Actor -> Policy : verify config hash + current profile/revision
+      Policy --> Actor : verified
+      alt readback matches and profile revision unchanged
+        Actor -> Audit : append(RadioConfigured, readback, provenance)
+        Actor --> UC : PreparedHandle(candidate, configHash, expiry, leaseId)
+        note right of Actor
+          Lease remains owned by the prepared handle.
+          Session start adopts it; expiry/cancel releases it.
+        end note
+      else readback mismatch or state changed
+        Actor -> Radio : bounded restore(prior safe config, lease)
+        Radio --> Actor : restored / unable to verify
+        Actor -> PTT : release(PreparationFailure)
+        PTT --> Actor : release observation
+        Actor -> Audit : append(PrepareFailed, restore/release outcome)
+        Actor -> Lease : release(leaseId)
+        Actor --> UC : READBACK_MISMATCH or station Faulted
+      end
+    end
+  end
+end
+UC --> MCP : typed result + warnings/errors
+MCP --> Caller : prepared handle or actionable denial
+@enduml

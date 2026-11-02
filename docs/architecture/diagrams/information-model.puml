@@ -1,0 +1,113 @@
+@startuml Linkwise_Information_Model
+hide methods
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam ArrowColor #2A6F75
+
+class StationProfile {
+  profileId: UUID
+  revision: Version
+  permittedBands/modes: Set
+  powerCeiling: Power
+  sessionLimits: Budget
+  approvalMode: ApprovalMode
+}
+class InventorySnapshot {
+  snapshotId: UUID
+  retrievedAt: DateTime
+  sourceVersion: String
+  queryFilters: FilterSet
+  contentHash: Hash
+  warnings: Vec<Warning>
+}
+class Gateway {
+  gatewayId: GatewayId
+  callsign: String
+  location: GeoPoint
+  lastReportAt: Option<DateTime>
+}
+class GatewayChannel {
+  channelId: ChannelId
+  frequency: Frequency
+  protocol: Protocol
+  service: ServiceCode
+  status: ReportedStatus
+  validUntil: Option<DateTime>
+}
+class EvidenceRecord {
+  evidenceId: UUID
+  kind: EvidenceKind
+  quality: Quality
+  source: SourceId
+  sourceTime: Option<DateTime>
+  retrievedAt: DateTime
+  validity: TimeRange
+  uncertainty: Option<Range>
+  provenanceRef: String
+}
+class RankingSnapshot {
+  rankingId: UUID
+  objective: Objective
+  rankerVersion: Version
+  createdAt: DateTime
+}
+class PreparedHandleRecord {
+  handleId: OpaqueId
+  configHash: Hash
+  radioRevision: StateRevision
+  expiresAt: DateTime
+  consumedAt: Option<DateTime>
+}
+class AuthorizationGrantRecord {
+  grantId: OpaqueId
+  scopeHash: Hash
+  policyRevision: Version
+  expiresAt: DateTime
+  status: GrantStatus
+}
+class SessionAttempt {
+  sessionId: UUID
+  startedAt: DateTime
+  endedAt: Option<DateTime>
+  terminalState: SessionOutcome
+  modemMetrics: OptionalMetrics
+  clientOutcome: OptionalOutcome
+}
+class TransferEvent {
+  eventId: UUID
+  stage: TransferStage
+  occurredAt: DateTime
+  source: SourceId
+  deduplicationKey: String
+}
+class AuditEvent {
+  eventId: UUID
+  correlationId: UUID
+  actor: PrincipalId
+  action: Action
+  decision: Decision
+  policyRevision: Version
+  occurredAt: DateTime
+  redactedData: Json
+}
+
+InventorySnapshot "1" o-- "1..*" Gateway : contains unique stations
+Gateway "1" o-- "1..*" GatewayChannel : offers channels
+GatewayChannel "1" <-- "0..*" EvidenceRecord : path evidence
+InventorySnapshot "1" <-- "0..*" RankingSnapshot : input snapshot
+RankingSnapshot "1" o-- "0..*" EvidenceRecord : evidence references
+StationProfile "1" <-- "0..*" PreparedHandleRecord : validated against revision
+PreparedHandleRecord "1" <-- "0..1" AuthorizationGrantRecord : exact config scope
+AuthorizationGrantRecord "1" <-- "0..*" SessionAttempt : consumed by
+GatewayChannel "1" <-- "0..*" SessionAttempt : attempted route
+SessionAttempt "1" o-- "0..*" TransferEvent : observed stages
+SessionAttempt "1" <-- "0..*" AuditEvent : correlation
+RankingSnapshot "1" <-- "0..*" SessionAttempt : decision provenance
+
+note bottom of TransferEvent
+Do not store message bodies/recipients by default.
+Client acceptance, CMS processing, and recipient delivery
+are separate stages and must not be conflated.
+end note
+@enduml

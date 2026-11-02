@@ -1,0 +1,74 @@
+@startuml Linkwise_System_Context
+!theme plain
+left to right direction
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam componentStyle rectangle
+skinparam ArrowColor #2A9D8F
+skinparam ArrowThickness 1.5
+skinparam packageStyle rectangle
+skinparam package {
+  BorderColor #16324F
+  BackgroundColor #EFF5F8
+  FontColor #16324F
+}
+skinparam component {
+  BorderColor #2E6F95
+  BackgroundColor #FFFFFF
+  FontColor #16324F
+}
+skinparam actor {
+  BorderColor #16324F
+  BackgroundColor #2E6F95
+  FontColor #FFFFFF
+}
+
+actor "AI host / autonomous agent" as AI
+actor "Station owner" as OP
+
+package "Linkwise Link Manager" as OLM {
+  [MCP tools and resources] as MCP
+  [Gateway ranker and evidence] as RANK
+  [Session controller and scheduler] as SESS
+  [Policy engine and PTT arbiter] as POLICY
+  database "State, history, and audit" as STORE
+
+  MCP --> RANK : observe / rank
+  MCP --> SESS : prepare / request session
+  SESS --> POLICY : authorize / keying requests
+  SESS --> STORE : persist lifecycle
+  RANK --> STORE : evidence / outcomes
+}
+
+component "Hamlib / rigctld" as HAM
+component "Radio\nCAT / audio / PTT" as RADIO
+component "Independent emergency stop\n(human-only TX inhibit)" as ESTOP
+component "VARA / Linkwise" as MODEM
+component "Winlink client" as CLIENT
+cloud "Winlink RMS / CMS" as CMS
+cloud "Operational evidence\nRMS / VOACAP / reports / GIRO" as SOURCES
+cloud "KeepTrack / Space-Track TIP\npredicted reentries (uncertain)" as REENTRY
+component "Research association +\nout-of-sample validation gate\n(default: shadow only)" as REENTRY_GATE
+
+AI --> MCP : autonomous CAT / PTT / link tools
+OP --> ESTOP : emergency stop only at runtime
+ESTOP --> RADIO : hard inhibit / PTT release
+SOURCES --> RANK : timestamped evidence
+REENTRY --> REENTRY_GATE : prediction + issue time / uncertainty
+STORE --> REENTRY_GATE : outcomes / historical evidence
+REENTRY_GATE ..> RANK : bounded feature only\nafter validated operator enablement
+POLICY --> HAM : validated rig control
+HAM --> RADIO : CAT / status
+POLICY --> MODEM : bounded modem session
+MODEM --> RADIO : audio / PTT via arbiter
+SESS --> CLIENT : session / transfer
+CLIENT --> CMS : Winlink traffic
+note right of OLM
+  Autonomous grants and recovery operate within
+  a signed station profile installed before activation.
+  No human approval or routine actuator control at runtime.
+end note
+@enduml

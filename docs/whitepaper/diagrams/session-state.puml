@@ -1,0 +1,64 @@
+@startuml Linkwise_Session_State
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam ArrowColor #2A9D8F
+skinparam state {
+  BackgroundColor #EFF5F8
+  BorderColor #2E6F95
+  FontColor #16324F
+}
+
+[*] --> Idle
+Idle --> Observing : refresh / snapshot
+Observing --> Ranked : eligible candidates + evidence
+Ranked --> Preparing : selected candidate / acquire lease
+Preparing --> Prepared : verified readback / handle issued
+Preparing --> Faulted : partial write / unsafe ambiguity
+Prepared --> Authorizing : session requested / revalidate
+Prepared --> Idle : expiry / cancel / release lease
+Authorizing --> Ready : automatic local grant + interlocks pass
+Authorizing --> Ranked : denied / stale; agent refreshes and re-ranks
+Ready --> Active : client session begins
+Ready --> Faulted : readiness or PTT invariant fails
+Active --> Completing : client reports terminal state
+Active --> Aborting : autonomous abort / deadline / fault / lease loss
+Completing --> Idle : release observed / persist outcome
+Aborting --> Idle : release observed / persist abort
+Aborting --> Faulted : release cannot be confirmed
+Faulted --> Reconciling : autonomous recovery / restart reconciliation
+Reconciling --> Idle : safe state verified; controls remain gated
+Reconciling --> Faulted : state unknown or PTT stuck
+Idle --> EmergencyStopped : human emergency stop
+Observing --> EmergencyStopped : human emergency stop
+Ranked --> EmergencyStopped : human emergency stop
+Preparing --> EmergencyStopped : human emergency stop
+Prepared --> EmergencyStopped : human emergency stop
+Authorizing --> EmergencyStopped : human emergency stop
+Ready --> EmergencyStopped : human emergency stop
+Active --> EmergencyStopped : human emergency stop
+Completing --> EmergencyStopped : human emergency stop
+Aborting --> EmergencyStopped : human emergency stop
+Faulted --> EmergencyStopped : human emergency stop
+Reconciling --> EmergencyStopped : human emergency stop
+EmergencyStopped --> [*] : latched; offline maintenance required
+
+note right of Active
+  Modem key-up requests pass through the
+  local PTT arbiter and bounded permit.
+  Model/network availability is not on
+  the release/watchdog path.
+end note
+note bottom of Faulted
+  No new transmit session until safe state
+  and release are confirmed; autonomous recovery
+  only, otherwise remain latched safe.
+end note
+note right of EmergencyStopped
+  Human runtime actuator is emergency stop only.
+  Hardware transmit inhibit is independent of AI
+  and application/network availability.
+end note
+@enduml

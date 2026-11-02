@@ -1,4 +1,4 @@
-# OpenVARA Rust scaffold
+# Linkwise Rust scaffold
 
 This crate is the starting point for an independently implemented,
 cross-platform modem. The command protocol, on-air framing, modulation,

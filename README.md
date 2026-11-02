@@ -1,12 +1,12 @@
-# OpenVARA
+# Linkwise
 
-OpenVARA is an independent, cross-platform Rust modem and automated link
+Linkwise is an independent, cross-platform Rust modem and automated link
 control research project. Its long-term goal is to implement a native modem
 that interoperates with an unmodified VARA HF installation on macOS, Windows,
 and Linux, while enabling AI systems to manage and optimize Winlink links
 through safe, observable, policy-controlled tools.
 
-VARA HF is the interoperability target. OpenVARA is a separate implementation:
+VARA HF is the interoperability target. Linkwise is a separate implementation:
 it is not a redistribution of VARA software, decompiled source, or proprietary
 assets.
 
@@ -30,7 +30,7 @@ triggers.
 
 ## Automated link-control goal
 
-OpenVARA is intended to become an AI-assisted communications system that can
+Linkwise is intended to become an AI-assisted communications system that can
 maintain the best available VARA HF/Winlink link for a defined objective. An AI
 operator should be able to observe radio and modem state, evaluate available
 gateways, select an appropriate channel, prepare the radio, initiate a bounded
@@ -48,29 +48,46 @@ as:
 - VARA modem connection state, negotiated speed, retries, and errors; and
 - historical connection success, duration, and throughput for each gateway.
 
-The intended control architecture is an MCP-compatible orchestration layer
-over Hamlib/`rigctld`, VARA, and Winlink. Read-only tools should expose state
-and observations. Preparation tools should tune the radio and configure the
-modem without transmitting. A separate policy layer should authorize and
-bound any transmit-capable Winlink session.
+The link manager must maintain labeled, timestamped counts rather than one
+ambiguous “number of links”: distinct RMS gateways, distinct gateway channels,
+channels eligible for this station, reported-status age, RF sessions attempted
+and connected, and client-confirmed message transfers. Outbox totals are
+separate and available only where a supported Winlink client interface exposes
+them. A listed or recently reporting gateway is not proof of RF reachability;
+see the [Winlink tracking design](docs/architecture/winlink-link-tracking-design.md)
+for data definitions, integration constraints, and MCP tools.
 
-Connectivity optimization is therefore a closed-loop process:
+The intended control architecture is an autonomous MCP-compatible
+orchestration layer over Hamlib/`rigctld`, VARA, and Winlink. The AI uses the
+complete locally enabled CAT control surface and explicit PTT tools to
+configure, operate, monitor, and recover links without routine operator
+approval. It acts through Linkwise policy and adapters, not raw device
+sockets or unchecked command strings. Human runtime control is limited to an
+independent emergency stop; autonomous authority and station limits are
+preconfigured and qualified before unattended operation.
+
+Connectivity optimization is therefore an autonomous closed-loop process:
 
 ```text
 observe → predict → rank gateways → prepare radio/modem
-        → authorize bounded session → monitor → learn from result
+        → authorize from station policy → transmit/session → monitor/recover
+        → learn from result → repeat
 ```
 
-This goal does not give an AI unrestricted access to PTT or RF transmission.
-Frequency and power limits, legal-band checks, channel-busy checks, PTT
-watchdogs, transmit timeouts, audit logging, exclusive radio leases, and an
-operator-controlled emergency stop are mandatory parts of the design. The AI
-can recommend and manage a link within those controls; it cannot override
-them.
+Autonomous control is bounded by a locally enforced station profile:
+permitted frequencies/modes, power ceilings, service constraints, session
+budgets, retries, and CAT-operation classes. Linkwise issues session and
+one-use PTT permits automatically when deterministic checks pass; the AI
+cannot change the profile or increase limits. Exclusive radio leases,
+readback, audit, independent PTT watchdog/release, and a physical emergency
+stop are mandatory. A safety fault causes automatic abort and a latched
+receive-only/fault state. Routine operator action is not part of link
+management, and no runtime human control other than emergency stop is exposed
+while autonomous operation is active.
 
 ## Current status
 
-OpenVARA is in the research and foundation stage.
+Linkwise is in the research and foundation stage.
 
 - The Rust crate is a scaffold with module boundaries for the application API,
   audio, modem, and platform integration.
@@ -86,9 +103,26 @@ OpenVARA is in the research and foundation stage.
 The authoritative research record is
 [lab-notes/lab-notes.tex](lab-notes/lab-notes.tex).
 
+## Architecture and design documents
+
+The proposed AI-assisted radio and Winlink link-management architecture is
+documented in the [architecture design set](docs/architecture/README.md). The
+stakeholder-oriented [LaTeX whitepaper](docs/whitepaper/linkwise-architecture-whitepaper.tex)
+and its [build instructions](docs/whitepaper/README.md) summarize the system
+goal, operating concept, use cases, interfaces, safety model, and roadmap.
+These documents describe a proposed system; they do not imply the automation
+or modem functionality is already implemented.
+
+The design set also proposes a reproducible, virtual-time RF decision
+simulator for testing the agent against noisy observations, seeded scenarios,
+simple policy baselines, and a truth-informed upper bound. It is intentionally
+separate from modem validation: channel-model-based audio tests and inhibited
+hardware-in-loop tests are required for those claims. See the
+[RF/agent simulation design](docs/architecture/rf-agent-simulation-design.md).
+
 ## Research principles
 
-OpenVARA treats compatibility as an evidence problem, not an assumption. Each
+Linkwise treats compatibility as an evidence problem, not an assumption. Each
 technical claim should be labeled as one of:
 
 - **DOCUMENTED** — stated by a source or specification;
@@ -120,7 +154,7 @@ operating-system and device adapters. Candidate waveform parameters and
 features such as bandwidth, sample rate, OFDM structure, adaptive levels, ACK
 signaling, and coding remain research questions until supported by captures and
 interoperability tests. AI control is likewise separated from device drivers:
-the model requests typed operations, while OpenVARA validates them against
+the model requests typed operations, while Linkwise validates them against
 radio capabilities, operating policy, and current link state.
 
 ## Propagation and Winlink research
@@ -164,8 +198,11 @@ observations, and timestamped records of both successful and failed attempts.
 
 ```text
 .
-├── rust/                         OpenVARA Rust crate
+├── rust/                         Linkwise Rust crate
 ├── lab-notes/                    Research log and progress presentation
+├── docs/
+│   ├── architecture/             System design documents
+│   └── whitepaper/               LaTeX paper and PlantUML diagram sources
 ├── reference/
 │   ├── propagation-toolbox.md    Propagation-tool documentation
 │   ├── vara/                     Local VARA reference materials
@@ -192,7 +229,7 @@ cargo test
 ```
 
 The complete configured verification sequence is available in VS Code as
-`OpenVARA: verify`. The repository currently checks these targets:
+`Linkwise: verify`. The repository currently checks these targets:
 
 ```text
 aarch64-apple-darwin       x86_64-apple-darwin
@@ -225,7 +262,7 @@ The full proposed plan, exit criteria, blockers, and corpus policy are in the
 
 ## Project status and licensing
 
-OpenVARA is research software and is not yet a functioning replacement modem.
+Linkwise is research software and is not yet a functioning replacement modem.
 No project license has been selected in this repository yet. Before a public
-release, the project must review the licenses and trademarks covering OpenVARA,
+release, the project must review the licenses and trademarks covering Linkwise,
 reference software, captured data, dependencies, and distributed tooling.

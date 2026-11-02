@@ -1,0 +1,79 @@
+@startuml Linkwise_Authorized_Session
+autonumber
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam sequenceMessageAlign center
+
+actor "AI host" as AI
+participant "MCP server" as MCP
+participant "StartSession" as UC
+participant "Station command actor" as Actor
+participant "Policy / grant store" as Policy
+participant "Radio + lease" as Radio
+participant "Winlink client" as Winlink
+participant "Modem adapter" as Modem
+participant "PTT arbiter" as PTT
+participant "Local watchdog" as Watchdog
+participant "Audit/event store" as Audit
+participant "Independent E-stop / TX inhibit" as EStop
+
+AI -> MCP : link_start_session(preparedHandle)
+MCP -> UC : StartRequest + trusted RequestContext
+UC -> Actor : enqueue(start, deadline, idempotencyKey)
+Actor -> Radio : verify lease, revision, config hash, PTT released
+Radio --> Actor : current readback + lease status
+Actor -> Policy : evaluate installed authority + current interlocks
+Policy -> Audit : append(AutonomousGrantIssued, scope, expiry, policyRevision)
+Policy --> Actor : one-use authorization or deny
+alt any binding stale / invalid
+  Actor -> Audit : append(SessionStartDenied, rule IDs)
+  Actor --> UC : denied; no client start
+else all checks pass
+  Actor -> Winlink : begin_session(channel, queue scope, deadline)
+  Winlink --> Actor : clientSessionId
+  Actor -> Modem : begin(sessionId, bounded parameters)
+  Modem --> Actor : modemSessionId / ready
+  Actor -> Audit : append(SessionStarted, IDs, config hash)
+  Actor --> UC : sessionId
+  loop each modem transmit burst
+    Modem -> PTT : request_key_up(sessionId, burstClass)
+    PTT -> Policy : validate active session, lease, hash, limits
+    Policy --> PTT : one-use TransmitPermit / deny
+    alt permit denied
+      PTT -> Audit : append(PttDenied, rule IDs)
+      PTT --> Modem : deny; keep PTT released
+    else permit valid
+      PTT -> Radio : assert(permit)
+      Radio --> PTT : requested + observed PTT state
+      PTT -> Watchdog : arm(maxKeyUp, permit expiry, session deadline)
+      Watchdog --> PTT : armed
+      ... bounded modem burst ...
+      Watchdog -> PTT : key-up limit / expiry / fault
+      PTT -> Radio : release(cause)
+      Radio --> PTT : release observed / unconfirmed
+      PTT -> Audit : append(PttTransition, timings, result)
+    end
+  end
+  Winlink -> UC : transfer/session terminal event
+  opt autonomous abort / timeout / fault
+    UC -> PTT : release(Abort)
+    UC -> Modem : stop(sessionId, Abort)
+    UC -> Winlink : abort(clientSessionId)
+  end
+  UC -> Audit : append(SessionTerminal, outcome, correlationId)
+end
+
+Operator -> EStop : activate (only human runtime control)
+EStop -> Radio : independent TX inhibit + PTT release
+EStop -> UC : latched emergency-stop event (if software reachable)
+UC -> Winlink : abort current client session
+UC -> Audit : append(EmergencyStop, observed state)
+
+note over PTT,Watchdog
+The modem owns protocol timing. The AI does not toggle PTT per burst.
+Local policy grants are automatic within the installed station authority.
+Emergency stop directly inhibits the transmitter, independent of model,
+MCP, and application scheduling. Autonomous release/abort proceeds even
+if persistence fails; failure to confirm release faults the station.
+end note
+@enduml

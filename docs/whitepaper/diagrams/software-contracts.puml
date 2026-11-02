@@ -1,0 +1,87 @@
+@startuml Linkwise_Software_Contracts
+!theme plain
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #2A9D8F
+
+class RequestContext {
+  request_id: UUID
+  correlation_id: UUID
+  idempotency_key: String
+  principal: Principal
+  deadline: MonotonicInstant
+  policy_revision: Revision
+}
+class Observed<T> {
+  value: T / explicit unknown
+  source: SourceId
+  observed_at: UTC?
+  retrieved_at: UTC
+  valid_until: UTC?
+  provenance: ProvenanceRef
+  quality: measured | reported | modeled | inferred
+  warnings: Warning[*]
+}
+class CandidateRanker
+class StationPolicy
+class SessionAggregate
+class RadioLease
+class PreparedHandle
+class AuthorizationGrant
+class TransmitPermit <<one-use>>
+
+interface RadioControlPort {
+  capabilities()
+  snapshot(): Observed<RadioSnapshot>
+  get_control(control_id): Observed<ControlValue>
+  set_control(control_id, value, lease): Readback
+  invoke_extension(extension_id, typed_args, lease): Result
+}
+interface PttControlPort {
+  observe(): Observed<PttState>
+  assert(permit): PttObservation
+  release(cause): PttObservation
+}
+interface ModemSessionPort {
+  status(): Observed<ModemStatus>
+  begin(request): ModemSessionId
+  stop(id, cause)
+}
+interface WinlinkClientPort {
+  capabilities()
+  begin_session(request): ClientSessionId
+  observe(id): Observed<ClientSessionState>
+  abort(id)
+}
+interface EvidenceProviderPort
+interface HistoryRepository
+interface AuditWriter
+
+CandidateRanker ..> Observed : consumes qualified evidence
+StationPolicy ..> RequestContext : evaluates principal/deadline
+StationPolicy ..> AuthorizationGrant : issues locally
+SessionAggregate o-- RadioLease
+SessionAggregate o-- PreparedHandle
+SessionAggregate o-- AuthorizationGrant
+SessionAggregate ..> TransmitPermit : requests bounded
+StationPolicy ..> RadioControlPort : allowed typed change
+SessionAggregate ..> PttControlPort : all key-up/release
+SessionAggregate ..> ModemSessionPort : bounded lifecycle
+SessionAggregate ..> WinlinkClientPort : supported session API
+CandidateRanker ..> EvidenceProviderPort
+SessionAggregate ..> HistoryRepository : events / aggregates
+SessionAggregate ..> AuditWriter : decision/action record
+note bottom of TransmitPermit
+  Bound to session, lease, config revision,
+  policy and expiry; possession alone is insufficient.
+end note
+note bottom of RadioControlPort
+  Full backend-advertised CAT surface is
+  available via typed controls; device-specific
+  extensions are schema-registered and policy-classified.
+end note
+@enduml

@@ -1,0 +1,74 @@
+@startuml Linkwise_Session_State_Machine
+hide empty description
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam state {
+  BackgroundColor #EFF5F8
+  BorderColor #16324F
+  ArrowColor #2A6F75
+}
+
+[*] --> ReceiveOnly
+
+state ReceiveOnly {
+  [*] --> Idle
+  Idle : no radio lease held
+  Idle : PTT must be release-confirmed
+}
+
+ReceiveOnly --> Preparing : valid candidate / acquire lease
+Preparing --> ReceiveOnly : policy deny / lease busy
+Preparing --> Ready : config readback matches / PTT down
+Preparing --> Faulted : partial write and restore unverified
+Ready --> ReceiveOnly : handle expiry / state revision changed
+Ready --> Authorizing : autonomous session requested
+Authorizing --> Ready : policy deny / stale; agent re-ranks or waits
+Authorizing --> Starting : automatic local grant + interlocks pass
+Starting --> Active : client + modem session confirmed
+Starting --> Aborting : start fault / timeout
+
+state Active {
+  [*] --> ModemReceive
+  ModemReceive --> PttKeyed : modem burst request + permit valid
+  PttKeyed --> ModemReceive : burst complete / local key-up cap
+  ModemReceive : no radio reconfiguration allowed
+  PttKeyed : current session + lease + config hash required
+}
+
+Active --> Finalizing : client/modem terminal event
+Active --> Aborting : autonomous abort / fault / deadline / lease loss
+ReceiveOnly --> EmergencyStopped : human emergency stop
+Preparing --> EmergencyStopped : human emergency stop
+Ready --> EmergencyStopped : human emergency stop
+Authorizing --> EmergencyStopped : human emergency stop
+Starting --> EmergencyStopped : human emergency stop
+Active --> EmergencyStopped : human emergency stop
+Finalizing --> EmergencyStopped : human emergency stop
+Aborting --> EmergencyStopped : human emergency stop
+Faulted --> EmergencyStopped : human emergency stop
+Finalizing --> ReceiveOnly : release observed + final event recorded
+Aborting --> ReceiveOnly : client stopped + release observed
+Aborting --> Faulted : PTT release unconfirmed
+Faulted --> ReceiveOnly : safe state verified + autonomous policy reset
+
+state Faulted {
+  Faulted : transmit authorization blocked
+  Faulted : autonomous recovery only; otherwise latched safe
+}
+
+state EmergencyStopped {
+  EmergencyStopped : hardware TX inhibit asserted
+  EmergencyStopped : latched until offline maintenance
+}
+
+note right of Active
+Any invalid or stale permit is denied.
+The safety supervisor can transition to Aborting
+from every transmit-capable state.
+end note
+note right of EmergencyStopped
+Human has one runtime actuator: independent
+emergency stop. No software reset control is
+available during autonomous operation.
+end note
+@enduml

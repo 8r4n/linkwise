@@ -1,5 +1,6 @@
 # Rust build output
 rust/target/
+target/
 
 # Python environments and caches
 .venv/
@@ -8,6 +9,41 @@ __pycache__/
 
 # LaTeX generated files
 lab-notes/build/
+docs/whitepaper/build/
+docs/whitepaper/diagrams/build/
+docs/build/
+lab-notes/*.pdf
+docs/whitepaper/*.aux
+docs/whitepaper/*.fdb_latexmk
+docs/whitepaper/*.fls
+docs/whitepaper/*.log
+docs/whitepaper/*.out
+docs/whitepaper/*.pdf
+docs/whitepaper/*.toc
+*.acn
+*.acr
+*.alg
+*.aux
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.glg
+*.glo
+*.gls
+*.glsdefs
+*.idx
+*.ilg
+*.ind
+*.lof
+*.lot
+*.nav
+*.out
+*.run.xml
+*.snm
+*.synctex.gz
+*.toc
+*.xdv
 lab-notes/*.aux
 lab-notes/*.fdb_latexmk
 lab-notes/*.fls
@@ -20,7 +56,13 @@ lab-notes/*.toc
 
 # Local/editor/OS files
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
 .vscode/*.log
+
+# Local IDE metadata
+.idea/
 
 # Local VM and emulator output
 *.qcow2
@@ -28,6 +70,7 @@ lab-notes/*.toc
 *.img
 
 # Large or vendor-supplied reference bundles kept locally, not in Git
+reference/acq-latex-templates/
 reference/ghidra/installers/
 reference/ghidra/docs/
 reference/ghidra/bridge/

@@ -1,0 +1,168 @@
+@startuml Linkwise_Interfaces_And_Domain
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam ArrowColor #2A6F75
+
+package "Application services" {
+  class RankCandidates <<use case>> {
+    +execute(request: RankRequest): Ranking
+  }
+  class PrepareCandidate <<use case>> {
+    +execute(request: PrepareRequest): PreparedHandle
+  }
+  class StartSession <<use case>> {
+    +execute(request: StartRequest): SessionId
+  }
+  class AbortSession <<use case>> {
+    +execute(session: SessionId): AbortResult
+  }
+}
+
+package "Domain" {
+  class GatewayCandidate {
+    +id: CandidateId
+    +gateway: GatewayId
+    +channel: ChannelId
+    +eligibility: Eligibility
+  }
+  class EvidenceItem {
+    +kind: EvidenceKind
+    +quality: Quality
+    +source: SourceId
+    +observedAt: Option<DateTime>
+    +validUntil: Option<DateTime>
+    +uncertainty: Option<Range>
+  }
+  class Ranking {
+    +snapshotId: SnapshotId
+    +rankerVersion: Version
+    +asOf: DateTime
+    +candidates: Vec<RankedCandidate>
+  }
+  class RadioSnapshot {
+    +revision: StateRevision
+    +frequency: Observed<Frequency>
+    +mode: Observed<Mode>
+    +power: Observed<Option<Power>>
+    +ptt: Observed<PttState>
+  }
+  class PreparedHandle {
+    +id: OpaqueId
+    +candidateId: CandidateId
+    +configHash: Hash
+    +radioRevision: StateRevision
+    +expiresAt: Instant
+  }
+  class AuthorizationGrant {
+    +id: OpaqueId
+    +scope: SessionScope
+    +policyRevision: Version
+    +expiresAt: Instant
+    +remainingBudget: Budget
+  }
+  class TransmitPermit {
+    +id: OpaqueId
+    +sessionId: SessionId
+    +configHash: Hash
+    +maxKeyUp: Duration
+    +expiresAt: Instant
+    +singleUse: bool
+  }
+  class SessionAggregate {
+    +id: SessionId
+    +state: SessionState
+    +lease: LeaseId
+    +grant: GrantId
+    +configHash: Hash
+  }
+  class DomainEvent {
+    +eventId: UUID
+    +correlationId: UUID
+    +occurredAt: DateTime
+    +kind: EventKind
+    +payload: RedactedEventData
+  }
+}
+
+package "Outbound ports" {
+  interface RadioControlPort {
+    +capabilities(): Result<RadioCapabilities>
+    +snapshot(): Result<Observed<RadioSnapshot>>
+    +getControl(controlId): Result<Observed<ControlValue>>
+    +setControl(controlId, value, lease): Result<RadioReadback>
+    +invokeExtension(id, typedArgs, lease): Result<ExtensionResult>
+  }
+  interface PttControlPort {
+    +observe(): Result<Observed<PttState>>
+    +assert(permit): Result<PttObservation>
+    +release(cause): Result<PttObservation>
+  }
+  interface ModemSessionPort {
+    +status(): Result<Observed<ModemStatus>>
+    +begin(request): Result<ModemSessionId>
+    +stop(id, cause): Result<void>
+  }
+  interface WinlinkClientPort {
+    +capabilities(): Result<ClientCapabilities>
+    +beginSession(request): Result<ClientSessionId>
+    +observe(id): Result<Observed<ClientSessionState>>
+    +abort(id): Result<void>
+  }
+  interface EvidenceProviderPort {
+    +forecast(path, window, frequencies): Result<Vec<EvidenceItem>>
+    +observations(path, window): Result<Vec<EvidenceItem>>
+  }
+  interface InventoryRepository {
+    +current(query): Result<InventorySnapshot>
+    +append(snapshot): Result<void>
+  }
+  interface AuditWriter {
+    +append(event): Result<void>
+    +find(correlationId): Result<Vec<DomainEvent>>
+  }
+}
+
+package "Concrete adapters (replaceable)" {
+  class HamlibRigctldAdapter
+  class PttHardwareAdapter
+  class VaraAdapter
+  class WinlinkClientAdapter
+  class VoacapAndObservationAdapter
+  class SqliteEventStore
+}
+
+RankCandidates ..> EvidenceProviderPort : reads
+RankCandidates ..> InventoryRepository : reads
+RankCandidates ..> Ranking
+PrepareCandidate ..> RadioControlPort : config/readback
+PrepareCandidate ..> PreparedHandle : issues after verification
+StartSession ..> WinlinkClientPort : starts bounded session
+StartSession ..> ModemSessionPort : coordinates lifecycle
+StartSession ..> AuthorizationGrant : consumes/revalidates
+AbortSession ..> PttControlPort : release first
+AbortSession ..> WinlinkClientPort : stop/abort
+AbortSession ..> DomainEvent : records
+SessionAggregate "1" o-- "0..*" TransmitPermit : active permit ledger
+PreparedHandle --> GatewayCandidate : binds candidate
+PreparedHandle --> RadioSnapshot : binds revision/hash
+Ranking "1" o-- "0..*" GatewayCandidate : ranks
+GatewayCandidate "1" o-- "0..*" EvidenceItem : justified by
+AuthorizationGrant --> PreparedHandle : scope includes
+DomainEvent --> SessionAggregate : lifecycle reference
+
+HamlibRigctldAdapter ..|> RadioControlPort
+PttHardwareAdapter ..|> PttControlPort
+VaraAdapter ..|> ModemSessionPort
+WinlinkClientAdapter ..|> WinlinkClientPort
+VoacapAndObservationAdapter ..|> EvidenceProviderPort
+SqliteEventStore ..|> InventoryRepository
+SqliteEventStore ..|> AuditWriter
+
+note bottom of TransmitPermit
+Opaque, one-use, short-lived capability.
+Every use is independently revalidated;
+the permit alone does not authorize RF.
+end note
+@enduml

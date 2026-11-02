@@ -1,0 +1,70 @@
+@startuml Linkwise_Session_Sequence
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 12
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #2A9D8F
+
+actor Operator
+participant "AI host" as AI
+participant "MCP adapter" as MCP
+participant "Use-case service" as APP
+participant "Station actor / lease" as ACTOR
+participant "Policy engine" as POLICY
+participant "Radio adapter" as RADIO
+participant "Winlink client" as WL
+participant "Modem adapter" as MODEM
+participant "PTT arbiter" as PTT
+database "Audit / event store" as AUDIT
+participant "Independent emergency stop / TX inhibit" as ESTOP
+
+AI -> MCP: prepare(candidate_id, request_context)
+MCP -> APP: typed PrepareCandidate
+APP -> ACTOR: enqueue exclusive mutation
+ACTOR -> POLICY: validate profile, candidate, idle, limits
+POLICY --> ACTOR: allow typed config / deny
+ACTOR -> RADIO: apply config under lease
+RADIO --> ACTOR: supported-field readback
+ACTOR -> AUDIT: record decision + requested/readback state
+ACTOR --> APP: short-lived PreparedHandle (lease retained)
+APP --> MCP: prepared result
+MCP --> AI: handle + expiry + state revision
+
+AI -> MCP: start_session(handle)
+MCP -> APP: typed StartSession
+APP -> ACTOR: adopt lease; revalidate all current state
+ACTOR -> POLICY: recheck grant, inventory, config, interlocks
+POLICY --> ACTOR: automatically issue bounded grant / reject
+ACTOR -> WL: begin supported client session
+WL -> MODEM: start modem link
+MODEM -> PTT: assert(one-use transmit permit)
+PTT -> POLICY: verify lease, session, budget, watchdog
+POLICY --> PTT: authorized / reject
+PTT --> MODEM: keying state observed
+MODEM --> WL: link progress / outcome
+WL --> ACTOR: session and transfer events
+ACTOR -> PTT: release on completion, abort, timeout, or fault
+PTT --> ACTOR: release requested / observed
+ACTOR -> AUDIT: append lifecycle and outcome events
+ACTOR --> APP: terminal session summary
+APP --> MCP: bounded result + outcome distinctions
+MCP --> AI: result (not a delivery claim beyond client evidence)
+
+Operator -> ESTOP: activate (only human runtime actuator)
+ESTOP -> PTT: independent hardware inhibit / release
+ESTOP -> ACTOR: latch E-stop state if software reachable
+ACTOR -> WL: abort active client session
+ACTOR -> AUDIT: append emergency-stop event
+
+alt validation, readback, or policy failure
+  ACTOR -> PTT: idempotent release
+  ACTOR -> AUDIT: record denial/fault and unresolved state
+  ACTOR --> APP: reject; invalidate handle; release lease as safe
+end
+note over ESTOP,PTT
+Emergency stop bypasses MCP and AI and latches the station safe.
+No runtime human reset/approval/control surface is provided.
+end note
+@enduml

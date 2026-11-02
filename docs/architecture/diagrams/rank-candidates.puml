@@ -1,0 +1,39 @@
+@startuml Linkwise_Rank_Candidates
+autonumber
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam sequenceMessageAlign center
+
+actor "AI host" as AI
+participant "MCP server" as MCP
+participant "RankCandidates" as UC
+participant "Inventory repository" as Inventory
+participant "Station profile / radio" as Station
+participant "Evidence providers" as Evidence
+participant "Session history" as History
+participant "Eligibility evaluator" as Eligibility
+participant "Deterministic ranker" as Ranker
+
+AI -> MCP : link_rank_gateways(objective, filters)
+MCP -> UC : RankRequest + trusted RequestContext
+UC -> Inventory : current(filters)
+Inventory --> UC : snapshot + source age/warnings
+UC -> Station : profile(), snapshot()
+Station --> UC : profile revision + observed radio state
+UC -> Evidence : forecast(paths, window, frequencies)
+Evidence --> UC : modeled/reported items + provenance
+UC -> History : outcomes(window, channels)
+History --> UC : classified session/transfer history
+UC -> Eligibility : evaluate(snapshot, profile, capabilities)
+Eligibility --> UC : eligible + excluded + reasons
+UC -> Ranker : score(eligible, evidence, history, objective)
+Ranker --> UC : stable ordering + score components
+UC -> Inventory : persist ranking provenance (optional snapshot ref)
+UC --> MCP : Ranking(snapshotId, asOf, rankerVersion, warnings)
+MCP --> AI : candidates + score breakdown + exclusions
+
+note over AI,Ranker
+This flow is read-only: it takes no radio lease,
+does not tune, authorize, key PTT, or claim reachability.
+end note
+@enduml

@@ -1,14 +1,14 @@
 [package]
-name = "openvara"
+name = "linkwise"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-description = "OpenVARA cross-platform Rust modem interoperability research scaffold"
+description = "Linkwise cross-platform Rust modem interoperability research scaffold"
 
 [lib]
-name = "openvara"
+name = "linkwise"
 path = "src/lib.rs"
 
 [[bin]]
-name = "openvara"
+name = "linkwise"
 path = "src/main.rs"

@@ -1,0 +1,81 @@
+@startuml Linkwise_Deployment
+left to right direction
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam ArrowColor #2A6F75
+
+actor "Station owner" as Owner
+
+node "Autonomous station workstation" as Workstation {
+  node "AI host process" as AIHost {
+    component "Model adapter / MCP client" as MCPClient
+    component "Model provider\n(optional remote service)" as Model
+    MCPClient --> Model : provider API / HTTPS
+  }
+
+  node "Linkwise process" as Linkwise {
+    component "MCP server\nstdio default; loopback HTTP optional" as MCPServer
+    component "Application + domain core" as Core
+    component "Safety supervisor + PTT arbiter" as Safety
+    database "Local state, evidence, audit" as Store
+    MCPServer --> Core : typed commands / snapshots
+    Core --> Safety : authorize / release / monitor
+    Core --> Store : transactional events / queries
+    Safety --> Store : safety audit (best effort; never blocks release)
+  }
+
+  node "Radio control" as RadioControl {
+    component "rigctld / Hamlib" as Rigctld
+    component "VARA HF or Linkwise modem" as Modem
+    component "Winlink client" as Winlink
+  }
+
+  node "Station hardware" as Station {
+    node "HF transceiver" as Radio
+    node "Audio interface" as Audio
+    node "Qualified PTT route +\nindependent transmit inhibit" as PttHw
+    component "Human-only emergency-stop\ncontrol (independent circuit)" as EStop
+  }
+
+  MCPClient --> MCPServer : stdio pipe
+  Core --> Rigctld : local TCP / Hamlib protocol
+  Core --> Modem : documented local control interface
+  Core --> Winlink : supported client adapter/API
+  Rigctld --> Radio : CAT / USB
+  Modem --> Audio : baseband audio
+  Modem --> Safety : scoped PTT request only
+  Safety --> PttHw : assert permit / release
+  PttHw --> Radio : key line / qualified control
+  EStop --> PttHw : hard inhibit / force release
+  Audio --> Radio : TX/RX audio
+}
+
+Owner --> EStop : emergency stop only
+
+cloud "Winlink RMS / CMS" as WinlinkNet
+cloud "RMS directory and\nstatus feeds" as RmsDirectory
+cloud "VOACAP / spots / GIRO\n(optional evidence sources)" as Evidence
+Winlink --> WinlinkNet : Winlink session / transfer
+Core --> RmsDirectory : bounded metadata refresh / HTTPS
+Core --> Evidence : bounded forecast/observation requests
+
+node "Test runner (development only)" as TestRunner {
+  component "Scenario harness" as Harness
+  component "Virtual time + fake adapters" as Fakes
+  component "Evaluator-only RF truth" as Truth
+  Harness --> Fakes : load / reset / advance
+  Harness --> Truth : evaluate only
+}
+Fakes ..> Core : same ports; no physical radio route
+Truth -[hidden]right-> Workstation
+
+note bottom of Workstation
+No inbound public listener by default. Non-loopback MCP or rig control
+requires separate authentication and deployment review. Physical emergency
+inhibit remains independent of the workstation and model provider.
+Runtime human interface is telemetry/audit plus emergency stop; no routine
+actuator or approval controls are provided. The station profile is installed
+and qualified before autonomous activation.
+end note
+@enduml

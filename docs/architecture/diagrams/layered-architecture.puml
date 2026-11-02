@@ -1,0 +1,119 @@
+@startuml Linkwise_Layered_Architecture
+left to right direction
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam ArrowColor #2A6F75
+skinparam package {
+  BorderColor #16324F
+  BackgroundColor #EFF5F8
+  FontColor #16324F
+}
+
+actor "Station owner\n(pre-deployment commissioning)" as Owner
+actor "AI host / autonomous agent\n(untrusted planner)" as AI
+
+package "Inbound boundary" as Inbound {
+  component "MCP server\n(schema, identity, limits)" as MCP
+  component "Read-only telemetry / audit" as Telemetry
+}
+
+package "Application layer" as App {
+  component "Use-case dispatcher" as UseCases
+  component "Inventory refresh" as Refresh
+  component "Candidate ranking" as Rank
+  component "Station command actor\n(sole mutation writer)" as StationActor
+  component "Session supervisor" as Session
+  component "Safety supervisor\n(deadlines, abort, PTT release)" as Safety
+}
+
+package "Domain core (deterministic)" as Domain {
+  component "Eligibility + evidence" as Eligibility
+  component "Utility ranker" as Utility
+  component "Station/session state machines" as State
+  component "Policy + authorization" as Policy
+  component "Radio lease + revision" as Lease
+  component "PTT permit arbiter" as Ptt
+  component "Outcome classifier" as Outcomes
+}
+
+package "Ports (owned by application/domain)" as Ports {
+  interface "RadioControlPort" as RadioPort
+  interface "PttControlPort" as PttPort
+  interface "ModemSessionPort" as ModemPort
+  interface "WinlinkClientPort" as WinlinkPort
+  interface "GatewayDirectoryPort" as DirectoryPort
+  interface "EvidenceProviderPort" as EvidencePort
+  interface "HistoryRepository / AuditWriter" as StorePort
+}
+
+package "Infrastructure adapters" as Adapters {
+  component "Hamlib / rigctld adapter" as Hamlib
+  component "Qualified PTT driver" as PttDriver
+  component "VARA / Linkwise modem adapter" as Modem
+  component "Winlink client adapter" as Winlink
+  component "RMS directory adapter" as Directory
+  component "VOACAP + observation adapters" as Evidence
+  component "Local event store" as Store
+}
+
+cloud "Radio + audio/PTT hardware" as Hardware
+component "Independent human emergency stop" as EStop
+cloud "RMS/CMS + external data" as External
+
+Owner --> Telemetry : commissioning / observation
+Owner --> EStop : sole runtime actuator
+EStop --> Hardware : hard TX inhibit / PTT release
+AI --> MCP : typed MCP tools/resources
+Telemetry --> StorePort : read-only status / audit
+MCP --> UseCases : validated command
+UseCases --> Refresh
+UseCases --> Rank
+UseCases --> StationActor
+UseCases --> Session
+StationActor --> Lease
+StationActor --> State
+StationActor --> Policy
+Session --> State
+Session --> Safety
+Safety --> Ptt
+Rank --> Eligibility
+Rank --> Utility
+Rank --> Outcomes
+Eligibility --> DirectoryPort
+Utility --> EvidencePort
+Refresh --> DirectoryPort
+StationActor --> RadioPort
+Session --> WinlinkPort
+Session --> ModemPort
+Ptt --> PttPort
+Outcomes --> StorePort
+Safety --> StorePort
+Refresh --> StorePort
+Rank --> StorePort
+
+Hamlib ..|> RadioPort
+PttDriver ..|> PttPort
+Modem ..|> ModemPort
+Winlink ..|> WinlinkPort
+Directory ..|> DirectoryPort
+Evidence ..|> EvidencePort
+Store ..|> StorePort
+Hamlib --> Hardware : CAT / rigctld
+PttDriver --> Hardware : qualified key/release path
+Modem --> Hardware : audio; PTT via arbiter only
+Winlink --> External : documented client path
+Directory --> External : source API/feed
+Evidence --> External : forecast/observation APIs
+
+note bottom of Domain
+No domain/application policy is delegated
+to model prompts or infrastructure adapters.
+The autonomous AI can invoke every enabled backend-reported
+CAT control through MCP; all actuator paths
+terminate at local policy and the PTT arbiter.
+No routine human approval or actuator surface exists
+during runtime; emergency stop is physically independent.
+end note
+@enduml

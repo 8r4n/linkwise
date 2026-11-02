@@ -1,0 +1,34 @@
+@startuml Linkwise_Cover_Architecture
+!include <C4/C4_Context>
+
+LAYOUT_LEFT_RIGHT()
+SHOW_LEGEND(false)
+skinparam backgroundColor #EFF5F8
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 12
+skinparam shadowing false
+
+Person(ai, "AI host / autonomous planner", "Uses full locally enabled CAT/PTT tools; manages Winlink links")
+Person(operator, "Station owner", "Installs and qualifies station profile; runtime control is emergency stop only")
+
+System_Boundary(linkwise_boundary, "Linkwise station") {
+  System(linkwise, "Linkwise Link Manager", "Maintains eligible Winlink channel candidates; combines VOACAP forecasts and measured history; enforces policy before radio actions")
+}
+
+System_Ext(radio, "HF radio + Hamlib", "Full advertised CAT controls; PTT is policy-guarded")
+System_Ext(estop, "Independent emergency stop", "Human-only physical transmit inhibit; latches safe state")
+System_Ext(modem, "VARA HF / Linkwise", "Establishes the HF data link")
+System_Ext(winlink, "Winlink client + RMS/CMS", "Selects RMS channels and transfers messages")
+System_Ext(evidence, "Propagation evidence", "VOACAP, RMS directory, reports and ionosonde data")
+System_Ext(reentry, "Reentry research feed", "Uncertain predictions; shadow analysis only")
+
+Rel(ai, linkwise, "MCP: autonomously configure, key, manage, recover")
+Rel(operator, linkwise, "Install signed profile before activation")
+Rel(operator, estop, "Emergency stop only during operation")
+Rel(estop, radio, "Independent hardware TX inhibit / release")
+Rel(linkwise, radio, "Capability-driven CAT / state readback")
+Rel(linkwise, modem, "Session coordination")
+Rel(linkwise, winlink, "Gateway selection / message session")
+Rel(evidence, linkwise, "Timestamped operational evidence")
+Rel(reentry, linkwise, "Research covariate via validation gate")
+@enduml

@@ -1,0 +1,93 @@
+@startuml Linkwise_Software_Layers
+!theme plain
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam packageStyle rectangle
+skinparam ArrowColor #2A9D8F
+skinparam ArrowThickness 1.4
+
+actor "Operator" as OP
+cloud "AI host / model\n(untrusted planner)" as AI
+package "Linkwise trusted application boundary" {
+  package "Inbound adapters" {
+    [MCP server\nidentity + schema validation] as MCP
+  }
+  package "Application services" {
+    [Autonomous use cases\nrefresh / rank / configure / session / recover] as APP
+    [Station command actor\nserialized mutations + lease] as ACTOR
+  }
+  package "Domain core" {
+    [Eligibility + candidate ranker] as RANK
+    [Station policy + authorization] as POLICY
+    [Session aggregate + PTT arbiter] as SAFE
+    [Evidence + audit semantics] as DATA
+  }
+  package "Outbound ports" {
+    interface "RadioControlPort" as RADIOPORT
+    interface "PttControlPort" as PTT
+    interface "ModemSessionPort" as MODEM
+    interface "WinlinkClientPort" as WINLINK
+    interface "Evidence / directory ports" as EVIDENCE
+    interface "Repository / clock ports" as STORE
+  }
+}
+package "Infrastructure adapters" {
+  [Hamlib / rigctld adapter] as HAM
+  [Qualified PTT driver] as PTTDRV
+  [VARA / modem adapter] as MODEMAD
+  [Supported Winlink client adapter] as CLIENT
+  [VOACAP + observations] as SOURCES
+  [Local event store] as DB
+  [Simulator adapters + virtual clock] as SIM
+}
+component "Transceiver + PTT hardware" as RADIOHW
+cloud "Modem, Winlink client,\nexternal evidence services" as EXT
+component "Human emergency stop\n(independent TX inhibit)" as ESTOP
+
+OP --> ESTOP : emergency stop only
+AI --> MCP : typed MCP requests
+ESTOP --> RADIOHW : hard transmit inhibit / PTT release
+MCP --> APP
+APP --> ACTOR : state-changing use cases
+APP --> RANK : immutable evidence snapshot
+APP --> POLICY
+ACTOR --> POLICY
+ACTOR --> SAFE
+RANK --> EVIDENCE
+DATA --> STORE
+POLICY --> RADIOPORT
+SAFE --> PTT
+APP --> MODEM
+APP --> WINLINK
+RADIOPORT <|.. HAM
+PTT <|.. PTTDRV
+MODEM <|.. MODEMAD
+WINLINK <|.. CLIENT
+EVIDENCE <|.. SOURCES
+STORE <|.. DB
+RADIOPORT <|.. SIM
+PTT <|.. SIM
+MODEM <|.. SIM
+WINLINK <|.. SIM
+EVIDENCE <|.. SIM
+STORE <|.. SIM
+HAM --> RADIOHW : full capability-driven CAT
+PTTDRV --> RADIOHW : qualified PTT route
+MODEMAD --> EXT
+CLIENT --> EXT
+SOURCES --> EXT
+MODEMAD --> RADIOHW : audio / arbiter-routed PTT
+note bottom of AI
+  Full locally enabled CAT and PTT tool surface
+  is available through MCP. No direct device
+  socket or policy bypass; requests are audited.
+end note
+note bottom of SAFE
+  Grants are automatic within the installed
+  authority. Watchdog/release/abort is local
+  and independent of model/network latency.
+end note
+@enduml

@@ -1,10 +1,10 @@
 use std::env;
 
-const USAGE: &str = "openvara — cross-platform modem research scaffold
+const USAGE: &str = "linkwise — cross-platform modem research scaffold
 
 Usage:
-  openvara --help
-  openvara --version
+  linkwise --help
+  linkwise --version
 
 Modem operation is not implemented yet.";
 
@@ -18,7 +18,7 @@ fn main() {
             println!("{USAGE}");
         }
         (Some(arg), None) if arg == "--version" || arg == "-V" => {
-            println!("openvara {}", env!("CARGO_PKG_VERSION"));
+            println!("linkwise {}", env!("CARGO_PKG_VERSION"));
         }
         _ => {
             eprintln!("{USAGE}");

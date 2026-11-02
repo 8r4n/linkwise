@@ -1,4 +1,4 @@
-//! Portable library boundary for the OpenVARA modem implementation.
+//! Portable library boundary for the Linkwise modem implementation.
 //!
 //! Protocol and DSP behavior remain intentionally undefined until supported
 //! by reference observations and repeatable tests.
