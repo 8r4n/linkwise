@@ -1,0 +1,47 @@
+name: linkwise
+
+services:
+  linkwise:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      LINKWISE_RADIO_BACKEND: ${LINKWISE_RADIO_BACKEND:-simulated}
+      LINKWISE_RIGCTLD_ADDR: ${LINKWISE_RIGCTLD_ADDR:-hamlib:4532}
+      LINKWISE_RADIO_WRITES: ${LINKWISE_RADIO_WRITES:-false}
+      LINKWISE_AUDIT_PATH: /var/lib/linkwise/audit.jsonl
+      LINKWISE_MIN_FREQ_HZ: ${LINKWISE_MIN_FREQ_HZ:-}
+      LINKWISE_MAX_FREQ_HZ: ${LINKWISE_MAX_FREQ_HZ:-}
+      LINKWISE_MAX_POWER_FRACTION: ${LINKWISE_MAX_POWER_FRACTION:-}
+      LINKWISE_ALLOWED_MODES: ${LINKWISE_ALLOWED_MODES:-}
+      LINKWISE_ENABLED_HAMLIB_CONTROLS: ${LINKWISE_ENABLED_HAMLIB_CONTROLS:-}
+    profiles: [dev, simulation, radio]
+    networks: [station]
+    stdin_open: true
+    volumes: [linkwise-data:/var/lib/linkwise]
+
+  hamlib:
+    build:
+      context: .
+      dockerfile: containers/hamlib/Dockerfile
+    environment:
+      RIGCTLD_MODEL: ${RIGCTLD_MODEL:-1}
+      RIGCTLD_DEVICE: ${RIGCTLD_DEVICE:-/dev/ttyUSB0}
+      RIGCTLD_PORT: "4532"
+    devices:
+      - ${RIGCTLD_HOST_DEVICE:-/dev/ttyUSB0}:${RIGCTLD_DEVICE:-/dev/ttyUSB0}
+    profiles: [radio]
+    networks: [station]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "rigctl -m 2 -r 127.0.0.1:4532 f >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+networks:
+  station:
+    internal: true
+
+volumes:
+  linkwise-data:

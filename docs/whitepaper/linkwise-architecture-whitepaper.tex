@@ -43,6 +43,21 @@
 \newcommand{\todo}{\textcolor{ovred}{\textbf{TBD}}}
 \newcommand{\evidence}[1]{\textsf{#1}}
 \newcommand{\urlref}[2]{\href{#1}{#2}}
+% Every PlantUML figure gets a dedicated landscape page, a bounded image box,
+% and a caption/label. Keep height below the landscape text area for captions.
+\newcommand{\landscapeplantuml}[3]{%
+  \clearpage
+  \begin{landscape}
+    \thispagestyle{plain}
+    \centering
+    \includegraphics[width=0.94\linewidth,height=0.72\textheight,keepaspectratio]{#1}\par
+    \vspace{0.10in}
+    \captionsetup{width=0.94\linewidth}
+    \captionof{figure}{#2}
+    \label{#3}
+  \end{landscape}
+  \clearpage
+}
 
 \begin{document}
 
@@ -61,22 +76,14 @@
   \textbf{Document:} LINKWISE-WP-001\par
   \textbf{Version:} 0.1 --- Architecture proposal\par
   \textbf{Date:} November 2026\par
-  \textbf{Status:} Proposed system; not an implemented capability
+  \textbf{Status:} Proposed system; limited radio-control MCP prototype implemented
   \vspace{0.25in}
   {\small\color{ovgray}Prepared as an engineering whitepaper. All protocol, automation, and propagation capabilities remain subject to implementation and validation.}
 \end{titlepage}
 \nopagecolor
 \color{black}
 
-\clearpage
-\begin{landscape}
-  \thispagestyle{plain}
-  \centering
-  \includegraphics[width=0.94\linewidth,height=0.74\textheight,keepaspectratio]{build/diagrams/Linkwise_Cover_Architecture}
-  \captionof{figure}{C4 system context: Linkwise and its people, station interfaces, Winlink services, and evidence sources.}
-  \label{fig:c4-system-context-cover}
-\end{landscape}
-\clearpage
+\landscapeplantuml{build/diagrams/Linkwise_Cover_Architecture}{C4 system context: Linkwise and its people, station interfaces, Winlink services, and evidence sources.}{fig:c4-system-context-cover}
 
 \begin{abstract}
 \noindent\system{} is a proposed system for helping a radio station send and receive Winlink messages over HF radio. It brings together radio settings, the VARA modem, Winlink gateways, and information about radio conditions. An AI agent would use this information to choose a promising gateway, configure the radio, and manage message sessions automatically within limits set before operation. The operator would not need to supervise routine activity and could stop transmissions using an independent emergency stop. The system would record session results to guide future choices. VOACAP forecasts can help compare possible radio paths, but they cannot guarantee a connection; the possible effects of satellite reentry remain a research question. One radio can use only one HF channel at a time. Linkwise has not yet implemented this full system, so the paper describes a design that still needs to be built and tested.
@@ -98,7 +105,75 @@ Reliable HF messaging depends on several things lining up: a gateway must be ava
 
 The design keeps each responsibility at a clear boundary. Hamlib/rigctld exposes all capabilities reported by the radio backend, and the AI can request any locally enabled CAT setting or registered device extension through typed MCP tools. PTT state, key-up, and key-down are also explicit tools; key-up remains subject to station-configured authority, and release remains an independent safety operation. A modem adapter handles protocol timing and the data link, and a Winlink-client adapter manages message and gateway sessions. Other adapters collect propagation and gateway evidence. The model does not connect to CAT/PTT sockets itself: Linkwise serializes and audits each operation and validates it against the radio profile and policy.
 
-This distinction between proposal and implementation matters: the current Rust crate does not yet provide a modem, MCP service, gateway optimizer, or autonomous transmit workflow. VARA protocol details also remain subject to evidence. The roadmap moves from observation and simulation through controlled interoperability and staged safety qualification before autonomous service is enabled. This paper presents the system-level rationale; companion architecture, requirements, interface, safety, and simulation documents carry the deeper engineering detail.
+This distinction between proposal and implementation matters. A limited Rust MCP radio-control prototype now exists, but Linkwise still has no VARA-compatible modem, gateway optimizer, or autonomous transmit workflow. VARA protocol details also remain subject to evidence. The roadmap moves from observation and simulation through controlled interoperability and staged safety qualification before autonomous service is enabled. The prototype and its validation limits are summarized in Section~\ref{sec:implementation-progress}; companion architecture, requirements, interface, safety, and simulation documents carry the deeper engineering detail.
+
+\section{Implementation progress: radio-control MCP prototype}\label{sec:implementation-progress}
+As of November 2026, the project has implemented an early radio-control service
+in Rust using the official \texttt{rmcp} 3.9.0 SDK. The service speaks MCP over
+standard input/output and is launched as a container through Docker Compose.
+Compose defines development, simulation, and radio-connected profiles; the
+radio profile builds Hamlib 4.7.2 from a version-pinned source release whose
+SHA-256 is checked during image construction. The Linkwise application
+container and Hamlib/\texttt{rigctld} container communicate over a private
+Compose network.
+
+The prototype currently exposes these MCP tools:
+\begin{itemize}
+  \item \texttt{radio\_get\_state}, with timestamped radio observations,
+        per-field errors, and a state revision;
+  \item \texttt{radio\_get\_capabilities} and \texttt{radio\_get\_controls},
+        returning Hamlib's raw capability dump and Linkwise's current control
+        descriptors;
+  \item \texttt{radio\_get\_ptt\_state}, reporting observed PTT state and
+        explicitly indicating that no watchdog is active;
+  \item \texttt{radio\_get\_control} and \texttt{radio\_set\_control},
+        using typed frequency, mode, RF-power, level, function, VFO, passband,
+        split, antenna, memory, RIT/XIT, and split-transmit values; and
+  \item \texttt{radio\_ptt\_request}, with separate key-up and key-down
+        requests and observed release state.
+\end{itemize}
+
+The \texttt{rigctld} adapter uses bounded TCP requests and serializes its CAT
+commands. Physical CAT writes are disabled by default. If explicitly enabled,
+frequency, mode, and RF-power writes require configured station limits, are
+rejected while PTT is asserted, and are checked by radio readback. Requests and
+outcomes are recorded as JSON Lines in a volume-backed audit file; failure to
+record a requested change denies that change. The adapter now discovers
+backend get/set level, function, and parameter tokens from one parsed
+\texttt{dump\_caps} response and maps
+common frequency, mode, VFO, passband, split-VFO, antenna selection,
+memory-channel, RIT/XIT, and split-transmit operations to typed values. Mode
+and VFO enum values and numeric level ranges come from that catalog, so
+capability enumeration does not issue a serial chain of live control probes.
+Generic levels/functions are validated against the discovered token catalog,
+and writes beyond the basic frequency/mode/power profile require explicit
+per-control enablement through
+\texttt{LINKWISE\_ENABLED\_HAMLIB\_CONTROLS}. The catalog is still incomplete:
+memory contents/channel records, device-specific extension invocation, and
+some non-control rig operations are not implemented. Parameter enum values are
+not yet converted into typed enums, and side-effect classes remain partly
+conservative defaults that need radio-by-radio qualification. Unsupported
+backend operations are reported as such.
+
+The simulated backend has no route to hardware. It supports in-memory changes
+to frequency, mode, and RF power for the lifetime of its MCP process, while
+PTT key-up is always denied and key-down remains a release-only request. CAT
+state revisions are currently Linkwise-local counters; they do not yet detect
+radio changes made by another controller. The service also lacks the planned
+exclusive lease, session/one-use transmit-permit arbiter, and independent PTT
+watchdog. PTT observation currently reports the watchdog as inactive. For
+these reasons, the prototype is not qualified for physical
+transmission or unattended station operation.
+
+Validation to date includes seven Rust unit tests, successful Rust compilation,
+successful builds of both container images, and valid Compose profile
+configuration. MCP state/capability calls have been exercised against the
+simulation and Hamlib's dummy-radio backend; typed simulator writes have been
+read back with revision checks, and simulated key-up was denied. No physical
+radio, native audio/PTT path, VARA session, gateway workflow, or modem
+interoperability has been tested. These results validate a narrow MCP and
+container integration slice, not the proposed end-to-end communications
+system.
 
 \section{Purpose and scope}
 
@@ -246,14 +321,14 @@ policy retains the authority to deny unsafe or out-of-profile operations.
 
 This decomposition is also the integration strategy. Existing programs stay
 behind adapters, so their version-specific interfaces can be tested and
-replaced without putting those details into the optimizer. The Rust
-repository is currently a scaffold and has no selected runtime dependencies
-for MCP, audio, or Hamlib bindings. The official Rust MCP SDK \texttt{rmcp}
-and cross-platform audio I/O library \texttt{cpal} are examples for later
-evaluation—not dependencies already used or final selections [23,24]. The
-initial architecture favors connecting to the existing local services over
-embedding native libraries until packaging, platform coverage, licensing,
-error handling, and hardware behavior have been evaluated.
+replaced without putting those details into the optimizer. The current Rust
+prototype uses the official Rust MCP SDK \texttt{rmcp} and connects to
+Hamlib's \texttt{rigctld} service over TCP. It does not yet include audio
+support or embed Hamlib's C library. The cross-platform audio I/O library
+\texttt{cpal} remains an option for later evaluation, not a selected
+dependency [23,24]. The architecture favors connecting to existing local
+services over embedding native libraries until packaging, platform coverage,
+licensing, error handling, and hardware behavior have been evaluated.
 
 \subsection{Stakeholders and concerns}
 The design serves people with different priorities. The station owner needs reliable pre-deployment configuration and a dependable emergency stop; developers need stable interfaces and testable behavior; safety reviewers need to know how autonomous actions are bounded. The table connects those concerns to the views used later in the paper.
@@ -307,15 +382,7 @@ recording what happened after an attempt:
   \item Record the result and update historical gateway estimates.
 \end{enumerate}
 
-\clearpage
-\begin{landscape}
-  \thispagestyle{plain}
-  \centering
-  \includegraphics[width=0.92\linewidth,height=0.72\textheight,keepaspectratio]{build/diagrams/Linkwise_Operating_Loop}
-  \captionof{figure}{Linkwise operating loop from evidence collection through session outcome and learning.}
-  \label{fig:operating-loop}
-\end{landscape}
-\clearpage
+\landscapeplantuml{build/diagrams/Linkwise_Operating_Loop}{Linkwise operating loop from evidence collection through session outcome and learning.}{fig:operating-loop}
 
 \section{Architecture}
 
@@ -350,15 +417,29 @@ All architecture diagrams in this paper are authored as PlantUML source in
 \texttt{docs/whitepaper/diagrams/} and rendered locally during the build. The
 generated standalone LaTeX is an intermediate used to create vector PDF
 figures; it is not maintained as diagram source [17].
-\clearpage
-\begin{landscape}
-  \thispagestyle{plain}
-  \centering
-  \includegraphics[width=0.94\linewidth,height=0.74\textheight,keepaspectratio]{build/diagrams/Linkwise_System_Context}
-  \captionof{figure}{System context and component boundaries for the proposed Linkwise Link Manager.}
-  \label{fig:system-context}
-\end{landscape}
-\clearpage
+\landscapeplantuml{build/diagrams/Linkwise_System_Context}{System context and component boundaries for the proposed Linkwise Link Manager.}{fig:system-context}
+
+\subsection{As-built MCP radio-control implementation}
+The following views document the implemented Rust prototype, not the proposed
+autonomous link manager. The MCP process uses stdio transport and typed
+\texttt{rmcp} tool handlers. Handlers delegate to \texttt{RadioControlPort};
+the selected backend is either process-local simulation or
+\texttt{RigctldRadio}. CAT write checks reside in the adapter, and the MCP
+handler appends JSONL audit records. The prototype has no session lease,
+transmit-permit arbiter, or active PTT watchdog. These limits are shown in the
+figures rather than inheriting those components from the proposed views.
+
+\landscapeplantuml{build/diagrams/Linkwise_MCP_Runtime_Components}{As-built MCP runtime components and radio-control boundaries.}{fig:mcp-runtime-components}
+
+\landscapeplantuml{build/diagrams/Linkwise_MCP_Compose_Deployment}{As-built Compose deployment: stdio MCP connection, private rigctld TCP link, audit volume, and optional CAT device mapping.}{fig:mcp-compose-deployment}
+
+\landscapeplantuml{build/diagrams/Linkwise_MCP_Radio_Read}{As-built capability discovery and control read sequence across MCP, the radio port, and the selected backend.}{fig:mcp-radio-read}
+
+\landscapeplantuml{build/diagrams/Linkwise_MCP_Radio_Write}{As-built typed CAT write sequence, including audit, backend readback, and uncertain audit-failure outcome.}{fig:mcp-radio-write}
+
+\landscapeplantuml{build/diagrams/Linkwise_MCP_Radio_Write_Activity}{As-built radio write validation and result activity, including fail-closed audit handling.}{fig:mcp-radio-write-activity}
+
+\landscapeplantuml{build/diagrams/Linkwise_MCP_PTT_Request}{As-built PTT request behavior: key-up denial, key-down release, audit handling, and inactive watchdog.}{fig:mcp-ptt-request}
 
 \subsection{Layered software design}
 The implementation is organized as a ports-and-adapters system with a
@@ -380,15 +461,7 @@ the same ports as the station adapters but keeps evaluator-only RF truth out
 of production-facing tools. The full responsibility and dependency allocation
 is recorded in the companion Software Design Description (SDD) [20].
 
-\clearpage
-\begin{landscape}
-  \thispagestyle{plain}
-  \centering
-  \includegraphics[width=0.94\linewidth,height=0.74\textheight,keepaspectratio]{build/diagrams/Linkwise_Software_Layers}
-  \captionof{figure}{Layered software design, trust boundary, and allowed dependency direction.}
-  \label{fig:software-layers}
-\end{landscape}
-\clearpage
+\landscapeplantuml{build/diagrams/Linkwise_Software_Layers}{Proposed layered software design, trust boundary, and allowed dependency direction.}{fig:software-layers}
 
 \subsection{Component contracts and ownership}
 The system uses typed commands and results rather than passing arbitrary JSON
@@ -413,15 +486,7 @@ append-only decisions and lifecycle events; message bodies and credentials
 are excluded by default. These contracts are summarized in Figure~\ref{fig:software-contracts};
 the companion SDD defines their semantics and representative Rust signatures.
 
-\clearpage
-\begin{landscape}
-  \thispagestyle{plain}
-  \centering
-  \includegraphics[width=0.94\linewidth,height=0.74\textheight,keepaspectratio]{build/diagrams/Linkwise_Software_Contracts}
-  \captionof{figure}{Domain services and typed ports governing the full advertised CAT surface, policy-mediated PTT, modem, Winlink, evidence, and persistence interactions.}
-  \label{fig:software-contracts}
-\end{landscape}
-\clearpage
+\landscapeplantuml{build/diagrams/Linkwise_Software_Contracts}{Proposed domain services and typed ports for CAT, policy-mediated PTT, modem, Winlink, evidence, and persistence.}{fig:software-contracts}
 
 \subsection{Command, state, and concurrency model}
 Reads operate on immutable inventory/evidence snapshots and may run
@@ -448,25 +513,9 @@ binding, one-use permit, airtime limits, and watchdog state. Abort, timeout,
 fault, lease loss, and permit expiry prioritize release. The sequence and
 state views make these independent checks explicit.
 
-\clearpage
-\begin{landscape}
-  \thispagestyle{plain}
-  \centering
-  \includegraphics[width=0.94\linewidth,height=0.74\textheight,keepaspectratio]{build/diagrams/Linkwise_Session_Sequence}
-  \captionof{figure}{Serialized candidate preparation and separately authorized session startup, with PTT arbitration.}
-  \label{fig:session-sequence}
-\end{landscape}
-\clearpage
+\landscapeplantuml{build/diagrams/Linkwise_Session_Sequence}{Proposed serialized candidate preparation and separately authorized session startup, with PTT arbitration.}{fig:session-sequence}
 
-\clearpage
-\begin{landscape}
-  \thispagestyle{plain}
-  \centering
-  \includegraphics[width=0.94\linewidth,height=0.74\textheight,keepaspectratio]{build/diagrams/Linkwise_Session_State}
-  \captionof{figure}{Session lifecycle and fault transitions; release and abort remain available independently of normal progress.}
-  \label{fig:session-state}
-\end{landscape}
-\clearpage
+\landscapeplantuml{build/diagrams/Linkwise_Session_State}{Proposed session lifecycle and fault transitions; release and abort remain available independently of normal progress.}{fig:session-state}
 
 \subsection{Execution isolation and persistence}
 Four execution responsibilities keep slow or unreliable work from delaying
@@ -896,6 +945,7 @@ explicit so they are not mistaken for implementation facts.
   \item KeepTrack, “KeepTrack API v4 documentation,” reentry endpoint, authentication, rate limits, and CC BY-NC 4.0 terms, \url{https://api.keeptrack.space/v4/docs}.
   \item Chiu, Yi-Chung, Loren C. Chang, and Jann-Yenq Liu, “The Ionospheric Impact of Artificial Space Object Reentry,” peer-reviewed abstract, Proceedings of the ION 2026 Pacific PNT Meeting, April 2026, \url{https://www.ion.org/publications/abstract.cfm?articleID=20596}.
   \item Linkwise project, “Software Design Description,” \texttt{docs/architecture/software-design.md}, proposed design baseline, \url{../architecture/software-design.md}.
+  \item Wing, R., Gerding, M., Plane, J. M. C., et al., “Measurement of a lithium plume from the uncontrolled re-entry of a Falcon 9 rocket,” \emph{Communications Earth \& Environment} 7, 161 (2026), \url{https://doi.org/10.1038/s43247-025-03154-8}. Reports an upper-atmospheric lithium plume attributed to a specific re-entry; it does not measure HF/10 m propagation.
   \item Hamlib, “Ham radio control library for rigs, rotators, and amplifiers,” \url{https://github.com/Hamlib/Hamlib}.
   \item Winlink, “VARA Products Now Downloadable Here,” third-party software status, \url{https://winlink.org/content/vara_products_now_downloadable_here}.
   \item Model Context Protocol, “Rust SDK (rmcp),” \url{https://rust.sdk.modelcontextprotocol.io/}.

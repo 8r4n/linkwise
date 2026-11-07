@@ -1,0 +1,68 @@
+@startuml Linkwise_MCP_Radio_Write
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 12
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #2A9D8F
+
+actor "AI host / MCP client" as CLIENT
+participant "stdio + rmcp" as MCP
+participant "RadioMcp handler" as HANDLER
+database "JSONL audit" as AUDIT
+participant "RadioControlPort" as PORT
+participant "RigctldRadio" as RIG
+participant "Hamlib rigctld" as HAM
+
+CLIENT -> MCP : radio_set_control(id, value, revision)
+MCP -> HANDLER : decoded SetControlRequest
+HANDLER -> AUDIT : append request record
+alt request audit failed
+  AUDIT --> HANDLER : I/O error
+  HANDLER --> MCP : audit_failure; do not call radio
+  MCP --> CLIENT : denied before CAT operation
+else request audit succeeded
+  AUDIT --> HANDLER : appended
+  HANDLER -> PORT : set_control(id, value, revision)
+  PORT -> RIG : validate and execute typed write
+  RIG -> RIG : check enablement, revision,
+  RIG -> RIG : PTT released, type, limits, capability
+  alt validation/policy denied
+    RIG --> PORT : RadioError
+  else request permitted
+    RIG -> HAM : serialized CAT set command
+    HAM --> RIG : RPRT 0 or backend error
+    alt backend accepted
+      RIG -> RIG : increment process-local revision
+      RIG -> HAM : read requested control back
+      HAM --> RIG : observed value
+      RIG -> RIG : compare requested and observed
+      alt readback matches
+        RIG -> HAM : read common radio state
+        HAM --> RIG : state fields
+        RIG --> PORT : resulting RadioState
+      else mismatch / readback unavailable
+        RIG --> PORT : ReadbackMismatch
+      end
+    else backend rejected / unavailable
+      RIG --> PORT : Protocol or Unavailable error
+    end
+  end
+  PORT --> HANDLER : state or RadioError
+  HANDLER -> AUDIT : append completion record
+  alt completion audit failed
+    AUDIT --> HANDLER : I/O error
+    HANDLER --> MCP : audit_failure; outcome may have occurred
+  else completion audit succeeded
+    AUDIT --> HANDLER : appended
+    HANDLER --> MCP : ApiResult with mapped status
+  end
+  MCP --> CLIENT : result; inspect status and readback
+end
+
+note over HANDLER,HAM
+  CAT writes are disabled by default. This path does not
+  include the proposed lease/session authorization service.
+end note
+@enduml

@@ -148,7 +148,15 @@ separate inhibited, shielded/conducted setup.
 
 ### 4.3 Deployment/physical view
 
-Minimum deployment:
+Minimum deployment uses Docker Compose to manage Linkwise services. The
+MCP/application service and Hamlib/`rigctld` service communicate over a private
+Compose network; only the MCP transport is exposed to its configured local
+host. The simulated backend is used in development and cannot reach physical
+radio devices. A radio-connected profile grants device access only to the
+Hamlib service. Host device pass-through and emergency-stop qualification
+remain platform-specific and must be established before radio deployment.
+
+Minimum deployed configuration:
 
 - One autonomous station workstation running OLM, AI host, radio control, modem, and
   Winlink client.

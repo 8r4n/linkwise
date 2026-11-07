@@ -1,0 +1,55 @@
+@startuml Linkwise_MCP_PTT_Request
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 12
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #2A9D8F
+
+actor "AI host / MCP client" as CLIENT
+participant "stdio + rmcp" as MCP
+participant "RadioMcp handler" as HANDLER
+database "JSONL audit" as AUDIT
+participant "RadioControlPort" as PORT
+participant "RigctldRadio" as RIG
+participant "Hamlib rigctld" as HAM
+
+CLIENT -> MCP : radio_ptt_request(action)
+MCP -> HANDLER : decoded PttRequest
+HANDLER -> AUDIT : append ptt_request record
+alt key-up and request audit failed
+  AUDIT --> HANDLER : I/O error
+  HANDLER --> MCP : audit_failure; key-up not attempted
+  MCP --> CLIENT : non-ok result
+else key-down or audit succeeded
+  AUDIT --> HANDLER : appended or I/O error
+  HANDLER -> PORT : request_ptt(request)
+  alt key-up
+    PORT -> RIG : request key-up
+    RIG --> PORT : denied (permit arbiter absent)
+  else key-down
+    PORT -> RIG : request release
+    RIG -> HAM : T 0
+    HAM --> RIG : RPRT 0
+    RIG -> HAM : query PTT state (t)
+    HAM --> RIG : observed state
+    RIG --> PORT : release observation
+  end
+  PORT --> HANDLER : observation or RadioError
+  HANDLER -> AUDIT : append ptt_completed record
+  alt completion audit failure
+    AUDIT --> HANDLER : I/O error
+    HANDLER --> MCP : audit_failure; include release warning if applicable
+  else audit succeeded
+    AUDIT --> HANDLER : appended
+    HANDLER --> MCP : ApiResult
+  end
+  MCP --> CLIENT : result with observed release state
+end
+
+note over RIG,HAM
+  The watchdog is inactive. Key-up is denied;
+  no transmit authorization is implemented.
+end note
+@enduml

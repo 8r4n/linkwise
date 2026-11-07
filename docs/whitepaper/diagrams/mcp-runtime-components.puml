@@ -1,0 +1,56 @@
+@startuml Linkwise_MCP_Runtime_Components
+!theme plain
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam ArrowColor #2A9D8F
+skinparam ArrowThickness 1.4
+
+actor "AI host / MCP client" as CLIENT
+
+package "Linkwise container (as built)" {
+  [stdio transport] as STDIO
+  [rmcp server + tool router] as RMCP
+  [RadioMcp handlers\n(tool dispatch + ApiResult)] as HANDLERS
+  interface "RadioControlPort" as PORT
+  [JSONL audit append] as AUDIT
+
+  package "Radio backends" {
+    [RigctldRadio\n(CAT mapping + limits)] as RIG
+    [SimulatedRadio\n(in-memory state)] as SIM
+  }
+}
+
+database "Volume-backed\naudit.jsonl" as LOG
+
+node "Compose radio profile" {
+  component "Hamlib rigctld" as HAM
+  component "Radio CAT interface" as CAT
+}
+
+CLIENT --> STDIO : JSON-RPC over stdin/stdout
+STDIO --> RMCP : MCP messages
+RMCP --> HANDLERS : decoded tool request
+HANDLERS --> PORT : typed radio operation
+HANDLERS --> AUDIT : write/PTT audit records
+AUDIT --> LOG : append JSON Lines
+PORT <|.. RIG
+PORT <|.. SIM
+RIG --> HAM : bounded private TCP
+HAM --> CAT : Hamlib CAT backend
+
+note bottom of HANDLERS
+  Tool input types are decoded by rmcp/serde.
+  Audit and CAT policy checks live in this prototype;
+  no separate session arbiter is implemented.
+end note
+
+note bottom of RIG
+  Writes disabled by default.
+  PTT key-up is denied; no watchdog is active.
+end note
+@enduml

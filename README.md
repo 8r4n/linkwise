@@ -89,8 +89,11 @@ while autonomous operation is active.
 
 Linkwise is in the research and foundation stage.
 
-- The Rust crate is a scaffold with module boundaries for the application API,
-  audio, modem, and platform integration.
+- The Rust crate contains an initial stdio MCP radio-control server, a typed
+  radio-control port, a `rigctld` adapter, and a non-transmitting simulator
+  with in-memory frequency, mode, and power controls.
+- Docker Compose profiles define development/simulation and radio-connected
+  service stacks; Hamlib source is pinned by release and checksum.
 - The stable Rust toolchain, formatter, Clippy, rust-analyzer, and six declared
   cross-compilation targets are configured.
 - Research notes, a proposed implementation roadmap, and a propagation-toolbox
@@ -239,6 +242,38 @@ aarch64-unknown-linux-gnu  x86_64-unknown-linux-gnu
 
 Cross-target compilation is necessary but does not replace native execution,
 audio-device validation, PTT testing, or reference interoperability tests.
+
+## Containerized radio-control services
+
+Project services are developed and run through Docker Compose. The development
+profile uses a non-transmitting simulated radio. Its frequency, mode, and
+power controls update only in-memory state:
+
+```sh
+docker compose --profile dev run --build --rm -i linkwise
+```
+
+VS Code can connect to this stdio server through the
+`linkwise-simulated-radio` entry in `.vscode/mcp.json`. Reload workspace MCP
+servers after changing that configuration.
+
+For radio-connected use, set `RIGCTLD_HOST_DEVICE`, `RIGCTLD_MODEL`, and
+`LINKWISE_RADIO_BACKEND=rigctld`, then start Hamlib and launch the MCP service:
+
+```sh
+docker compose --profile radio up --build -d hamlib
+docker compose --profile radio run --rm -i -e LINKWISE_RADIO_BACKEND=rigctld linkwise
+```
+
+Configure the station limits described in the architecture. CAT writes are
+disabled by default and denied unless explicit frequency, mode, and power
+limits are configured. Hamlib is reachable only on the Compose network and is
+not published to the host. See
+[`compose.yaml`](compose.yaml) and [`containers/hamlib.lock`](containers/hamlib.lock).
+
+Physical device pass-through and emergency-stop qualification remain
+platform-specific work. The radio Compose profile does not imply that every
+host OS supports direct device pass-through to containers.
 
 ## Roadmap
 

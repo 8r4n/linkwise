@@ -1,0 +1,47 @@
+@startuml Linkwise_MCP_Compose_Deployment
+!theme plain
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam componentStyle rectangle
+skinparam ArrowColor #2A9D8F
+skinparam ArrowThickness 1.4
+
+node "Station workstation" as HOST {
+  node "MCP client process" as CLIENT {
+    artifact "AI host / MCP client" as AI
+  }
+
+  node "Docker Compose" as COMPOSE {
+    node "linkwise container" as LINKWISE {
+      artifact "linkwise MCP stdio process" as MCP
+      database "mounted volume:\naudit.jsonl" as AUDIT
+    }
+
+    node "hamlib container\n(radio profile only)" as HAMLIB {
+      artifact "rigctld :4532" as RIGCTLD
+    }
+  }
+
+  node "Radio hardware\n(optional physical backend)" as RADIO {
+    artifact "CAT serial device" as CAT
+  }
+}
+
+AI <--> MCP : MCP JSON-RPC over stdin/stdout
+MCP --> AUDIT : append control/PTT events
+MCP --> RIGCTLD : private Compose TCP :4532
+RIGCTLD --> CAT : optional device mapping
+
+note bottom of MCP
+  Development/simulation can use the in-memory
+  backend without starting the Hamlib container.
+end note
+
+note bottom of RIGCTLD
+  Dummy-radio tests may bind /dev/null;
+  no physical radio is implied by the diagram.
+end note
+@enduml

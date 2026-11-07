@@ -18,10 +18,13 @@ cache PlantUML/TeX resources; subsequent builds reuse those caches. Generated
 PDFs and auxiliary files are written to the ignored `build/` folder.
 
 Architecture and software-design figures are authored only in
-[`diagrams/`](diagrams/). The paper includes context, layered software,
-contract, session-sequence, and session-state views. Edit those PlantUML
-sources rather than generated LaTeX or PDFs. PlantUML's LaTeX output is an
-intermediate rendering format, not a diagram source of truth.
+[`diagrams/`](diagrams/). The paper distinguishes the proposed system views
+from as-built MCP views: the latter cover runtime components, Compose
+deployment, control read/write sequences, write validation, and current PTT
+behavior. Each diagram is placed on its own landscape page with a bounded
+image size and caption. Edit PlantUML sources rather than generated LaTeX or
+PDFs. PlantUML's LaTeX output is an intermediate rendering format, not a
+diagram source of truth.
 
 The source uses a portable `article` class and standard TeX packages. It is
 original project material. The supplied

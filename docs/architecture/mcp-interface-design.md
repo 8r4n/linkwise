@@ -2,7 +2,9 @@
 
 **Document ID:** LINKWISE-ICD-MCP-001  
 **Version:** 0.1, proposed  
-**Status:** Interface proposal; no server implemented
+**Status:** Interface proposal; partial Rust server implemented. See the
+implementation progress section of the architecture whitepaper for the
+implemented subset and validation limits.
 
 ## 1. Design goals
 

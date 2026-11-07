@@ -1,0 +1,10 @@
+.git
+.codex
+.agents
+**/target
+reference
+lab-notes
+docs
+*.pdf
+*.tex
+*.puml

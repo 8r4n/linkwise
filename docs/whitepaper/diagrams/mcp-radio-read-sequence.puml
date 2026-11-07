@@ -1,0 +1,56 @@
+@startuml Linkwise_MCP_Radio_Read
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 12
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #2A9D8F
+
+actor "AI host / MCP client" as CLIENT
+participant "stdio + rmcp" as MCP
+participant "RadioMcp handler" as HANDLER
+participant "RadioControlPort" as PORT
+participant "RigctldRadio" as RIG
+participant "Hamlib rigctld" as HAM
+participant "SimulatedRadio" as SIM
+
+CLIENT -> MCP : tools/call radio_get_controls
+MCP -> HANDLER : decoded request
+HANDLER -> PORT : capabilities()
+alt simulated backend
+  PORT -> SIM : build in-memory descriptors
+  SIM --> PORT : control descriptors
+else rigctld backend
+  PORT -> RIG : capabilities()
+  RIG -> HAM : command "1" (dump_caps)
+  HAM --> RIG : capability lines + RPRT 0
+  RIG -> RIG : parse flags, tokens, modes, ranges
+  RIG --> PORT : raw dump + descriptors
+end
+PORT --> HANDLER : RadioCapabilities
+HANDLER --> MCP : ApiResult(data)
+MCP --> CLIENT : tool result
+
+... client selects an ID and starts a separate read request ...
+
+CLIENT -> MCP : tools/call radio_get_control(control_id)
+MCP -> HANDLER : decoded control ID
+HANDLER -> PORT : control(control_id)
+alt simulated backend
+  PORT -> SIM : read in-memory value
+  SIM --> PORT : ControlValue
+else rigctld backend
+  PORT -> RIG : map control ID to Hamlib query
+  RIG -> HAM : bounded serialized CAT query
+  HAM --> RIG : value + RPRT 0
+  RIG --> PORT : typed ControlValue
+end
+PORT --> HANDLER : ControlValue or RadioError
+alt success
+  HANDLER --> MCP : status=ok, data=value
+else unsupported / unavailable / protocol error
+  HANDLER --> MCP : mapped non-ok status + error
+end
+MCP --> CLIENT : tool result
+@enduml

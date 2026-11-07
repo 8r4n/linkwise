@@ -2,6 +2,11 @@
 rust/target/
 target/
 
+# Local Compose environment and secrets
+/.env
+/.env.*
+!/.env.compose.example
+
 # Python environments and caches
 .venv/
 __pycache__/

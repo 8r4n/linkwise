@@ -1,5 +1,21 @@
 {
   "servers": {
+    "linkwise-simulated-radio": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "compose",
+        "--profile",
+        "simulation",
+        "run",
+        "--rm",
+        "-T",
+        "linkwise"
+      ],
+      "env": {
+        "LINKWISE_RADIO_BACKEND": "simulated"
+      }
+    },
     "ghidra-mcp": {
       "type": "stdio",
       "command": "/Users/bdurepo/Development/vara/.venv/bin/bridge-mcp-ghidra"

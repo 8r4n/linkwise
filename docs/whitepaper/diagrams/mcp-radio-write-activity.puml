@@ -1,0 +1,74 @@
+@startuml Linkwise_MCP_Radio_Write_Activity
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 12
+skinparam activity {
+  BackgroundColor #EFF5F8
+  BorderColor #2E6F95
+  FontColor #16324F
+  DiamondBackgroundColor #E9C46A
+  DiamondBorderColor #16324F
+  StartColor #2A9D8F
+  EndColor #B23A48
+}
+skinparam ArrowColor #2E6F95
+
+start
+:Decode typed MCP request (RigctldRadio path);
+:Append radio_control_requested audit record;
+if (Request audit appended?) then (yes)
+  :Call RadioControlPort::set_control;
+  :Check global writes and extended-control profile;
+  if (Write policy permits this control?) then (yes)
+    :Acquire radio command lock;
+    if (Expected revision matches?) then (yes)
+      :Read PTT state;
+      if (PTT released?) then (yes)
+        :Validate control ID, value type,
+        ranges, enums, station limits;
+        if (Value is valid and supported?) then (yes)
+          :Send CAT set command;
+          if (rigctld returns RPRT 0?) then (yes)
+            :Increment process-local revision;
+            :Read control back and compare;
+            if (Readback matches?) then (yes)
+              :Read common radio state;
+              :Build status=ok result;
+            else (no)
+              :Return readback error mapped from RadioError;
+            endif
+          else (no)
+            :Return failed / unavailable;
+          endif
+        else (no)
+          :Return unsupported / denied;
+        endif
+      else (no)
+        :Return denied (PTT asserted);
+      endif
+    else (no)
+      :Return denied (stale revision);
+    endif
+  else (no)
+    :Return denied (writes disabled / profile);
+  endif
+  :Append radio_control_completed record;
+  if (Completion audit appended?) then (yes)
+    :Return operation result;
+  else (no)
+    :Set status=audit_failure;
+    :Preserve uncertainty if CAT may have changed radio;
+  endif
+else (no)
+  :Return audit_failure;
+  :Do not call radio backend;
+endif
+stop
+
+note right
+  SimulatedRadio has a separate in-memory write path;
+  it does not apply CAT write-enablement gates.
+end note
+@enduml

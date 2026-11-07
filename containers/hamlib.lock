@@ -1,0 +1,8 @@
+# Hamlib source pinned for reproducible container builds.
+repository = "https://github.com/Hamlib/Hamlib"
+release = "4.7.2"
+tag = "4.7.2"
+archive = "https://github.com/Hamlib/Hamlib/releases/download/4.7.2/hamlib-4.7.2.tar.gz"
+sha256 = "ae1fcf2dbc80ea0786ea8f047b09399c3f7737d1930442f61a031708ed33e88f"
+
+# Update only in a dedicated reviewed change with radio-backend qualification.

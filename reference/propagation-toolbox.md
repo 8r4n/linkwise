@@ -11,6 +11,40 @@ ionosonde measurements; and KeepTrack provides orbital/reentry information.
 None of these tools, by itself, predicts a sporadic-E opening caused by a
 reentry.
 
+## Research reference: measured Falcon 9 lithium plume
+
+Wing et al. report a directly measured upper-atmospheric lithium plume
+associated with the uncontrolled re-entry of a SpaceX Falcon 9 upper stage on
+19 February 2025. A resonance lidar at Kühlungsborn, Germany, detected a
+roughly tenfold lithium enhancement near 96 km altitude about 20 hours after
+the re-entry. The observed layer spanned 94.5–96.8 km and was detected for
+about 40 minutes. An ensemble of wind-informed back trajectories connected the
+sampled air mass to the Falcon 9 re-entry path west of Ireland. The study also
+examined ionosonde, meteor-radar wind, and geomagnetic observations; these did
+not support a natural sporadic-E-related explanation for this particular
+lithium enhancement.
+
+This is evidence that rocket re-entry can inject a detectable anthropogenic
+metal signature into the mesosphere/lower thermosphere, and that remote
+sensing plus atmospheric transport modelling can associate an observation
+with a particular event. It is not evidence that the event caused an HF or
+10 m propagation opening. The lidar measured lithium, not radio propagation;
+the reported case is one event and one observed plume. It therefore does not
+validate a reentry-to-sporadic-E or reentry-to-link-success relationship, nor
+provide a propagation forecast or a basis for live channel ranking.
+
+For Linkwise, retain re-entry predictions/observations as a separately
+provenanced research covariate. A propagation study would still need repeated
+event and control windows, independent ionosonde and 10 m observations, and
+timestamped successes and failures for relevant paths. The article's
+ionosonde/radar context is a useful model for recording independent evidence
+that can test alternative explanations. See the authoritative article:
+Wing, R., Gerding, M., Plane, J. M. C., et al., “Measurement of a lithium
+plume from the uncontrolled re-entry of a Falcon 9 rocket,”
+\emph{Communications Earth \& Environment} 7, 161 (2026),
+doi:10.1038/s43247-025-03154-8.
+<https://doi.org/10.1038/s43247-025-03154-8>
+
 ## Quick reference
 
 | Tool | Primary use | Data type | Automation status |

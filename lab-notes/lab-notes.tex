@@ -433,6 +433,72 @@ the maintained documentation, PlantUML sources, Rust package/binary, editor
 tasks, and whitepaper filename. Earlier chronicle entries retain the project
 name used when those records were written; the reference material itself was
 not renamed. \\
+2026-11-07 &
+Reviewed Wing et al.'s lidar study of the 19 February 2025 Falcon 9
+uncontrolled reentry and catalogued it in the propagation toolbox. The paper
+reports an approximately tenfold lithium enhancement near 96 km over
+K\"uhlungsborn about 20 hours after reentry; wind-informed back trajectories
+connect the sampled air mass to the reentry path west of Ireland. Ionosonde,
+meteor-radar wind, and geomagnetic observations did not support a natural
+sporadic-E-related explanation for this specific lithium plume. This is direct
+evidence of a measurable atmospheric metal signature associated with a rocket
+reentry, not evidence of an HF/10 m opening or improved Winlink link. The
+reentry/propagation relationship remains a hypothesis requiring repeated
+event and control periods with independent ionosonde, 10 m, and link-outcome
+records. Documentation update only; no propagation measurements or Linkwise
+experiments were performed. \\
+2026-11-07 &
+Started the Linkwise Rust MCP radio-control implementation. The service exposes
+typed state, capability, control, and PTT tools over stdio; CAT access uses a
+bounded \texttt{rigctld} adapter with writes disabled by default, station-profile
+limits, readback checks, and JSONL audit records. Compose profiles cover local
+development, simulation, and a Hamlib 4.7.2 \texttt{rigctld} adapter; the Hamlib
+source release is pinned by SHA-256. A workspace stdio MCP entry now launches
+the simulator through Compose; simulator frequency, mode, and power changes
+exist only in process memory, and PTT key-up remains denied. Both
+container images built, and MCP state/capability requests succeeded against
+the simulation backend and Hamlib's dummy backend. An MCP control session
+changed the simulated frequency to 7.1 MHz, mode to CW, and normalized power
+to 0.2; readback and revision checks passed, while key-up was denied. Three
+Rust unit tests passed; the physical radio path has not been validated. \\
+2026-11-07 &
+Reconciled the implementation roadmap with the current code and validation
+evidence. The containerized radio MCP work is recorded as a partial Phase 7
+slice; Phase 0 remains open, Foundation 0.1 and Phases 2--6 remain incomplete,
+and Phase 8 is only partially established. Added the remaining MCP safety and
+integration-test gaps to next work. No new VARA protocol behavior or modem
+interoperability was established by this documentation update. \\
+2026-11-07 &
+Extended the Hamlib capability catalog in
+\pathtext{rust/src/radio.rs}. Capability discovery now parses a single
+\texttt{dump\_caps} response for get/set function, level, and parameter
+catalogs; capability flags; mode/VFO enumerations; and numeric ranges. This
+replaces the previous series of live queries during catalog construction,
+which caused the MCP capability call to stall against the dummy backend.
+Common VFO, passband, split VFO, antenna, memory-channel, RIT/XIT, split
+frequency/mode, and generic Hamlib controls are represented with typed
+descriptors. Added parser coverage for tab-separated flags and numeric
+catalog tokens; all seven Rust unit tests pass. Rebuilt the Linkwise container
+and exercised \texttt{radio\_get\_capabilities} through Compose against
+Hamlib's dummy model: frequency, mode, VFO, and RFPOWER were reported
+supported/readable, and physical writes remained disabled by default. Updated
+the whitepaper and rebuilt its PDF. Memory records, vendor-extension
+invocation, typed parameter enums, and several non-control rig operations
+remain incomplete; no physical radio or VARA behavior was tested. \\
+2026-11-07 &
+Expanded the whitepaper's architecture documentation with six as-built
+PlantUML views of the current Rust MCP implementation: runtime components,
+Compose deployment, radio capability/read flow, typed control writes, write
+validation, and PTT behavior. These views are identified separately from the
+proposed Linkwise system architecture to avoid implying that proposed session,
+authorization, or watchdog behavior is implemented. Updated the whitepaper
+guide to identify PlantUML as the diagram source of truth. All 13 figures are
+placed on distinct landscape pages with captions; image dimensions are bounded
+to the available page area while retaining aspect ratio. Rebuilt the whitepaper
+and visually reviewed the figure pages; diagrams and captions fit without
+overflow. Tectonic reported non-fatal layout warnings. This was a documentation
+and presentation change only: no radio, MCP, or VARA implementation behavior
+changed, and no hardware or modem tests were performed. \\
 \bottomrule
 \end{longtable}
 
@@ -666,8 +732,9 @@ This roadmap is a plan, not a claim that the listed behavior has been
 reverse-engineered or implemented. Work is organized around measurable
 interoperability gates. In particular, waveform and decoder compatibility
 should be established before substantial investment in ARQ, host integration,
-or a graphical interface. The current crate remains a scaffold; crate names
-below are logical boundaries and do not require creating every crate up front.
+or a graphical interface. The Rust crate now includes an early radio-control
+MCP prototype, but no modem implementation; crate names below are logical
+boundaries and do not require creating every crate up front.
 
 \subsection{Planning targets and architecture}
 The proposed product is an independently implemented Rust modem that
@@ -791,13 +858,59 @@ PTT timing; native platform/audio checks; and extended regression testing.
 Only claim the modes, platforms, and conditions actually tested.
 
 \subsection{Initial execution order}
-The first implementation milestone should be a modest \emph{Foundation 0.1}:
-make the current Rust scaffold a testable workspace, add WAV fixture support
-and basic spectrum analysis, and establish CI for the supported targets.
-In parallel, unblock the authorized reference runtime and collect reproducible
-captures. Then choose the next narrow receiver task based on measured evidence.
-Defer the GUI, broad host compatibility, full ARQ, and speculative protocol
-implementation until their prerequisite gates are satisfied.
+The first modem milestone remains a modest \emph{Foundation 0.1}: add WAV
+fixture support and basic spectrum analysis, then establish CI for supported
+targets. A containerized radio-control MCP slice has been implemented in
+parallel as project infrastructure; it does not complete Foundation 0.1 or
+demonstrate modem compatibility. In parallel, unblock the authorized reference
+runtime and collect reproducible captures. Choose each receiver task from
+measured evidence. Defer the GUI, broad host compatibility, full ARQ, and
+speculative protocol implementation until their prerequisite gates are met.
+
+\subsection{Progress against the roadmap (2026-11-07)}
+The following status separates the recent radio-control implementation from
+the modem milestones and their evidence gates:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Phase 0 --- partial; exit gate unmet.} Static reference
+        analysis, extracted payload preservation, and research documentation
+        are in place. The Windows guest has not provided usable runtime access;
+        no controlled VARA audio captures or reproducible protocol observations
+        have been collected.
+  \item \textbf{Foundation 0.1 / Phase 1 --- not started.} The Rust package
+        builds, but WAV fixture handling, spectrum analysis, corpus-backed
+        measurements, and CI for the supported target matrix are not yet
+        implemented. The radio MCP service is not a waveform analyzer.
+  \item \textbf{Phases 2--6 --- not started; evidence-blocked.} No ACK/DATA
+        receiver, FEC implementation, compatible transmitter, or ARQ/session
+        state machine has been implemented. Their protocol assumptions remain
+        unverified pending reference captures and confirmed command behavior.
+  \item \textbf{Phase 7 --- partial, radio-control slice only.} A Rust stdio
+        MCP service runs in Compose with simulated and Hamlib 4.7.2
+        \texttt{rigctld} backends. Simulated frequency, mode, and power writes
+        are process-local; physical CAT writes are disabled by default and
+        require station limits. Capability enumeration parses one Hamlib
+        \texttt{dump\_caps} response into common CAT descriptors and generic
+        levels, functions, and parameters. Image builds, Compose configuration,
+        seven Rust unit tests, and MCP state/control/capability calls against
+        the simulator and Hamlib dummy model have passed. No VARA host
+        interface, audio backend, physical radio test, or native
+        platform/device validation has passed.
+  \item \textbf{Phase 8 --- partial foundation only.} Rust formatting,
+        compilation, the current unit tests, and container builds have been
+        checked. Cross-platform CI, broad interoperability regressions,
+        performance qualification, and release/license review remain open.
+\end{itemize}
+
+This work verifies the MCP server boundary and Compose packaging; it is not
+evidence of VARA HF interoperability. The CAT catalog includes common
+frequency, mode, RF power, VFO, passband, split, antenna, memory-channel,
+RIT/XIT, and generic Hamlib level/function/parameter descriptors. Memory
+records, vendor extensions, complete non-control rig operations, and typed
+parameter enums remain open. PTT key-up remains
+denied pending a session/one-use-permit arbiter, and physical controls have not
+been tested. The local state revision does not yet detect changes made outside
+Linkwise. Keep hardware writes disabled until lease, permit, readback, audit,
+and watchdog behavior has been independently exercised.
 
 \section{Signal data acquisition and corpus (proposed)}
 
@@ -1101,8 +1214,10 @@ by itself establish full modem compatibility or complete Phase 0 coverage.
 \endhead
 Ghidra 12.1.4 plus matching extension; live plugin health endpoint; actual
 VARA v4.9 executable imported; initial Recon bookmarks; extracted reference
-payload preserved; Rust scaffold; six target checks; UTM and CrystalFetch
-installed; Windows installer ISO downloaded and located; UTM MCP configured;
+payload preserved; containerized Rust radio MCP prototype; simulated MCP
+control and Hamlib dummy-backend smoke checks; seven Rust unit tests; both
+container images built; six target checks; UTM and CrystalFetch installed;
+Windows installer ISO downloaded and located; UTM MCP configured;
 the user reports the \texttt{Windows} VM installation and ARM64 guest are
 configured; both UTM guests are currently stopped; the Windows guest has not
 provided usable network/runtime access; user states written authorization
@@ -1129,6 +1244,12 @@ so the presentation and notes do not diverge.
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]
+  \item Close the radio MCP prototype's safety and test gaps before enabling
+        physical CAT writes: implement the session/one-use transmit-permit
+        arbiter and watchdog; define revision behavior for external radio
+        changes; and add rigctld contract tests for write denial, readback,
+        audit failures, timeouts, and unsupported controls. Keep writes disabled
+        until these gates pass.
   \item The user reports written authorization covering the VARA research
         scope; preserve its boundaries and do not redistribute the software.
         The user reports v4.9.0 is installed in the Windows 11 ARM64 VM, but
@@ -1162,6 +1283,13 @@ so the presentation and notes do not diverge.
   \item UTM Windows guest guide: \url{https://docs.getutm.app/guides/windows/}.
   \item Microsoft Windows 11 ARM64 download:
         \url{https://www.microsoft.com/software-download/windows11arm64}.
+  \item Wing, R., Gerding, M., Plane, J. M. C., et al.,
+        “Measurement of a lithium plume from the uncontrolled re-entry of a
+        Falcon 9 rocket,” \emph{Communications Earth \& Environment} 7, 161
+        (2026), published 19 February 2026,
+        \url{https://doi.org/10.1038/s43247-025-03154-8}.
+  \item Linkwise project, “HF propagation toolbox,” research summary and
+        experiment implications: \pathtext{reference/propagation-toolbox.md}.
 \end{enumerate}
 
 \end{document}
