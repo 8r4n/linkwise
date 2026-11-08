@@ -419,6 +419,20 @@ generated standalone LaTeX is an intermediate used to create vector PDF
 figures; it is not maintained as diagram source [17].
 \landscapeplantuml{build/diagrams/Linkwise_System_Context}{System context and component boundaries for the proposed Linkwise Link Manager.}{fig:system-context}
 
+The propagation pipeline is an asynchronous application service, not work
+performed inside an MCP request handler. Bounded source adapters collect
+configured external and local evidence; normalization validates units,
+timestamps, identities, and source-specific revisions before immutable
+records enter the evidence store. The analysis service consumes a consistent
+snapshot and produces versioned path analyses. The link manager combines
+those analyses with current RMS inventory, station eligibility, and session
+history to create ranked candidate links. MCP exposes these results to the
+AI and accepts bounded refresh, preparation, and session requests. A candidate
+is a proposed route for one eligible RMS channel; creating one never creates
+a Winlink service, reserves spectrum, or authorizes transmission.
+
+\landscapeplantuml{build/diagrams/Linkwise_Propagation_Evidence_Flow}{Proposed propagation evidence flow: independent collection, normalization, persistent analysis snapshots, candidate links, MCP queries, and policy-mediated sessions.}{fig:propagation-evidence-flow}
+
 \subsection{As-built MCP radio-control implementation}
 The following views document the implemented Rust prototype, not the proposed
 autonomous link manager. The MCP process uses stdio transport and typed
@@ -488,6 +502,10 @@ the companion SDD defines their semantics and representative Rust signatures.
 
 \landscapeplantuml{build/diagrams/Linkwise_Software_Contracts}{Proposed domain services and typed ports for CAT, policy-mediated PTT, modem, Winlink, evidence, and persistence.}{fig:software-contracts}
 
+\landscapeplantuml{build/diagrams/Linkwise_Evidence_Model}{Proposed evidence-to-analysis model: collection runs, typed immutable observations, forecast inputs, inventory, station-profile assumptions, and historical outcome features.}{fig:evidence-model}
+
+\landscapeplantuml{build/diagrams/Linkwise_Decision_History_Model}{Proposed decision and outcome lineage: individual ranked candidates, optional selection, policy evaluations, retries, and session lifecycle events.}{fig:decision-history-model}
+
 \subsection{Command, state, and concurrency model}
 Reads operate on immutable inventory/evidence snapshots and may run
 concurrently. Station mutations are serialized by one station command actor
@@ -537,6 +555,46 @@ safe. SQLite/WAL is a proposed initial store behind repository interfaces;
 it is not a domain dependency. Counters are derived from deduplicated events
 and retain their metric window, denominator, coverage, and source snapshot.
 
+The persistence model separates immutable evidence from replaceable current
+views. A collection run records provider/adapter version, completion status,
+errors, and coverage. Each source record includes a typed measurement or
+reported value as well as provider identity/revision, observation/issue and
+retrieval times, validity interval, units, location/path/frequency where
+applicable, quality, attribution, and a content checksum or permitted raw
+record reference. Corrected provider records link to the version they
+supersede. A forecast run records model/provider version, issue time, horizon,
+complete input assumptions, typed outputs, and source-record references.
+An analysis snapshot references the exact station-profile revision, inventory
+snapshot, and evidence inputs used; each input identifies its feature role,
+transformation, freshness, quality, and value. The snapshot also records
+path/channel/time window, feature values, score components, uncertainty,
+coverage, and analyzer/ranker/calibration versions.
+
+A candidate ranking contains explicit ordered entries, one for each candidate
+link, with rank, score components, eligibility, exclusion reasons, and the
+analysis snapshot supporting that entry. A decision records whether the agent
+selected a route, chose to wait, or found no eligible route; selection is
+optional and references a specific ranking entry. Decisions and policy
+evaluations are retained even when no session starts. One decision may lead
+to multiple session attempts, including bounded retries. Each attempt keeps
+connection result, failure category, transfer stage, delivery status when
+confirmed, radio revision/configuration hash, and lifecycle events separate.
+Historical aggregates reference the attempts used and record their matching
+query, time window, sample count, numerator/denominator, estimate, and
+uncertainty. Revisions create new records; they do not rewrite the evidence
+used by a prior decision.
+
+Index records by time, provider, path, gateway/channel, and session; retain
+stable IDs and schema versions so exports can be replayed. Source-specific
+licensing and terms determine whether raw payloads may be retained; where they
+may not, retain only permitted normalized fields, attribution, hashes, and
+references. Keep message bodies and credentials out of the evidence store.
+MCP history reads return bounded summaries with counts, denominators, time
+windows, coverage, and evidence IDs rather than unbounded raw history.
+Retention, backup, migration, and export policies are deployment
+configuration and must not silently discard records needed to explain an
+active or past decision.
+
 \subsection{Component responsibilities}
 \begin{description}[leftmargin=1.4in,style=nextline]
   \item[AI planner] Interprets goals, compares explanations, and may invoke the full locally enabled CAT/PTT tool surface or request link workflows. It has no direct device connection and cannot alter local policy or self-approve key-up.
@@ -544,7 +602,8 @@ and retain their metric window, denominator, coverage, and source snapshot.
   \item[Policy engine] Validates profile, authorization, mode/frequency/power, channel freshness, lease, and session budget. It is deterministic and independent of model availability.
   \item[PTT arbiter] Owns the only software key-up path, routes authorized requests to qualified radio/modem PTT drivers, and enforces per-key-up/session budgets and watchdog release.
   \item[Link manager] Owns state machine, polling cadence, candidate lifecycle, hysteresis, radio lease, and session supervision.
-  \item[Gateway/evidence ranker] Normalizes inputs while preserving provenance, confidence, and validity; computes ranked opportunities and explanations.
+  \item[Evidence collectors and normalizer] Poll configured sources on bounded schedules; validate, deduplicate, timestamp, and persist evidence without changing radio state.
+  \item[Path analyzer and gateway ranker] Consume pinned evidence and inventory snapshots; compute versioned path analyses, eligible candidate rankings, score explanations, freshness, coverage, and uncertainty.
   \item[Winlink inventory/history services] Synchronize and deduplicate station/channel inventories, maintain source-age summaries, and aggregate session/transfer events without exposing message content.
   \item[Hamlib/PTT adapters] Expose the full capability-reported radio control set through typed calls (plus registered device extensions where needed) and a qualified PTT route (radio backend/CAT, serial control line, or modem/client request). The agent may request supported controls; all writes are serialized and audited, while every key-up is routed through the PTT arbiter.
   \item[Modem adapter] Manages state and the session interface for VARA HF or a future Linkwise modem. It does not own Winlink message routing.
@@ -561,6 +620,15 @@ Every item is tagged as \evidence{DOCUMENTED}, \evidence{MEASURED},
 gateway status, a monthly path forecast, a spot report, an ionogram, and a
 completed VARA session answer different questions. The ranker keeps those
 distinctions visible rather than blending them into one unlabeled probability.
+Every derived analysis is reproducible from immutable source and inventory
+snapshot IDs plus the versioned model, ranker, and station-profile
+assumptions. Historical summaries are computed by the link-history service,
+not inferred from the model's conversation memory. Similar-session results
+include the selection window, matching dimensions, numerator, denominator,
+and uncertainty; sparse history is returned as sparse rather than promoted
+to a confident success estimate. The AI may compare these summaries and
+explanations, but deterministic application code owns canonical statistics
+and ranking.
 
 \subsection{Design choices and consequences}
 Several choices shape the system and make its boundaries explicit. They remain
@@ -611,7 +679,130 @@ Reentry evidence follows a distinct path. A provider such as KeepTrack's v4 endp
 
 The production ranker initially excludes this feature. In shadow/research mode, the system computes a parallel experimental score and explanation, then evaluates it retrospectively and prospectively against (a) a VOACAP-plus-operational-evidence baseline and (b) the same baseline without reentry features. Evaluation uses event/control windows, geographic relevance, source/prediction age, sufficient repeated observations, calibration, and held-out time/path scenarios. Only after controlled testing demonstrates repeatable out-of-sample improvement may a newly reviewed, calibrated profile be installed before a later deployment; enabling it is not a runtime operator action. Its weight and provenance remain visible, and it can never override eligibility, channel-clear checks, local policy, or PTT authorization. This conservative gate is warranted because recent peer-reviewed work examines a possible association between artificial reentries, metallic ions, and E-region anomalies, but does not establish a real-time HF path predictor [19].
 
-VOACAP reliability is statistical for modeled hour/month and is not a guarantee for a particular session [2]. RMS status is a reported gateway state, not RF reachability [3]. PSK Reporter and DX Maps provide reported activity and can be biased by who is transmitting/reporting. GIRO ionograms are local/remote ionosonde measurements, not full end-to-end channel measurements [4]. KeepTrack's API is licensed CC BY-NC 4.0, requires attribution, and is restricted to non-commercial use; a deployment must review these terms and may substitute another permitted source [18]. Each evidence item retains source, timestamp, assumptions, age, and confidence.
+VOACAP reliability is statistical for modeled hour/month and is not a guarantee for a particular session [2]. RMS status is a reported gateway state, not RF reachability [3]. PSK Reporter and DX Maps provide reported activity and can be biased by who is transmitting/reporting. NOAA SWPC products such as solar radio flux, geomagnetic indices and forecasts, alerts, and D-Region Absorption Prediction (D-RAP) can characterize space-weather conditions that may affect HF circuits; they are contextual or mechanism-specific evidence, not end-to-end path measurements [24,27]. NASA CCMC DONKI contributes event analyses and linked solar/heliospheric context, while NASA GNSS-derived TEC products may support regional ionospheric studies. DONKI is research/prototyping-quality information, and TEC is not a direct measure of HF circuit success [25,26]. GIRO ionograms are local/remote ionosonde measurements, not full end-to-end channel measurements [4]. KeepTrack's API is licensed CC BY-NC 4.0, requires attribution, and is restricted to non-commercial use; a deployment must review these terms and may substitute another permitted source [18]. Each evidence item retains source, timestamp, assumptions, age, coverage, and confidence.
+
+\subsection{Research basis and engineering interpretation}
+The literature supports a causal, layered account of HF link conditions:
+solar and geomagnetic forcing changes ionospheric state; the state controls
+wave refraction, absorption, and scattering; path effects combine with
+antennas, noise, and equipment to determine the received channel; the modem
+and Winlink client then determine whether that channel supports a session and
+transfer. These layers have different observables and uncertainty. The
+architecture therefore stores propagation estimates separately from measured
+radio contact, modem connection, client acceptance, and delivery.
+
+At first order, the electron plasma frequency is
+\[
+  f_p = \frac{1}{2\pi}\sqrt{\frac{N_e e^2}{\epsilon_0 m_e}},
+\]
+where \(N_e\) is electron density, \(e\) is electron charge, \(m_e\) is
+electron mass, and \(\epsilon_0\) is free-space permittivity. In an
+unmagnetized, collisionless plasma the refractive index obeys
+\(n^2 \simeq 1-f_p^2/f^2\). This approximation explains why electron density
+and operating frequency govern refraction and a vertical-incidence critical
+frequency. The terrestrial ionosphere is magnetized, collisional, spatially
+structured, and time varying; practical HF analysis therefore requires
+magnetoionic dispersion (with ordinary and extraordinary modes), path geometry,
+and absorption treatment rather than applying the simple expression as a
+complete prediction [31,32,34]. Ray tracing is a computationally useful
+geometric-optics approximation where the medium varies slowly relative to the
+wave; full-wave methods are needed where that approximation or assumed layer
+geometry is inadequate [31].
+
+The complex refractive index also encodes attenuation. Absorption depends on
+electron density and collision frequency along the traversed path, with
+important contributions from the lower ionosphere. Zawdie et al. show that
+absorption calculations depend on the dispersion formulation and the
+collision-frequency model; under their comparisons, selecting consistent
+collision-frequency assumptions brought the Appleton--Hartree and Sen--Wyller
+calculations to within a few percent in the D/E regions, while mismatched
+assumptions produced much larger differences [40]. This result is a warning
+against treating model names as interchangeable or attaching confidence to a
+forecast without recording its ionospheric and absorption assumptions.
+
+Circuit quantities must also be distinguished. A critical frequency
+characterizes vertical-incidence reflection under specified conditions; the
+maximum usable frequency is path- and mode-dependent. The lowest usable and
+optimum working frequencies also depend on losses, noise, and the desired
+reliability. A field-strength or SNR estimate is not itself a probability of
+successful VARA/Winlink delivery. The latter also depends on time-varying
+fading, multipath delay and Doppler, interference, receiver performance,
+modem mode, and client behavior [32,34--36]. The link utility model must
+therefore keep modeled circuit support and measured service outcomes as
+separate response variables.
+
+Measurement types observe different parts of this chain. A vertical ionogram
+probes the ionosphere near the sounder; an oblique sounder or calibrated
+beacon is more directly associated with an actual radio path; wideband
+soundings can estimate delay/Doppler spreading and the channel scattering
+function [35,36]. GNSS TEC is an electron-density integral along a GNSS ray,
+not an HF-frequency electron-density profile or a measurement of a particular
+HF circuit [33,34]. Amateur-radio reporting networks provide valuable,
+time-stamped observations of real operating paths and have been used in
+peer-reviewed studies of flares and traveling ionospheric disturbances
+[41,43]. Their reports are opportunistic and mode/population dependent;
+researchers describe them as networks designed to reveal propagation
+openings, rather than finely calibrated ionospheric instruments [42]. Thus,
+an observed report is evidence that a particular transmission was received;
+no report is ambiguous and must not be recorded as proof of path closure.
+
+Published comparisons demonstrate why the service must expose model scope and
+uncertainty. In Walden's 23-month study of nine 5.29 MHz midlatitude NVIS
+beacon circuits, prediction residuals varied with season and path. The
+reported overall RMS difference was 7--15 dB for VOACAP and 9--16 dB for
+ASAPS, while the study also found signals during some periods when the
+models' support probabilities were zero [37]. In a 2026 global model
+comparison using the selected CCIR measurement data and a common evaluation
+procedure, REC533 had the lowest overall dispersion among the three models;
+ICEPAC and VOACAP showed larger, condition-dependent errors, especially in
+some long-distance, high-frequency, and low-latitude cases [39]. These are
+results for the papers' datasets and methods, not a ranking that can be
+transferred directly to Linkwise's RMS/VARA operating population. A forecast
+should be calibrated and stratified by path class, season, solar/geomagnetic
+regime, and operating configuration before it changes live candidate order.
+
+Short-term forecasting of an ionospheric state is a distinct research problem
+from predicting a particular oblique HF circuit. Moskaleva and Zaalov describe
+a simplified model that forecasts F2-layer critical frequency and electron
+density profiles one day ahead and compares the forecasts with ionograms [38].
+Such profile skill can inform path models, but does not by itself establish
+forecast accuracy for received field strength, channel availability, or
+successful application transfer. Validation should be done at each intended
+target metric using observations that represent that target; recent work
+demonstrates evaluation of ionospheric models against technologically
+relevant metrics including HF links [44].
+
+The resulting evidence-to-decision contract is:
+\begin{enumerate}
+  \item Store source value, physical unit, source/model version, issue and
+        observation times, validity window, path/location, frequency, and
+        assumptions. Keep forecast output, direct measurement, reception
+        report, and session outcome as different evidence classes.
+  \item Convert each input to a stated path/time/frequency feature, with
+        missingness, freshness, spatial coverage, uncertainty, and quality
+        preserved. Do not treat missing records or no spots as zero signal or
+        as a failed path observation.
+  \item Compare forecasts against measurements of the same target and scale.
+        Evaluate field strength, channel availability, and application-level
+        transfer success separately; do not validate an SNR prediction only
+        against session success or call both results “propagation accuracy.”
+  \item Use model estimates as calibrated statistical evidence for ranking,
+        not as a live reachability assertion or authorization input. Retain
+        exact input/model IDs so each recommendation and later outcome can be
+        replayed.
+\end{enumerate}
+
+This synthesis establishes the theory and engineering basis for the
+capability, but it does not qualify an implementation. Remaining empirical
+work is to characterize the chosen local VOACAPL/VOACAP configuration, build
+a path-matched dataset with calibrated observations and station-specific
+outcomes, test alternative model and assimilation approaches on
+time/path/season-held-out data, and quantify the improvement in the link
+ranking objective. The evaluation should report bias and error for continuous
+estimates, calibration and discrimination for probabilities, and
+denominator-bearing outcome and utility measures for ranking [44]. Any experimental
+covariate, including reentry-related evidence, remains shadow-only until it
+shows repeatable out-of-sample value over the non-experimental baseline.
 
 The ranker can refresh its recommendations as new evidence arrives, but a new
 score does not automatically mean a new radio setting. The link manager acts
@@ -723,6 +914,17 @@ are \path{radio_get_state}, \path{radio_get_capabilities},
 \path{link_rank_gateways}. The inventory/history tools expose additional
 station, gateway, and outcome detail. The full catalog is defined in the
 companion MCP interface design.
+
+Propagation and history reads include
+\path{propagation_get_status}, \path{propagation_get_path_analysis},
+\path{link_get_candidate_analysis}, and \path{link_get_similar_sessions}.
+They return immutable evidence/analysis IDs, source and model versions,
+freshness, coverage, uncertainty, and bounded outcome summaries with counts
+and denominators. \path{propagation_refresh_sources} may request a bounded
+refresh of preconfigured providers; it cannot accept arbitrary provider URLs,
+credentials, or polling policies. Scheduled source collection and
+re-analysis continue independently of MCP calls. Exact tool schemas and
+resource URIs are defined in the companion MCP interface design.
 
 For actuation, \path{radio_set_control} can set any supported, locally
 permitted CAT control, while \path{radio_invoke_extension} invokes a
@@ -951,6 +1153,24 @@ explicit so they are not mistaken for implementation facts.
   \item Model Context Protocol, “Rust SDK (rmcp),” \url{https://rust.sdk.modelcontextprotocol.io/}.
   \item RustAudio, “CPAL: Cross-Platform Audio Library,” \url{https://docs.rs/cpal/latest/cpal/}.
   \item Winlink, “Alternate Information,” client/modem configuration information including VARA interface ports, \url{https://winlink.org/content/alternate_information}.
+  \item NOAA Space Weather Prediction Center, “Products,” machine-readable solar, geomagnetic, forecast, and warning products, \url{https://services.swpc.noaa.gov/products/}.
+  \item NASA Community Coordinated Modeling Center, “DONKI,” event database, API, and research/prototyping limitations, \url{https://ccmc.gsfc.nasa.gov/tools/DONKI/}.
+  \item NASA Earthdata CDDIS, “GNSS IGS Analysis Center Ionosphere Vertical Total Electron Content and GUARDIAN Near Real-Time TEC collections,” \url{https://cmr.earthdata.nasa.gov/search/site/collections/directory/CDDIS/gov.nasa.eosdis}.
+  \item NOAA Space Weather Prediction Center, “SWPC Text Products,” including D-RAP and current geomagnetic forecast products, \url{https://services.swpc.noaa.gov/text/}.
+  \item Budden, K. G., \emph{The Propagation of Radio Waves: The Theory of Radio Waves of Low Power in the Ionosphere and Magnetosphere}, Cambridge University Press, 1985, \url{https://doi.org/10.1017/CBO9780511564321}.
+  \item Davies, K., \emph{Ionospheric Radio}, Peter Peregrinus / Institution of Electrical Engineers, 1990, \url{https://doi.org/10.1049/PBEW031E}.
+  \item Hargreaves, J. K., \emph{The Solar-Terrestrial Environment: An Introduction to Geospace}, Cambridge University Press, 1992, \url{https://doi.org/10.1017/CBO9780511628924}.
+  \item Hunsucker, R. D., and J. K. Hargreaves, \emph{The High-Latitude Ionosphere and its Effects on Radio Propagation}, Cambridge University Press, 2002, \url{https://doi.org/10.1017/CBO9780511535758}.
+  \item Herv\'as, M., P. Bergad\`a, and R. M. Alsina-Pag\`es, “Ionospheric Narrowband and Wideband HF Soundings for Communications Purposes: A Review,” \emph{Sensors}, 20(9), 2486, 2020, \url{https://doi.org/10.3390/s20092486}.
+  \item Ads, A. G., P. Bergad\`a, C. Vilella, J. R. Regu\'e, J. L. Pijoan, R. Bardaj\'i, and J. Mauricio, “A comprehensive sounding of the ionospheric HF radio link from Antarctica to Spain,” \emph{Radio Science}, 48(1), 1--12, 2012, \url{https://doi.org/10.1029/2012RS005074}.
+  \item Walden, M. C., “Comparison of propagation predictions and measurements for midlatitude HF near-vertical incidence sky wave links at 5 MHz,” \emph{Radio Science}, 47, RS0L09, 2012, \url{https://doi.org/10.1029/2011RS004914}.
+  \item Moskaleva, E. V., and N. Y. Zaalov, “A simplified HF radio channel forecasting model. Case study,” \emph{Advances in Space Research}, 69(6), 2477--2488, 2022, \url{https://doi.org/10.1016/j.asr.2021.12.047}.
+  \item Zhu, Z., Q. Yu, Y. Shi, C. Yang, J. Fan, and J. Wang, “Exploring the Applicability of Three Popular Models for Predicting the Received Field Strength of HF Sky-Wave Propagation and Communication,” \emph{Space Weather}, 24, e2025SW004907, 2026, \url{https://doi.org/10.1029/2025SW004907}.
+  \item Zawdie, K. A., D. P. Drob, D. E. Siskind, and C. Coker, “Calculating the absorption of HF radio waves in the ionosphere,” \emph{Radio Science}, 52, 767--783, 2017, \url{https://doi.org/10.1002/2017RS006256}.
+  \item Frissell, N. A., et al., “Ionospheric Sounding Using Real-Time Amateur Radio Reporting Networks,” \emph{Space Weather}, 12, 651--656, 2014, \url{https://doi.org/10.1002/2014SW001132}.
+  \item Frissell, N. A., et al., “First Observations of Large Scale Traveling Ionospheric Disturbances Using Automated Amateur Radio Receiving Networks,” \emph{Geophysical Research Letters}, 49, e2022GL097879, 2022, \url{https://doi.org/10.1029/2022GL097879}.
+  \item Frissell, N. A., et al., “Heliophysics and amateur radio: citizen science collaborations for atmospheric, ionospheric, and space physics research and operations,” \emph{Frontiers in Astronomy and Space Sciences}, 10, 1184171, 2023, \url{https://doi.org/10.3389/fspas.2023.1184171}.
+  \item Chartier, A. T., J. Steele, G. Sugar, D. R. Themens, S. K. Vines, and J. D. Huba, “Validating Ionospheric Models Against Technologically Relevant Metrics,” \emph{Space Weather}, 21, e2023SW003590, 2023, \url{https://doi.org/10.1029/2023SW003590}.
 \end{enumerate}
 
 \end{document}
