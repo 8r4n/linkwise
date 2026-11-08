@@ -3,8 +3,20 @@ set -eu
 
 REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 WHITEPAPER_DIR="$REPO_ROOT/docs/whitepaper"
+PLANTUML="${LINKWISE_PLANTUML:-plantuml}"
+TECTONIC="${LINKWISE_TECTONIC:-tectonic}"
 
-for tool in plantuml tectonic; do
+# Reuse explicitly provisioned workspace-local tools when they are not on PATH.
+if ! command -v "$PLANTUML" >/dev/null 2>&1 &&
+  [ -x "$WHITEPAPER_DIR/build/tools/bin/plantuml" ]; then
+  PLANTUML="$WHITEPAPER_DIR/build/tools/bin/plantuml"
+fi
+if ! command -v "$TECTONIC" >/dev/null 2>&1 &&
+  [ -x "$WHITEPAPER_DIR/build/tools/bin/tectonic" ]; then
+  TECTONIC="$WHITEPAPER_DIR/build/tools/bin/tectonic"
+fi
+
+for tool in "$PLANTUML" "$TECTONIC"; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     printf 'Missing required tool: %s\n' "$tool" >&2
     printf 'See docs/whitepaper/README.md for installation instructions.\n' >&2
@@ -17,7 +29,7 @@ mkdir -p build/diagrams
 
 # PlantUML is the source of truth. Its standalone LaTeX output is compiled to
 # vector PDFs, which the main paper includes as figures.
-plantuml --check-before-run --stop-on-error --latex \
+"$PLANTUML" --check-before-run --stop-on-error --latex \
   -Playout=smetana \
   --output-dir "$WHITEPAPER_DIR/build/diagrams" diagrams/*.puml
 
@@ -32,9 +44,9 @@ for diagram in diagrams/*.puml; do
     printf 'PlantUML did not produce %s.\n' "$diagram_source" >&2
     exit 1
   fi
-  tectonic --keep-logs --keep-intermediates --outdir build/diagrams \
+  "$TECTONIC" --keep-logs --keep-intermediates --outdir build/diagrams \
     "$diagram_source"
 done
 
-tectonic --keep-logs --keep-intermediates --outdir build \
+"$TECTONIC" --keep-logs --keep-intermediates --outdir build \
   linkwise-architecture-whitepaper.tex

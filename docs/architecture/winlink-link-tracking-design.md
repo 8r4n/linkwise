@@ -90,11 +90,34 @@ model's conversation history:
   silently convert dial and center frequencies.
 - **InventorySnapshot:** source, query filters, retrieval time, source update
   time, counts, validation warnings, and a content hash for idempotent ingest.
-- **LinkOpportunity:** derived station-specific eligibility and rank for one
-  channel, with exclusion reasons and evidence/freshness references.
+- **CollectionRun:** provider, requested scope, start/end, result status,
+  coverage, warnings/errors, and immutable record IDs. Partial and failed
+  collection is explicit; it must not become an empty or zero-valued snapshot.
+- **SourceRecord / ForecastRun:** immutable typed observations and modeled
+  forecasts with source/model version, value and unit, path/location,
+  frequency, evidence class, observed/valid/retrieved times, quality,
+  uncertainty, and revision/hash or permitted payload reference.
+- **StationProfileRevision:** immutable station/antenna/equipment assumptions
+  used by an analysis.
+- **AnalysisSnapshot / AnalysisInput:** versioned path features and estimates
+  with uncertainty, coverage, and missing/stale reasons; every input points to
+  exactly one immutable source, forecast, inventory, profile, model/config, or
+  historical-aggregate target and records its role.
+- **HistoricalOutcomeAggregate:** versioned summary derived from deduplicated
+  measured attempt and transfer events, with time window, matching dimensions,
+  sample count, denominator, coverage, uncertainty, and traceable source IDs.
+- **CandidateLink / RankingEntry:** eligible or excluded channel candidate
+  and its rank, score components, explanation, and analysis/ranking references.
+- **Decision / PolicyEvaluation:** explicit select, wait, or no-route decision,
+  optional selected candidate, and versioned policy constraints/results.
 - **SessionAttempt:** unique local session ID, gateway/channel, modem/client,
-  start/end, state transitions, PTT/keying summary, connect result, failure
-  reason, and policy correlation ID.
+  originating decision and candidate, try/parent-attempt reference where
+  applicable, start/end, PTT/keying summary, and policy correlation ID. Each
+  retry is a new attempt; the decision can have zero or more attempts.
+- **SessionEvent:** ordered, deduplicated lifecycle event for an attempt.
+  Record gateway contact, modem connection, client acceptance, and recipient
+  delivery as separate outcome stages, including `unknown`/`unsupported`
+  where the client cannot report a stage; do not infer later-stage success.
 - **TransferEvent:** opaque message MID if available, direction, bytes/status,
   client-reported outcome stage, and event time. Do not store message bodies
   or recipient data for link optimization.

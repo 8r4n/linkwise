@@ -85,6 +85,13 @@ Verification: `I` inspection, `A` analysis, `D` demonstration, `T` instrumented 
 | OVR-F-029 | P1 | Simulation results shall separately report eligible inventory, attempted sessions, connections, and client-confirmed transfers; prohibited safety events invalidate a run. | A,T |
 | OVR-F-030 | P2 | Modem-in-loop channel tests shall identify the channel model/version and parameters, and shall compare applicable cases with documented HF modem test recommendations. | I,T |
 | OVR-F-031 | P2 | A hardware-in-loop test profile shall inhibit radiated transmission and verify PTT, readback, watchdog, and safe-stop behavior on qualified hardware. | T |
+| OVR-F-034 | P1 | The system shall persist collection runs, typed source observations, forecast runs, inventory snapshots, station-profile revisions, analysis snapshots and their exact input references, candidate links and ranking entries, decisions, policy evaluations, session attempts, and lifecycle events as versioned records linked by stable identifiers, so a recommendation can be reconstructed from its exact inputs and algorithm/configuration versions. | I,T |
+| OVR-F-035 | P1 | The evidence collector and path analyzer shall operate on bounded schedules independently of MCP polling; each collection run shall report provider status, timing, coverage, and warnings, and provider failure or partial response shall preserve the last valid data as stale without representing missing data as zero. | T |
+| OVR-F-036 | P1 | MCP history and analysis tools shall return bounded provenance-bearing summaries with source/model versions, exact analysis and ranking identifiers, time windows, counts, denominators, coverage, freshness, and uncertainty; the AI conversation shall not be the system of record for evidence or outcome statistics. | I,T |
+| OVR-F-037 | P2 | The system shall support deterministic replay of a candidate ranking and associated decision from immutable analysis inputs, inventory snapshot, station-profile revision, historical aggregate version, ranking entries, and ranker/policy versions, subject to source licensing and retention constraints. | A,T |
+| OVR-F-038 | P1 | Each analysis input shall reference exactly one immutable target and identify its input role; corrected or revised source data, forecasts, station assumptions, or analysis shall append a new version without changing prior decisions. | I,T |
+| OVR-F-039 | P1 | The system shall record explicit select, wait, and no-route decisions, with an optional selected candidate, and link each decision to zero or more distinct session attempts; every retry shall create a new attempt linked to the originating decision. | I,T |
+| OVR-F-040 | P1 | Historical outcome aggregates shall be derived from deduplicated measured session and transfer events, retain the aggregation window, match dimensions, sample count, denominator, coverage, and uncertainty, and remain traceable to the underlying records. Prediction-only evidence shall not be counted as a measured outcome. | A,T |
 
 ## 4. Quality requirements
 
@@ -250,7 +257,7 @@ replay; the evaluated agent cannot inspect latent RF truth.
 | Requirement family | Owning component(s) |
 | --- | --- |
 | OVR-F-001, 007–009 | Hamlib adapter, lease manager, session controller |
-| OVR-F-003–006, 014–016 | Gateway/evidence adapters, ranker, evidence store |
+| OVR-F-003–006, 014–016, 034–037 | Gateway/evidence adapters, normalizer, evidence store, path analyzer, ranker, MCP history interface |
 | OVR-F-010–012, 017–018 | MCP interface, policy engine, watchdog, read-only telemetry, independent emergency-stop circuit |
 | OVR-F-019–020 | PTT arbiter, qualified PTT driver, policy engine, watchdog, audit store |
 | OVR-F-021 | Winlink inventory provider, normalizer, snapshot store, link ranker |

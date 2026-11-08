@@ -1,0 +1,63 @@
+@startuml Linkwise_Propagation_Evidence_Flow
+!theme plain
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam componentStyle rectangle
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam package {
+  BorderColor #16324F
+  BackgroundColor #EFF5F8
+  FontColor #16324F
+}
+
+cloud "Configured sources\nNOAA / NASA / VOACAP /\nPSKReporter / GIRO / RMS" as SOURCES
+component "Source adapters\npoll, validate, deduplicate" as ADAPTER
+database "Collection runs\nprovider status / coverage" as RUNS
+component "Normalizer and\nfreshness / quality checks" as NORMALIZER
+database "Evidence store\ntyped, immutable records" as EVIDENCE
+component "Path analysis service\nversioned deterministic runs" as ANALYSIS
+database "Analysis snapshots\nexact input IDs / roles / versions" as SNAPSHOTS
+component "Candidate builder and ranker\neligibility + utility + explanation" as RANK
+database "Ranking snapshot\ncandidate links + ranking entries" as CANDIDATES
+component "MCP tools / resources" as MCP
+component "AI planner" as AI
+component "Link manager and\ndeterministic policy" as POLICY
+component "Radio / modem / Winlink\nadapters and session controller" as SESSION
+database "Decision history\nselect / wait / no-route" as DECISIONS
+database "Session attempts + events\nmeasured outcomes" as HISTORY
+
+SOURCES --> ADAPTER : external observations / forecasts
+ADAPTER --> NORMALIZER : timestamped records
+ADAPTER --> RUNS : per-provider status / timing
+NORMALIZER --> EVIDENCE : typed immutable observations
+RUNS --> EVIDENCE : collection provenance
+EVIDENCE --> ANALYSIS : exact immutable input set
+ANALYSIS --> SNAPSHOTS : analysis + model/config version
+SNAPSHOTS --> RANK : path estimates
+EVIDENCE --> RANK : operational evidence / RMS inventory
+HISTORY --> RANK : measured station outcomes
+RANK --> CANDIDATES : ranked eligible links
+CANDIDATES --> MCP : queryable snapshot
+MCP <--> AI : tools / resources
+AI --> MCP : select / wait / no-route request
+MCP --> POLICY : typed application command
+POLICY --> SESSION : revalidate, prepare, authorize
+POLICY --> DECISIONS : policy evaluation + decision
+DECISIONS --> SESSION : optional selected candidate
+SESSION --> HISTORY : one attempt per try; ordered events
+HISTORY --> EVIDENCE : measured outcomes as typed records
+
+note bottom of MCP
+  MCP serves bounded requests and exposes stable run, evidence,
+  analysis, ranking, decision, and aggregate IDs. Scheduled collection
+  and analysis continue independently of model polling.
+end note
+note bottom of POLICY
+  Forecasts and rankings inform choice but never grant
+  transmit authority or bypass local interlocks.
+end note
+@enduml

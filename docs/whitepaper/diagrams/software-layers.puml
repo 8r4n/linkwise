@@ -17,6 +17,7 @@ package "Linkwise trusted application boundary" {
   }
   package "Application services" {
     [Autonomous use cases\nrefresh / rank / configure / session / recover] as APP
+    [Scheduled collection + analysis\nprovider runs / immutable snapshots] as COLLECT
     [Station command actor\nserialized mutations + lease] as ACTOR
   }
   package "Domain core" {
@@ -53,6 +54,8 @@ ESTOP --> RADIOHW : hard transmit inhibit / PTT release
 MCP --> APP
 APP --> ACTOR : state-changing use cases
 APP --> RANK : immutable evidence snapshot
+COLLECT --> EVIDENCE : typed evidence + exact input IDs
+COLLECT --> STORE : collection / analysis records
 APP --> POLICY
 ACTOR --> POLICY
 ACTOR --> SAFE

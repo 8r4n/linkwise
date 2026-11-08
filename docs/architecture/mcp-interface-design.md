@@ -51,6 +51,9 @@ approval or routine-operation tools.
 | `linkwise://winlink/queue-summary` | Read/optional | Aggregate queue counts/bytes only when supported by the selected client; no message body/recipient |
 | `linkwise://links/candidates` | Read | Current eligible candidates and evidence-backed ranking |
 | `linkwise://links/metrics` | Read | Attempt, connection, and transfer counts/rates with window, denominator, and data coverage |
+| `linkwise://propagation/status` | Read | Provider health, latest observation/forecast times, freshness, coverage, and adapter errors |
+| `linkwise://propagation/summary/{path_id}` | Read | Latest path analysis with evidence IDs, model/ranker versions, assumptions, uncertainty, and stale/missing inputs |
+| `linkwise://links/analysis/{candidate_id}` | Read | Immutable analysis snapshot and score explanation for one candidate |
 | `linkwise://sessions/{session_id}` | Read | Session lifecycle and summary, never message body by default |
 | `linkwise://audit/{correlation_id}` | Read/restricted | Decision and action trace under local operator authorization |
 
@@ -73,9 +76,14 @@ time and may not rely on a previously read resource snapshot.
 | `winlink_get_inventory_summary` | Optional protocol/band/service filters | Labeled unique-gateway/channel/eligibility/status-age counts, `as_of`, snapshot ID, warnings |
 | `winlink_get_gateway_channels` | Gateway identity | All channels for one station with protocol/frequency/source/freshness |
 | `winlink_get_queue_summary` | Optional direction/time window | Aggregate pending queue counts/bytes; capability error if unsupported |
-| `link_rank_gateways` | Objective, allowed band/modes, optional candidate IDs | Ranked list, score components, evidence provenance, exclusions |
+| `link_rank_gateways` | Objective, allowed band/modes, optional candidate IDs | Immutable ranking snapshot ID; ranked candidate links and ranking-entry IDs, score components, analysis/input provenance, freshness, uncertainty, and exclusions |
 | `link_get_history` | Time range, gateway/channel, result filters | Distinct session and transfer events; message content excluded |
 | `link_get_metrics` | Time window and optional filters | Attempted/connected/failed sessions and client-confirmed transfer outcomes with numerator, denominator, and coverage |
+| `propagation_get_status` | Optional provider IDs | Provider health, freshness, coverage, and latest successful collection time |
+| `propagation_get_path_analysis` | Station/path, channel/frequency, UTC planning window, optional `max_age_ms` | Versioned analysis ID and exact input IDs/roles, model/config and station-profile revisions, features, uncertainty, coverage, and missing/stale inputs |
+| `link_get_candidate_analysis` | Candidate ID or ranking-entry ID | Exact immutable analysis and ranking snapshot IDs; candidate/ranking-entry IDs, associated decision if any, exclusions, policy result, and full provenance |
+| `link_get_similar_sessions` | Path/gateway/frequency filters, UTC time window, optional similarity dimensions | Historical aggregate ID/version, matching dimensions and window, measured outcome counts/denominators, sample size, coverage, and uncertainty; source attempts/events remain addressable |
+| `propagation_refresh_sources` | Configured provider IDs, bounded deadline | Collection-run IDs, per-provider success/partial/failure status, timing, coverage/warnings, and immutable evidence IDs; never changes radio state |
 
 `winlink_refresh_inventory` is read-only with respect to radio state but may
 perform network I/O. Rate limits, timeout, source attribution, and cache age
@@ -84,6 +92,23 @@ must be explicit. It returns an immutable snapshot ID and count delta;
 directory is not a live RF test and does not verify a gateway is reachable.
 `winlink_get_queue_summary` is optional and must return unsupported if the
 chosen client exposes no supported queue interface; no GUI scraping fallback.
+
+Propagation collection and analysis are scheduled application services, not
+work performed by MCP tool handlers. `propagation_refresh_sources` only
+requests a bounded refresh of preconfigured providers; the caller cannot
+provide arbitrary URLs, credentials, polling intervals, or parser rules. A
+tool response includes immutable collection-run, evidence, analysis, ranking,
+and aggregate IDs so later queries can recover the exact inputs and outcomes
+used. Every analysis input identifies one immutable target and its role.
+Historical summaries are computed from persisted, deduplicated measured
+events by Linkwise, not reconstructed from the AI conversation. Each summary
+identifies its version, time window, match dimensions, counts and denominators,
+coverage, freshness, and uncertainty; sparse history remains explicitly
+sparse. A partial or failed refresh preserves the previous valid data as
+stale, reports per-provider status and warnings, and never substitutes zeros.
+Decision responses distinguish select, wait, and no-route; retries are
+represented as separate session attempts linked back to the originating
+decision, with outcome stages kept distinct.
 
 ### 4.2 Capability-driven CAT control tools
 

@@ -18,8 +18,15 @@ class InventorySnapshot {
   retrievedAt: DateTime
   sourceVersion: String
   queryFilters: FilterSet
+  schemaVersion: Version
   contentHash: Hash
   warnings: Vec<Warning>
+}
+class CollectionRun {
+  collectionId: UUID
+  provider / adapterVersion: String
+  startedAt / completedAt: DateTime
+  status / error / coverage
 }
 class Gateway {
   gatewayId: GatewayId
@@ -35,22 +42,85 @@ class GatewayChannel {
   status: ReportedStatus
   validUntil: Option<DateTime>
 }
-class EvidenceRecord {
-  evidenceId: UUID
+class SourceRecord {
+  recordId: UUID
+  providerRecordId / revision: String
+  deduplicationKey: String
   kind: EvidenceKind
   quality: Quality
   source: SourceId
-  sourceTime: Option<DateTime>
+  observedAt / issuedAt: Option<DateTime>
   retrievedAt: DateTime
   validity: TimeRange
+  measurement / typedValue: Value
+  units / location / frequency: Optional
+  schemaVersion: Version
   uncertainty: Option<Range>
-  provenanceRef: String
+  attribution / checksum: Optional
+  supersedesEvidenceId: Option<UUID>
+}
+class ForecastRun {
+  forecastId: UUID
+  model / version: String
+  issuedAt: DateTime
+  horizon: TimeRange
+  inputs / assumptions: Json
+  typedOutputs / uncertainty: Json
+}
+class AnalysisSnapshot {
+  analysisId: UUID
+  path/channel/window: Key
+  analyzer / ranker / calibrationVersion: Version
+  profileRevision: Version
+  features / scoreComponents: Json
+  uncertainty/coverage: Json
+  createdAt: DateTime
+}
+class AnalysisInput {
+  inputId: UUID
+  targetType / targetId: ImmutableReference
+  role / featureName: String
+  value / units / transformation: Value
+  freshness / quality: Metadata
+}
+class HistoricalOutcomeAggregate {
+  aggregateId: UUID
+  query / matchDimensions: Key
+  window / sampleCount: Metadata
+  numerator / denominator: Count
+  estimate / uncertainty: Value
+}
+class CandidateLink {
+  candidateId: UUID
+  channel / timeWindow / objective: Key
+  eligibility / exclusionReasons: Metadata
 }
 class RankingSnapshot {
   rankingId: UUID
   objective: Objective
   rankerVersion: Version
   createdAt: DateTime
+  expiresAt: DateTime
+}
+class RankingEntry {
+  entryId: UUID
+  rank / scoreComponents: Value
+  eligibility / explanation: Metadata
+}
+class LinkDecision {
+  decisionId: UUID
+  type: SELECT | WAIT | NO_ROUTE
+  selectedEntry: Option<RankingEntryId>
+  reasonCodes: Vec<String>
+  correlationId: UUID
+  policyRevision: Version
+  createdAt: DateTime
+}
+class PolicyEvaluation {
+  evaluationId: UUID
+  action / allowOrDeny: Enum
+  constraints / reasonCodes: Metadata
+  policyRevision / evaluatedAt: Metadata
 }
 class PreparedHandleRecord {
   handleId: OpaqueId
@@ -70,9 +140,19 @@ class SessionAttempt {
   sessionId: UUID
   startedAt: DateTime
   endedAt: Option<DateTime>
-  terminalState: SessionOutcome
+  terminalState: AttemptState
+  connectionResult / failureClass: Outcome
+  transferStage / deliveryStatus: Outcome
+  duration / throughput: Metrics
+  radioRevision / configHash: Version
   modemMetrics: OptionalMetrics
   clientOutcome: OptionalOutcome
+}
+class SessionEvent {
+  eventId: UUID
+  eventType / occurredAt: Metadata
+  source / deduplicationKey: String
+  redactedDetails: Json
 }
 class TransferEvent {
   eventId: UUID
@@ -94,16 +174,42 @@ class AuditEvent {
 
 InventorySnapshot "1" o-- "1..*" Gateway : contains unique stations
 Gateway "1" o-- "1..*" GatewayChannel : offers channels
-GatewayChannel "1" <-- "0..*" EvidenceRecord : path evidence
+GatewayChannel "1" <-- "0..*" SourceRecord : path evidence
+CollectionRun "1" o-- "0..*" SourceRecord : ingests
+SourceRecord "0..*" <-- "0..*" ForecastRun : input records
+SourceRecord "0..*" <-- "0..*" AnalysisInput : source reference
+ForecastRun "0..*" <-- "0..*" AnalysisInput : forecast reference
 InventorySnapshot "1" <-- "0..*" RankingSnapshot : input snapshot
-RankingSnapshot "1" o-- "0..*" EvidenceRecord : evidence references
+StationProfile "1" <-- "0..*" AnalysisSnapshot : exact assumptions
+AnalysisSnapshot "1" o-- "1..*" AnalysisInput : computed from
+AnalysisInput "0..*" --> "0..1" HistoricalOutcomeAggregate : history feature
+HistoricalOutcomeAggregate "0..*" --> "0..*" SessionAttempt : aggregates
+GatewayChannel "1" <-- "0..*" CandidateLink : eligible route
+CandidateLink "1" <-- "0..*" AnalysisSnapshot : analyzed path
+RankingSnapshot "1" o-- "1..*" RankingEntry : ordered candidates
+RankingEntry "0..*" --> "1" CandidateLink : ranks
+RankingEntry "0..*" --> "1" AnalysisSnapshot : explanation basis
+RankingSnapshot "1" <-- "0..*" LinkDecision : selected from
+LinkDecision "0..1" --> "0..1" RankingEntry : optional selection
+LinkDecision "1" o-- "0..*" PolicyEvaluation : policy checks
 StationProfile "1" <-- "0..*" PreparedHandleRecord : validated against revision
 PreparedHandleRecord "1" <-- "0..1" AuthorizationGrantRecord : exact config scope
 AuthorizationGrantRecord "1" <-- "0..*" SessionAttempt : consumed by
 GatewayChannel "1" <-- "0..*" SessionAttempt : attempted route
+SessionAttempt "1" o-- "0..*" SessionEvent : lifecycle trace
 SessionAttempt "1" o-- "0..*" TransferEvent : observed stages
 SessionAttempt "1" <-- "0..*" AuditEvent : correlation
-RankingSnapshot "1" <-- "0..*" SessionAttempt : decision provenance
+LinkDecision "1" <-- "0..*" SessionAttempt : attempts / retries
+
+note bottom of AnalysisInput
+Exactly one immutable target is set per input row:
+SourceRecord, ForecastRun, InventorySnapshot, StationProfile revision,
+model/config revision, or HistoricalOutcomeAggregate.
+end note
+
+note bottom of LinkDecision
+WAIT and NO_ROUTE decisions have no selected ranking entry.
+end note
 
 note bottom of TransferEvent
 Do not store message bodies/recipients by default.

@@ -1,0 +1,89 @@
+@startuml Linkwise_Evidence_Model
+!theme plain
+top to bottom direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #2A9D8F
+
+class CollectionRun {
+  collection_id: UUID
+  provider / adapter_version
+  status / error / coverage
+}
+class SourceRecord {
+  record_id / provider_revision
+  observed_at / issued_at / retrieved_at
+  measurement / typed_value / units
+  location / path / frequency / quality
+  attribution / checksum / dedupe_key
+  supersedes_record_id: UUID?
+}
+class ForecastRun {
+  forecast_id / model_version
+  issued_at / horizon
+  inputs / assumptions
+  typed_outputs / uncertainty
+}
+class InventorySnapshot {
+  snapshot_id / source_version
+  as_of / retrieved_at
+  filters / schema_version / hash
+}
+class GatewayChannel {
+  channel_id / gateway_id / location
+  frequency / mode / service
+  status / valid_until
+}
+class StationProfileRevision {
+  profile_id / immutable_revision
+  station_location / antenna / power
+  modes / limits / config_hash
+}
+class AnalysisSnapshot {
+  analysis_id / path / channel / window
+  analyzer / ranker / calibration_version
+  features / scores / uncertainty
+  coverage / created_at
+}
+class AnalysisInput {
+  input_id / role / feature_name
+  value / units / transform
+  freshness / quality
+  exactly_one_evidence_target
+}
+class HistoricalOutcomeAggregate {
+  aggregate_id / match_query / window
+  sample_count / numerator / denominator
+  estimate / uncertainty
+}
+class SessionAttempt {
+  session_id / result / failure_class
+  transfer_stage / delivery_status
+}
+
+CollectionRun "1" o-- "0..*" SourceRecord : collects
+SourceRecord "0..*" <-- "0..*" SourceRecord : supersedes
+SourceRecord "0..*" <-- "0..*" ForecastRun : forecast inputs
+InventorySnapshot "1" o-- "1..*" GatewayChannel : contains
+StationProfileRevision "1" <-- "0..*" AnalysisSnapshot : assumptions
+InventorySnapshot "1" <-- "0..*" AnalysisSnapshot : inventory basis
+AnalysisSnapshot "1" o-- "1..*" AnalysisInput : computed from
+SourceRecord "0..1" <-- "0..*" AnalysisInput : observed input
+ForecastRun "0..1" <-- "0..*" AnalysisInput : forecast input
+HistoricalOutcomeAggregate "0..1" <-- "0..*" AnalysisInput : history input
+HistoricalOutcomeAggregate "0..*" --> "0..*" SessionAttempt : aggregates
+
+note bottom of AnalysisInput
+Each input references exactly one SourceRecord, ForecastRun,
+InventorySnapshot, StationProfileRevision, model/config revision,
+or HistoricalOutcomeAggregate; the target type, ID, and input role
+are persisted for exact replay.
+end note
+note bottom of SourceRecord
+Retain raw payload only when source terms allow; otherwise
+persist permitted typed values and provenance.
+end note
+@enduml

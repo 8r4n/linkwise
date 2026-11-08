@@ -186,10 +186,32 @@ validity interval, provenance, and confidence/quality metadata. Core entities:
   gateway identity, retaining source-report time and local ingest time.
 - `InventorySnapshot`: source, query filters, unique gateway/channel counts,
   retrieval/source timestamps, warnings, schema/version, and content hash.
-- `PropagationEvidence`: model output or observation, with evidence class,
-  path, time, frequency, method, and uncertainty.
-- `SessionAttempt`: selected gateway/channel, config, result, transfer stats,
-  retries, errors, policy grant, and audit correlation ID.
+- `CollectionRun`: provider and requested scope, start/end times, status,
+  coverage, warnings/errors, and the resulting immutable source-record IDs.
+- `SourceRecord` / `ForecastRun`: typed, source-attributed observation or
+  forecast values with units, location/path, frequency, observed/valid/retrieved
+  times, evidence class, quality, uncertainty, source revision, and payload
+  reference/hash where retention permits. Forecast runs retain model/version
+  and lead-time metadata; later corrections append revisions.
+- `StationProfileRevision`: immutable antenna, station location, equipment,
+  and operating assumptions used by a specific analysis.
+- `AnalysisSnapshot` / `AnalysisInput`: versioned features, estimates,
+  uncertainty, coverage, and missing/stale-input reasons. Each input row
+  references exactly one immutable target and records its role; the snapshot
+  pins algorithm/config versions and the exact input set.
+- `HistoricalOutcomeAggregate`: versioned, time-bounded and dimensioned
+  aggregate derived from measured attempts/events, including sample counts,
+  denominators, coverage, and uncertainty.
+- `CandidateLink` / `RankingEntry`: candidate channel and its eligibility,
+  score components, rank, exclusions, and explanation tied to one analysis and
+  ranking version.
+- `Decision` / `PolicyEvaluation`: explicit select, wait, or no-route result;
+  selection is optional and policy evaluation records constraints, reasons,
+  revision, and authorization reference.
+- `SessionAttempt` / `SessionEvent`: one concrete attempt per session try,
+  linked to its decision and candidate, with ordered lifecycle events and
+  distinct gateway contact, modem connection, client acceptance, and
+  recipient-delivery outcomes when observable. Retries create new attempts.
 - `TransferEvent` / `QueueSnapshot`: client-observed transfer stage and
   aggregate queue counts, when supported; exclude message bodies and recipient
   data from link-optimization telemetry.

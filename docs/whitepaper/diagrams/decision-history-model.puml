@@ -1,0 +1,71 @@
+@startuml Linkwise_Decision_History_Model
+!theme plain
+top to bottom direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #2A9D8F
+
+class AnalysisSnapshot {
+  analysis_id / path / channel / window
+  analyzer / ranker / profile_version
+  features / scores / uncertainty
+}
+class CandidateLink {
+  candidate_id / gateway_channel
+  time_window / objective
+  eligibility / exclusions
+}
+class RankingSnapshot {
+  ranking_id / objective / created_at
+  expires_at / ranker_version
+}
+class RankingEntry {
+  entry_id / rank / score_components
+  eligibility / explanation
+}
+class Decision {
+  decision_id / SELECT | WAIT | NO_ROUTE
+  selected_entry_id: UUID?
+  reason_codes / correlation_id
+  policy_revision / created_at
+}
+class PolicyEvaluation {
+  evaluation_id / action / allow_or_deny
+  constraints / reason_codes
+  policy_revision / evaluated_at
+}
+class SessionAttempt {
+  session_id / started_at / ended_at
+  connection_result / failure_class
+  transfer_stage / delivery_status
+  radio_revision / config_hash
+  duration / throughput
+}
+class SessionEvent {
+  event_id / type / occurred_at
+  source / dedupe_key
+  redacted_details
+}
+
+CandidateLink "1" <-- "0..*" AnalysisSnapshot : evaluated for
+RankingSnapshot "1" o-- "1..*" RankingEntry : ordered candidates
+CandidateLink "1" <-- "0..*" RankingEntry : ranked route
+AnalysisSnapshot "1" <-- "0..*" RankingEntry : explanation basis
+RankingSnapshot "1" <-- "0..*" Decision : decision context
+Decision "0..1" --> "0..1" RankingEntry : optional selection
+Decision "1" o-- "0..*" PolicyEvaluation : policy checks
+Decision "1" <-- "0..*" SessionAttempt : retries
+SessionAttempt "1" o-- "0..*" SessionEvent : lifecycle trace
+
+note bottom of Decision
+WAIT and NO_ROUTE have no selected entry. A ranking is advisory;
+deterministic policy checks gate each side effect.
+end note
+note bottom of SessionAttempt
+Connection, client transfer acceptance, and recipient delivery
+are separate outcomes; retries are separate attempts.
+end note
+@enduml

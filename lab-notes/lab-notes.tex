@@ -53,7 +53,7 @@
 \title{Linkwise: Radio, Modem, and Link Management Research\\[0.4em]
 \large Lab notes and evidence ledger}
 \author{Engineering research log}
-\date{30 October 2026}
+\date{7 November 2026}
 
 \begin{document}
 \maketitle
@@ -499,6 +499,22 @@ and visually reviewed the figure pages; diagrams and captions fit without
 overflow. Tectonic reported non-fatal layout warnings. This was a documentation
 and presentation change only: no radio, MCP, or VARA implementation behavior
 changed, and no hardware or modem tests were performed. \\
+2026-11-07 &
+Extended the proposed evidence and decision-history architecture after a
+consistency review. The evidence model now distinguishes bounded provider
+collection runs, typed immutable observations, forecast runs, inventory and
+station-profile revisions, exact analysis-input references, and versioned
+historical outcome aggregates. The decision-history model records individual
+ranking entries, select/wait/no-route decisions, policy evaluations, and
+separate session attempts and lifecycle events for retries. Aligned the
+software design, system data view, MCP response descriptions, Winlink tracking
+model, and functional requirements with those records and their provenance,
+deduplication, replay, stale/partial-collection, and measured-outcome rules.
+Updated the propagation-flow, software-layers, and information-model diagrams,
+then rebuilt the whitepaper and regenerated its PDF successfully. The build
+reports non-fatal LaTeX layout warnings. This is proposed architecture and
+documentation work only: no collector, analyzer, persistence implementation,
+radio operation, or propagation validation was performed. \\
 \bottomrule
 \end{longtable}
 

@@ -127,6 +127,17 @@ cancellation. Its key handlers are:
   normalize/deduplicate gateway and channel identities, persist an immutable
   inventory snapshot, and publish a change event. It never tunes or keys the
   radio.
+- `CollectEvidence`: scheduled bounded workers poll only configured providers,
+  validate and normalize records, deduplicate by provider identity/revision,
+  preserve source and observation timestamps, and append immutable evidence
+  records. Provider timeouts and failures update health state without blocking
+  station or safety work.
+- `AnalyzePaths`: load a pinned set of evidence and inventory snapshot IDs,
+  station profile, VOACAP/P.533 results, and measured session outcomes; run a
+  deterministic versioned analyzer and persist immutable per-path analysis
+  snapshots with inputs, features, uncertainty, coverage, and score components.
+  This runs on evidence changes and planning cadence, independently of MCP
+  polling.
 - `RankCandidates`: load station profile, current inventory, propagation and
   observation evidence, and measured session outcomes; construct a
   deterministic feature set and return ranked candidates with reasons,
@@ -165,7 +176,48 @@ operation deadline cancels work and produces a terminal event; cancellation
 does not imply that a hardware write was rolled back, so the caller must
 observe/read back the resulting device state.
 
-### 3.3 Domain and policy services
+### 3.3 Evidence persistence and retrieval
+
+Persistence is a system of record, not conversational memory. The repository
+stores append-only `CollectionRun`, typed `SourceRecord`, `ForecastRun`,
+`InventorySnapshot`, `StationProfileRevision`, `AnalysisSnapshot`,
+`AnalysisInput`, `HistoricalOutcomeAggregate`, `CandidateLink`, `RankingEntry`,
+`Decision`, `PolicyEvaluation`, `SessionAttempt`, and `SessionEvent` records.
+Each derived record references exact upstream IDs and versions. An
+`AnalysisInput` identifies exactly one input target (source record, forecast,
+inventory snapshot, station-profile revision, model/config revision, or
+historical aggregate) and its role in the analysis. Ranking entries belong to
+an immutable candidate ranking; decisions refer to that ranking and may
+select a candidate, wait for better evidence, or report no route. A decision
+may lead to multiple distinct session attempts, each with its own lifecycle
+events and separately recorded connection and transfer outcomes.
+
+Corrections, updated forecasts, changed station assumptions, and re-analysis
+append new versions; they do not mutate the evidence behind prior decisions.
+Collection runs record provider request/result status, timing, coverage, and
+warnings so partial failure cannot be mistaken for an empty observation set.
+Repeated deliveries are deduplicated by provider identity and source event
+identity/content hash while preserving revision history. Current provider
+health and latest-candidate pointers may be materialized views rebuilt from
+events. Historical aggregates are versioned derived inputs with explicit
+time windows, match dimensions, sample counts, denominators, and uncertainty;
+they never replace the individual attempts and transfer events from which
+they were computed.
+
+`GetSimilarSessions` and `GetHistoryMetrics` query deduplicated outcomes by
+path, gateway, frequency, season/time window, mode, and station profile as
+requested. Results include selected range and match criteria, sample count,
+numerator/denominator, coverage, and uncertainty. The ranker applies
+shrinkage or another declared sparse-data policy and exposes its version;
+the AI may interpret the returned summary but does not own persistent counts
+or trusted aggregates. Raw provider payload retention is governed by each
+source's terms; retain permitted normalized fields, attribution, stable IDs,
+and checksums/references where raw retention is not allowed. Session storage
+excludes message bodies and credentials by default. SQLite/WAL remains an
+initial adapter choice behind repository interfaces, with schema migrations
+and replay/export support.
+
+### 3.4 Domain and policy services
 
 Domain services are pure or stateful logic over explicit inputs:
 
@@ -195,7 +247,7 @@ shadow evaluation. The same candidate snapshot and ranker version should
 produce the same ordering, subject only to explicitly versioned time-derived
 features.
 
-### 3.4 Outbound adapters and integration seams
+### 3.5 Outbound adapters and integration seams
 
 | Port / adapter | Contract and boundary behavior |
 | --- | --- |
