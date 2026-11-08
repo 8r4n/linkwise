@@ -515,6 +515,26 @@ then rebuilt the whitepaper and regenerated its PDF successfully. The build
 reports non-fatal LaTeX layout warnings. This is proposed architecture and
 documentation work only: no collector, analyzer, persistence implementation,
 radio operation, or propagation validation was performed. \\
+2026-11-07 &
+Reorganized the whitepaper so the communications background, link/session
+model, propagation foundations, and safety requirements precede architecture.
+Removed the as-built prototype subsection and its figures from the main paper;
+implementation status and validation evidence remain in the earlier dated
+chronicle entries above. PlantUML source files are retained under
+\pathtext{docs/whitepaper/diagrams/}. The paper retains a brief maturity note
+that points to this chronicle. Documentation change only; no code, radio, or
+modem behavior changed, and no hardware tests were performed. \\
+2026-11-07 &
+Clarified the RF observation and modem contracts in the whitepaper. The RF
+adapter now distinguishes SDR spectrum measurements from IC-7200 demodulated
+audio observations, carries measurement provenance, timing, estimator,
+uncertainty, and validity, and treats transmit/desense intervals as coverage
+gaps. The modem contract defines link-up as the modem protocol state machine's
+completed bidirectional handshake and separates that event from RF activity,
+Winlink session/transfer completion, and confirmed CMS acceptance or delivery.
+Rebuilt the whitepaper PDF successfully; LaTeX emitted non-fatal layout
+warnings. Documentation only; no radio, DSP, modem, or Winlink runtime behavior
+was implemented or tested. \\
 \bottomrule
 \end{longtable}
 

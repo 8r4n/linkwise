@@ -105,75 +105,9 @@ Reliable HF messaging depends on several things lining up: a gateway must be ava
 
 The design keeps each responsibility at a clear boundary. Hamlib/rigctld exposes all capabilities reported by the radio backend, and the AI can request any locally enabled CAT setting or registered device extension through typed MCP tools. PTT state, key-up, and key-down are also explicit tools; key-up remains subject to station-configured authority, and release remains an independent safety operation. A modem adapter handles protocol timing and the data link, and a Winlink-client adapter manages message and gateway sessions. Other adapters collect propagation and gateway evidence. The model does not connect to CAT/PTT sockets itself: Linkwise serializes and audits each operation and validates it against the radio profile and policy.
 
-This distinction between proposal and implementation matters. A limited Rust MCP radio-control prototype now exists, but Linkwise still has no VARA-compatible modem, gateway optimizer, or autonomous transmit workflow. VARA protocol details also remain subject to evidence. The roadmap moves from observation and simulation through controlled interoperability and staged safety qualification before autonomous service is enabled. The prototype and its validation limits are summarized in Section~\ref{sec:implementation-progress}; companion architecture, requirements, interface, safety, and simulation documents carry the deeper engineering detail.
-
-\section{Implementation progress: radio-control MCP prototype}\label{sec:implementation-progress}
-As of November 2026, the project has implemented an early radio-control service
-in Rust using the official \texttt{rmcp} 3.9.0 SDK. The service speaks MCP over
-standard input/output and is launched as a container through Docker Compose.
-Compose defines development, simulation, and radio-connected profiles; the
-radio profile builds Hamlib 4.7.2 from a version-pinned source release whose
-SHA-256 is checked during image construction. The Linkwise application
-container and Hamlib/\texttt{rigctld} container communicate over a private
-Compose network.
-
-The prototype currently exposes these MCP tools:
-\begin{itemize}
-  \item \texttt{radio\_get\_state}, with timestamped radio observations,
-        per-field errors, and a state revision;
-  \item \texttt{radio\_get\_capabilities} and \texttt{radio\_get\_controls},
-        returning Hamlib's raw capability dump and Linkwise's current control
-        descriptors;
-  \item \texttt{radio\_get\_ptt\_state}, reporting observed PTT state and
-        explicitly indicating that no watchdog is active;
-  \item \texttt{radio\_get\_control} and \texttt{radio\_set\_control},
-        using typed frequency, mode, RF-power, level, function, VFO, passband,
-        split, antenna, memory, RIT/XIT, and split-transmit values; and
-  \item \texttt{radio\_ptt\_request}, with separate key-up and key-down
-        requests and observed release state.
-\end{itemize}
-
-The \texttt{rigctld} adapter uses bounded TCP requests and serializes its CAT
-commands. Physical CAT writes are disabled by default. If explicitly enabled,
-frequency, mode, and RF-power writes require configured station limits, are
-rejected while PTT is asserted, and are checked by radio readback. Requests and
-outcomes are recorded as JSON Lines in a volume-backed audit file; failure to
-record a requested change denies that change. The adapter now discovers
-backend get/set level, function, and parameter tokens from one parsed
-\texttt{dump\_caps} response and maps
-common frequency, mode, VFO, passband, split-VFO, antenna selection,
-memory-channel, RIT/XIT, and split-transmit operations to typed values. Mode
-and VFO enum values and numeric level ranges come from that catalog, so
-capability enumeration does not issue a serial chain of live control probes.
-Generic levels/functions are validated against the discovered token catalog,
-and writes beyond the basic frequency/mode/power profile require explicit
-per-control enablement through
-\texttt{LINKWISE\_ENABLED\_HAMLIB\_CONTROLS}. The catalog is still incomplete:
-memory contents/channel records, device-specific extension invocation, and
-some non-control rig operations are not implemented. Parameter enum values are
-not yet converted into typed enums, and side-effect classes remain partly
-conservative defaults that need radio-by-radio qualification. Unsupported
-backend operations are reported as such.
-
-The simulated backend has no route to hardware. It supports in-memory changes
-to frequency, mode, and RF power for the lifetime of its MCP process, while
-PTT key-up is always denied and key-down remains a release-only request. CAT
-state revisions are currently Linkwise-local counters; they do not yet detect
-radio changes made by another controller. The service also lacks the planned
-exclusive lease, session/one-use transmit-permit arbiter, and independent PTT
-watchdog. PTT observation currently reports the watchdog as inactive. For
-these reasons, the prototype is not qualified for physical
-transmission or unattended station operation.
-
-Validation to date includes seven Rust unit tests, successful Rust compilation,
-successful builds of both container images, and valid Compose profile
-configuration. MCP state/capability calls have been exercised against the
-simulation and Hamlib's dummy-radio backend; typed simulator writes have been
-read back with revision checks, and simulated key-up was denied. No physical
-radio, native audio/PTT path, VARA session, gateway workflow, or modem
-interoperability has been tested. These results validate a narrow MCP and
-container integration slice, not the proposed end-to-end communications
-system.
+Linkwise remains a proposed architecture. Companion architecture, requirements,
+interface, safety, simulation, and lab-notes documents carry detailed design
+and implementation history.
 
 \section{Purpose and scope}
 
@@ -195,7 +129,7 @@ Linkwise is intended to:
 \subsection{Non-goals}
 Linkwise will not replace the Winlink CMS or gateway network, promise worldwide coverage, or claim that a propagation model can predict an exact live opening. It will not turn unverified observations into modem protocol facts. One radio cannot hold simultaneous HF links, and coordinating multiple radios is outside the initial scope.
 
-The next section turns these boundaries into an operating picture: what Linkwise counts as a link opportunity, how the autonomous agent selects among them, and how the emergency stop and automatic safe-state behavior bound operation.
+The following sections establish the communications context, define the link and session terms, and explain the evidence and scoring basis before describing the operating concept.
 
 \section{Background: the communications software}
 Readers do not need prior experience with amateur-radio software to follow
@@ -259,6 +193,17 @@ contracts. Linkwise does not claim to implement or replace
 the VARA waveform. A future native modem is a separate research and
 interoperability effort.
 
+The initial target transceiver is the Icom IC-7200. Its USB connection
+provides CI-V computer control and audio transfer, so the radio adapter can
+use Hamlib/rigctld for supported CAT state and controls while the audio
+adapter routes receive and transmit audio to the selected modem [45, 46].
+USB receive audio is the radio's demodulated audio output; it is not a
+wideband RF/IQ stream and therefore cannot survey other channels while the
+IC-7200 is tuned to an active session. Such band-level observation requires
+a separate receive-only SDR. The IC-7200's CAT meter readings, where the
+installed Hamlib backend exposes them, are useful local measurements but
+must not be treated as proof of remote protocol reception or link success.
+
 \subsection{Winlink clients, RMS gateways, and message services}
 Winlink is a radio-email and messaging system, not a single radio protocol.
 At a client station, a Winlink application manages the outbox; messages may
@@ -293,6 +238,29 @@ whether the next VARA session will succeed. Linkwise therefore uses VOACAP as
 one time-bounded planning input, alongside RMS status, observations, and its
 own measured session outcomes—not as a transmit authorization or a guarantee
 of reachability [2].
+
+ALE systems provide a useful evidence pattern for measured link quality:
+stations transmit known soundings, receivers associate decoded measurements
+with the sounding station and channel, and systems may average, age, exchange,
+and threshold those observations before automatic channel selection [47,
+48]. Linkwise may borrow these data-management concepts, but the initial
+system does not implement MIL-STD-188-141 ALE and must not label unrelated
+VARA or IC-7200 measurements as ALE LQA. Its RF evidence is instead separated
+by source and meaning: SDR-derived spectrum/occupancy observations describe
+local channel conditions; radio meter samples describe the IC-7200 receiver;
+modem events establish protocol-level peer responses; and Winlink client
+events establish session and transfer progress.
+
+For wider RF-environment sensing, a configured receive-only SDR can feed a
+GNU Radio flowgraph using SoapySDR-supported hardware [49, 50]. The flowgraph
+may produce bounded measurements such as noise floor, occupied bandwidth,
+energy-detection candidates, and observation coverage. These are local
+observations, not decoded station identities or a reachability guarantee.
+Raw IQ remains inside the SDR/DSP pipeline; Linkwise ingests compact,
+timestamped results through a local adapter. The adapter records receiver,
+frequency span, sample/configuration metadata, units, calibration status,
+source and collection times, and quality flags. Continuous IQ and waterfall
+frames are not MCP payloads or ordinary audit-log entries.
 
 \subsection{MCP and the role of the AI agent}
 MCP (Model Context Protocol) is a standard interface through which an AI host
@@ -354,6 +322,168 @@ Researcher & Evidence provenance and a fair test of propagation hypotheses & Dat
 \end{landscape}
 \clearpage
 
+\section{Link and session model}
+Linkwise tracks a route from discovery through application outcome. The stages
+are deliberately separate: an RMS listing is inventory evidence; a candidate
+is an eligible station/channel pairing; a ranking is a time-bounded comparison;
+preparation configures and verifies the station; authorization is a local
+policy decision; an attempt is one bounded session; a modem link is a protocol
+connection; and a Winlink transfer is a client-level result. CMS acceptance
+and recipient delivery are recorded only when the client explicitly confirms
+them. These distinctions define what each observation can establish.
+
+\begin{table}[htbp]
+\centering
+\caption{Core Linkwise terms and the evidence each term represents.}
+\label{tab:linkwise-terms}
+\begin{tabularx}{\linewidth}{@{}p{1.35in}X@{}}
+\toprule
+\textbf{Term} & \textbf{Meaning} \\
+\midrule
+Gateway channel & One published RMS station, frequency, protocol, and supported mode record. \\
+Candidate & A gateway channel that passes the installed station and service eligibility checks. \\
+Ranking & A versioned comparison of eligible candidates for an objective and evidence snapshot. \\
+Prepared route & A candidate whose radio settings and required subsystem readiness have been checked. \\
+Attempt & One authorized, bounded execution of a Winlink session flow. A retry is a new attempt. \\
+Modem link & A protocol-level connection reported by the modem. It does not prove client transfer. \\
+Transfer outcome & A client-confirmed session or message-transfer result; CMS acceptance and recipient delivery remain distinct when reported. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Propagation and evidence foundations}
+\subsection{Propagation physics and measurement limits}
+The literature supports a causal, layered account of HF link conditions:
+solar and geomagnetic forcing changes ionospheric state; the state controls
+wave refraction, absorption, and scattering; path effects combine with
+antennas, noise, and equipment to determine the received channel; the modem
+and Winlink client then determine whether that channel supports a session and
+transfer. These layers have different observables and uncertainty. The
+architecture therefore stores propagation estimates separately from measured
+radio contact, modem connection, client acceptance, and delivery.
+
+At first order, the electron plasma frequency is
+\[
+  f_p = \frac{1}{2\pi}\sqrt{\frac{N_e e^2}{\epsilon_0 m_e}},
+\]
+where \(N_e\) is electron density, \(e\) is electron charge, \(m_e\) is
+electron mass, and \(\epsilon_0\) is free-space permittivity. In an
+unmagnetized, collisionless plasma the refractive index obeys
+\(n^2 \simeq 1-f_p^2/f^2\). This approximation explains why electron density
+and operating frequency govern refraction and a vertical-incidence critical
+frequency. The terrestrial ionosphere is magnetized, collisional, spatially
+structured, and time varying; practical HF analysis therefore requires
+magnetoionic dispersion (with ordinary and extraordinary modes), path geometry,
+and absorption treatment rather than applying the simple expression as a
+complete prediction [31,32,34]. Ray tracing is a computationally useful
+geometric-optics approximation where the medium varies slowly relative to the
+wave; full-wave methods are needed where that approximation or assumed layer
+geometry is inadequate [31].
+
+The complex refractive index also encodes attenuation. Absorption depends on
+electron density and collision frequency along the traversed path, with
+important contributions from the lower ionosphere. Zawdie et al. show that
+absorption calculations depend on the dispersion formulation and the
+collision-frequency model; under their comparisons, selecting consistent
+collision-frequency assumptions brought the Appleton--Hartree and Sen--Wyller
+calculations to within a few percent in the D/E regions, while mismatched
+assumptions produced much larger differences [40]. This result is a warning
+against treating model names as interchangeable or attaching confidence to a
+forecast without recording its ionospheric and absorption assumptions.
+
+Circuit quantities must also be distinguished. A critical frequency
+characterizes vertical-incidence reflection under specified conditions; the
+maximum usable frequency is path- and mode-dependent. The lowest usable and
+optimum working frequencies also depend on losses, noise, and the desired
+reliability. A field-strength or SNR estimate is not itself a probability of
+successful VARA/Winlink delivery. The latter also depends on time-varying
+fading, multipath delay and Doppler, interference, receiver performance,
+modem mode, and client behavior [32,34--36]. The link utility model must
+therefore keep modeled circuit support and measured service outcomes as
+separate response variables.
+
+Measurement types observe different parts of this chain. A vertical ionogram
+probes the ionosphere near the sounder; an oblique sounder or calibrated
+beacon is more directly associated with an actual radio path; wideband
+soundings can estimate delay/Doppler spreading and the channel scattering
+function [35,36]. GNSS TEC is an electron-density integral along a GNSS ray,
+not an HF-frequency electron-density profile or a measurement of a particular
+HF circuit [33,34]. Amateur-radio reporting networks provide valuable,
+time-stamped observations of real operating paths and have been used in
+peer-reviewed studies of flares and traveling ionospheric disturbances
+[41,43]. Their reports are opportunistic and mode/population dependent;
+researchers describe them as networks designed to reveal propagation
+openings, rather than finely calibrated ionospheric instruments [42]. Thus,
+an observed report is evidence that a particular transmission was received;
+no report is ambiguous and must not be recorded as proof of path closure.
+
+The resulting evidence-to-decision contract is:
+\begin{enumerate}
+  \item Store source value, physical unit, source/model version, issue and
+        observation times, validity window, path/location, frequency, and
+        assumptions. Keep forecast output, direct measurement, reception
+        report, and session outcome as different evidence classes.
+  \item Convert each input to a stated path/time/frequency feature, with
+        missingness, freshness, spatial coverage, uncertainty, and quality
+        preserved. Do not treat missing records or no spots as zero signal or
+        as a failed path observation.
+  \item Compare forecasts against measurements of the same target and scale.
+        Evaluate field strength, channel availability, and application-level
+        transfer success separately; do not validate an SNR prediction only
+        against session success or call both results “propagation accuracy.”
+  \item Use model estimates as calibrated statistical evidence for ranking,
+        not as a live reachability assertion or authorization input. Retain
+        exact input/model IDs so each recommendation and later outcome can be
+        replayed.
+\end{enumerate}
+
+This synthesis establishes the theory and engineering basis for the
+capability, but it does not qualify an implementation. Remaining empirical
+work is to characterize the chosen local VOACAPL/VOACAP configuration, build
+a path-matched dataset with calibrated observations and station-specific
+outcomes, test alternative model and assimilation approaches on
+time/path/season-held-out data, and quantify the improvement in the link
+ranking objective. The evaluation should report bias and error for continuous
+estimates, calibration and discrimination for probabilities, and
+denominator-bearing outcome and utility measures for ranking [44]. Any experimental
+covariate, including reentry-related evidence, remains shadow-only until it
+shows repeatable out-of-sample value over the non-experimental baseline.
+
+
+\section{Gateway scoring and continuous management}
+\subsection{Evidence-to-score model}
+For candidate gateway \(g\), the ranker estimates utility as
+\[
+U(g,t)=P_g(\text{delivery within budget}\mid E_t)\,V_g
+       -C_g^{\mathrm{time}}-C_g^{\mathrm{switch}}-C_g^{\mathrm{risk}},
+\]
+where \(E_t\) is timestamped evidence and \(V_g\) represents user-defined delivery value. Inputs can include RMS availability, path-specific VOACAP results, current reported activity, local receiver observations, antenna bearing, modem compatibility, and historical session outcomes. Any learned estimate must disclose calibration limits and uncertainty.
+
+\subsection{Evidence sources and operational interpretation}
+The planner treats a ``channel'' as an eligible RMS gateway/channel record (including its published frequency and supported mode), not a newly created Winlink service or a spectrum allocation. For each candidate path, the evidence service supplies the station and gateway locations, UTC planning interval, frequency, antenna/power assumptions, and compatible mode to a pinned local VOACAPL/VOACAP implementation. The result is stored with those inputs and the model version. The ranker uses the relevant hourly/monthly circuit reliability and signal-to-noise outputs to establish a statistical prior and identify promising frequency/time windows; it can combine that prior with current RMS status, reported activity, local measurements, and empirical outcomes. It cannot claim that the path is open now. Before an attempt, the link manager refreshes candidate inventory and station state, applies the installed station profile and regulatory limits, then autonomously selects and tunes the best eligible listed route for the bounded session flow.
+
+Reentry evidence follows a distinct path. A provider such as KeepTrack's v4 endpoint reports upcoming reentry predictions derived from Space-Track TIP messages, with updated predictions deduplicated by object [18]. These are forecasts with uncertainty, not confirmed event times or direct measurements of ionization. The research pipeline records object identifier, prediction issue time, predicted time/window, source, event status, and available spatial metadata. It aligns the event interval with geographically and temporally relevant sporadic-E/ionosonde observations and Linkwise's measured per-path session results. A reentry-associated feature is therefore a candidate explanatory variable for local E-region variability—not a universal channel-quality adjustment.
+
+The production ranker initially excludes this feature. In shadow/research mode, the system computes a parallel experimental score and explanation, then evaluates it retrospectively and prospectively against (a) a VOACAP-plus-operational-evidence baseline and (b) the same baseline without reentry features. Evaluation uses event/control windows, geographic relevance, source/prediction age, sufficient repeated observations, calibration, and held-out time/path scenarios. Only after controlled testing demonstrates repeatable out-of-sample improvement may a newly reviewed, calibrated profile be installed before a later deployment; enabling it is not a runtime operator action. Its weight and provenance remain visible, and it can never override eligibility, channel-clear checks, local policy, or PTT authorization. This conservative gate is warranted because recent peer-reviewed work examines a possible association between artificial reentries, metallic ions, and E-region anomalies, but does not establish a real-time HF path predictor [19].
+
+VOACAP reliability is statistical for modeled hour/month and is not a guarantee for a particular session [2]. RMS status is a reported gateway state, not RF reachability [3]. PSK Reporter and DX Maps provide reported activity and can be biased by who is transmitting/reporting. NOAA SWPC products such as solar radio flux, geomagnetic indices and forecasts, alerts, and D-Region Absorption Prediction (D-RAP) can characterize space-weather conditions that may affect HF circuits; they are contextual or mechanism-specific evidence, not end-to-end path measurements [24,27]. NASA CCMC DONKI contributes event analyses and linked solar/heliospheric context, while NASA GNSS-derived TEC products may support regional ionospheric studies. DONKI is research/prototyping-quality information, and TEC is not a direct measure of HF circuit success [25,26]. GIRO ionograms are local/remote ionosonde measurements, not full end-to-end channel measurements [4]. KeepTrack's API is licensed CC BY-NC 4.0, requires attribution, and is restricted to non-commercial use; a deployment must review these terms and may substitute another permitted source [18]. Each evidence item retains source, timestamp, assumptions, age, coverage, and confidence.
+
+The score remains an estimate against the installed service objective, not a
+reachability verdict. Evidence sources retain separate semantics and
+uncertainty; eligibility and local authorization remain independent checks.
+The propagation-model comparisons summarized in Appendix~\ref{app:model-evidence}
+show why calibration must match the intended path class, season, frequency,
+and outcome metric.
+
+The ranker can refresh its recommendations as new evidence arrives, but a new
+score does not automatically mean a new radio setting. The link manager acts
+only when an improvement is meaningful, the evidence is fresh, and policy
+checks pass. It never retunes during PTT or an active transfer. With one
+radio, Linkwise selects one channel for the next session; multiple concurrent
+links would require separate radios, leases, and a different scheduler.
+
+
+
 \section{Operating concept}
 
 \subsection{Link opportunity set}
@@ -383,6 +513,123 @@ recording what happened after an attempt:
 \end{enumerate}
 
 \landscapeplantuml{build/diagrams/Linkwise_Operating_Loop}{Linkwise operating loop from evidence collection through session outcome and learning.}{fig:operating-loop}
+
+\section{Safety, security, and reliability}
+
+\subsection{Safety invariants}
+\begin{enumerate}
+  \item PTT key-up may be requested by the AI or modem, but can occur only through the arbiter under an automatically authorized session; key-down is always permitted.
+  \item Policy is enforced in deterministic local code, not model instructions.
+  \item Authorization is one-use, short-lived, and bound to channel/configuration/session limits.
+  \item Frequency, mode, power, and service rules are checked locally before session start.
+  \item No tune/switch while PTT is asserted or a transfer is active, except emergency abort.
+  \item A watchdog, session timeout, autonomous abort, human-only emergency stop, and physical inhibit are independent of AI.
+  \item Stale/unknown measurements are never converted to favorable defaults.
+  \item Loss of AI or internet access triggers deterministic safe fallback/receive-only behavior and cannot prevent emergency stop.
+\end{enumerate}
+
+\subsection{Threats and failure modes}
+Prompt injection, malformed tool arguments, stale RMS data, inaccurate propagation reports, external radio changes, multiple clients racing rigctld, modem/client crash, stuck PTT, unauthorized MCP access, and sensitive payload logging are in-scope threats. Controls include typed schemas, allowlists, capability-aware validation, single-writer leases, readback, freshness limits, watchdogs, loopback binding, audit trails, and payload-free default logging.
+
+\subsection{Anti-oscillation}
+Channel management uses configurable minimum dwell, switch hysteresis, switch penalties, retry limits, failure cooldowns, and deferral during active sessions. Numeric thresholds remain \todo{} until tested on real station hardware and realistic gateway sets.
+
+The invariants above need observable acceptance evidence, not just design
+intent. Section~\ref{sec:requirements-verification} states what should be
+checked and how; TBD limits remain open until station-specific testing
+supplies defensible values.
+
+
+\section{Requirements and verification strategy}\label{sec:requirements-verification}
+
+\clearpage
+\begin{landscape}
+\thispagestyle{plain}
+\begin{longtable}{@{}p{0.95in}p{0.55in}p{4.95in}p{0.7in}@{}}
+\caption{Representative system requirements and proposed verification methods.}\label{tab:requirements}\\
+\toprule
+\textbf{ID} & \textbf{Prio.} & \textbf{Proposed requirement} & \textbf{Method}\\
+\midrule
+\endhead
+OVR-F-001 & P0 & Report radio state with field-level support, freshness, and errors. & Test \\
+OVR-F-002 & P0 & Route all radio writes through the policy-controlled path. & Inspect/Test \\
+OVR-F-003 & P1 & Normalize RMS gateway/channel fields and source retrieval time. & Test \\
+OVR-F-005 & P1 & Rank eligible gateways with evidence, uncertainty, and switching cost. & Analysis/Test \\
+OVR-F-006 & P1 & Explain ranking factors, source provenance, freshness, and exclusions. & Test \\
+OVR-F-007 & P0 & Enforce one exclusive radio-control lease. & Test \\
+OVR-F-008 & P0 & Read back and verify configuration before marking a candidate prepared. & Test \\
+OVR-F-009 & P0 & Prohibit retuning during PTT or active payload transfer except abort. & Test \\
+OVR-F-011 & P0 & Automatically grant a bounded session when the installed authority and live interlocks pass; no session-by-session human approval. & Demo/Test \\
+OVR-F-012 & P0 & Expire authorization at configured time/session/lease boundary. & Test \\
+OVR-F-017 & P0 & Provide a human-only emergency stop independent of AI, MCP, network, and application availability. & Demo/Test \\
+OVR-F-019 & P0 & Gate PTT key-up on active session, permit, lease, verified configuration, and local duration/duty limits; allow unconditional idempotent key-down. & Test \\
+OVR-F-018 & P0 & Autonomously start, monitor, recover, and retry within preinstalled authority; no routine human intervention or controls. & Demo/Test \\
+OVR-F-020 & P0 & On session/permit/lease/watchdog fault, request and audit PTT release and confirmation state. & Test \\
+OVR-F-025 & P1 & Exercise production tool contracts using simulated adapters and virtual time. & Test \\
+OVR-F-026--029 & P1 & Reproduce scenarios, isolate hidden truth, compare baselines, and report distinct outcomes. & Analysis/Test \\
+OVR-F-030--031 & P2 & Qualify modem channel tests and inhibited hardware-in-loop behavior separately. & Test \\
+OVR-Q-001 & P0 & Release software PTT and enter configured safe state within \todo{} after controller loss. & Test \\
+OVR-Q-005 & P1 & Apply hysteresis, dwell, cooldown, and retry bounds to automatic selection. & Test \\
+OVR-Q-009 & P1 & Claim modem compatibility only after bidirectional reference interoperability. & Demo/Test \\
+\bottomrule
+\end{longtable}
+\end{landscape}
+\clearpage
+
+The full actor, use-case, and requirement traceability baseline is maintained in \url{docs/architecture/requirements-and-use-cases.md}. Early qualification should use a dummy rig backend and simulated adapters for stale data, concurrent controllers, readback mismatch, and PTT/session timeouts. Simulation evidence, modem channel qualification, and real hardware qualification are distinct; build checks are not interoperability evidence.
+
+
+\section{Use cases}
+
+\subsection{UC-1: Observe station and opportunity set}
+The scheduler and agent obtain a snapshot. OLM reads radio, modem, client, and RMS state; attaches UTC timestamps and age; identifies unsupported fields; and returns a partial result if a subsystem is offline. No radio state is changed.
+
+\subsection{UC-2: Rank gateway alternatives}
+The installed station profile supplies message/service objectives and preferences. OLM filters unavailable, unauthorized, unsupported, stale, or out-of-profile channels; evaluates evidence per candidate; then gives the autonomous planner a ranking, confidence, rationale, and exclusions. When evidence is weak it reports that limitation rather than fabricating precision.
+
+\subsection{UC-3: Prepare a channel}
+The agent selects an eligible candidate. OLM acquires an exclusive lease, checks no active session/PTT, validates local limits, configures the full enabled CAT control profile through Hamlib, reads back supported values, and verifies modem/client readiness. Preparation cannot transmit. A mismatch invalidates the prepared state and triggers automatic recovery or a safe pause.
+
+\subsection{UC-4: Authorize and conduct a bounded Winlink session}
+Local policy automatically issues a one-session grant bounded by gateway, frequency, modem/client, power ceiling, queue scope, configuration hash, and expiry. No per-session operator approval is requested. The client begins the session; OLM monitors session/transfer/PTT and enforces time and duty ceilings. Completion, fault, expiry, loss of lease, emergency stop, or abort ends the attempt and records a summary.
+
+\subsection{UC-5: Recover from failure}
+On a failed connection, OLM releases PTT, classifies and records the failure, applies retry/cooldown, refreshes stale metadata, and re-ranks alternatives. It automatically prepares a new candidate and obtains a new policy grant if eligible; otherwise it waits or enters a latched safe state. It never reuses a previous grant.
+
+\subsection{UC-6: Maintain link opportunity coverage}
+At configured intervals, OLM refreshes RMS channels and external observations and recalculates candidate eligibility. A stable active channel is protected from score-driven churn; a material change is acted on at a safe session boundary without operator intervention.
+
+\subsection{UC-7: Use propagation forecasts and evaluate reentry evidence}
+At each planning cycle, the autonomous agent obtains a ranked candidate set. The ranker obtains VOACAP estimates for candidate path/frequency/time combinations, then combines them with fresh RMS availability, station profile, current reports, measured conditions, and empirical outcomes. The response identifies the likely planning window, input assumptions, score contributions, confidence, and stale/missing sources. Before preparation, the link manager refreshes state and obtains an automatic policy grant; forecasts do not themselves authorize transmission.
+
+In parallel, a research service ingests versioned reentry predictions and associates them with independent ionosonde/sporadic-E observations and per-session results. The agent may see the experimental score and its uncertainty labeled as non-operational. A validation report compares it to the VOACAP/operational baseline using event and control windows, held-out data, and shuffled covariates. Until a pre-deployment evidence/validation gate is satisfied, reentry data cannot alter the live candidate order. Even after enablement, it is only a bounded ranking covariate, never a reachability claim or authorization input.
+
+Together, these use cases define the exchanges the adapters must support. The
+interfaces below keep those exchanges explicit and prevent the AI-facing API
+from becoming a shortcut around radio policy.
+
+
+\subsection{Goal-to-verification traceability}
+Table~\ref{tab:goal-traceability} gives representative links from system
+intent through requirements and use cases to the architecture elements and
+evidence expected to verify them. The companion requirements baseline remains
+the authoritative, complete traceability record.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Representative goal-to-verification traceability.}
+\label{tab:goal-traceability}
+\begin{tabularx}{\linewidth}{@{}p{1.45in}p{2.2in}X@{}}
+\toprule
+\textbf{Goal} & \textbf{Trace links} & \textbf{Architecture owner and verification evidence} \\
+\midrule
+Fresh, explainable candidate choices & OVR-F-003, 005, 006; UC-1, UC-2, UC-6 & Inventory, evidence, and ranker; snapshot replay and checks of provenance, freshness, uncertainty, and exclusions \\
+Bounded autonomous station operation & OVR-F-007--012, 018--020; OVR-Q-001; UC-3--UC-5 & Link manager, policy, radio adapter, and PTT arbiter; fault injection and inhibited hardware-in-loop demonstration \\
+Measured session and transfer learning & OVR-F-025--031; OVR-Q-009; UC-4, UC-5, UC-7 & Modem, Winlink client, and history store; interoperability runs and denominator-bearing held-out evaluation \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
 \section{Architecture}
 
@@ -433,30 +680,10 @@ a Winlink service, reserves spectrum, or authorizes transmission.
 
 \landscapeplantuml{build/diagrams/Linkwise_Propagation_Evidence_Flow}{Proposed propagation evidence flow: independent collection, normalization, persistent analysis snapshots, candidate links, MCP queries, and policy-mediated sessions.}{fig:propagation-evidence-flow}
 
-\subsection{As-built MCP radio-control implementation}
-The following views document the implemented Rust prototype, not the proposed
-autonomous link manager. The MCP process uses stdio transport and typed
-\texttt{rmcp} tool handlers. Handlers delegate to \texttt{RadioControlPort};
-the selected backend is either process-local simulation or
-\texttt{RigctldRadio}. CAT write checks reside in the adapter, and the MCP
-handler appends JSONL audit records. The prototype has no session lease,
-transmit-permit arbiter, or active PTT watchdog. These limits are shown in the
-figures rather than inheriting those components from the proposed views.
-
-\landscapeplantuml{build/diagrams/Linkwise_MCP_Runtime_Components}{As-built MCP runtime components and radio-control boundaries.}{fig:mcp-runtime-components}
-
-\landscapeplantuml{build/diagrams/Linkwise_MCP_Compose_Deployment}{As-built Compose deployment: stdio MCP connection, private rigctld TCP link, audit volume, and optional CAT device mapping.}{fig:mcp-compose-deployment}
-
-\landscapeplantuml{build/diagrams/Linkwise_MCP_Radio_Read}{As-built capability discovery and control read sequence across MCP, the radio port, and the selected backend.}{fig:mcp-radio-read}
-
-\landscapeplantuml{build/diagrams/Linkwise_MCP_Radio_Write}{As-built typed CAT write sequence, including audit, backend readback, and uncertain audit-failure outcome.}{fig:mcp-radio-write}
-
-\landscapeplantuml{build/diagrams/Linkwise_MCP_Radio_Write_Activity}{As-built radio write validation and result activity, including fail-closed audit handling.}{fig:mcp-radio-write-activity}
-
-\landscapeplantuml{build/diagrams/Linkwise_MCP_PTT_Request}{As-built PTT request behavior: key-up denial, key-down release, audit handling, and inactive watchdog.}{fig:mcp-ptt-request}
+The current Rust radio-control MCP prototype is a limited implementation slice; its verified scope and remaining gaps are recorded in the lab-notes chronicle. It does not implement the complete autonomous link manager described here.
 
 \subsection{Layered software design}
-The implementation is organized as a ports-and-adapters system with a
+The proposed software is organized as a ports-and-adapters system with a
 deliberately controlled—not merely read-only—actuation boundary. The AI host
 can discover typed operations and invoke the full locally enabled CAT and PTT
 tool surface, while it has no direct device socket, shell, or route around
@@ -492,10 +719,13 @@ registered, schema-defined extensions for device-specific CAT features; writes
 are serialized under a lease and returned with readback. PTT has separate
 observation, assert, and release operations: the AI can request key-up, but
 the arbiter validates its authorized session or test context and local limit;
-release is idempotent and available during faults. The modem reports lifecycle and link metrics; the Winlink client owns
-its supported session and transfer operations. Neither modem nor client
-events alone prove recipient delivery. Evidence providers return forecasts
-and reports with provenance, never permission. Repositories persist
+release is idempotent and available during faults. A separate RF-environment
+port ingests compact observations from a configured receive-only SDR/DSP
+pipeline; it does not route IQ through MCP or control the IC-7200. The modem
+reports lifecycle and link metrics; the Winlink client owns its supported
+session and transfer operations. Neither modem nor client events alone prove
+recipient delivery. Evidence providers return forecasts, reports, or local
+RF measurements with provenance, never permission. Repositories persist
 append-only decisions and lifecycle events; message bodies and credentials
 are excluded by default. These contracts are summarized in Figure~\ref{fig:software-contracts};
 the companion SDD defines their semantics and representative Rust signatures.
@@ -663,154 +893,6 @@ controlled path; the AI host communicates only through MCP; and evidence
 sources can inform ranking but cannot authorize transmission. These
 correspondences are traced in the companion System Architecture Description.
 
-\section{Gateway scoring and continuous management}
-
-For candidate gateway \(g\), the ranker estimates utility as
-\[
-U(g,t)=P_g(\text{delivery within budget}\mid E_t)\,V_g
-       -C_g^{\mathrm{time}}-C_g^{\mathrm{switch}}-C_g^{\mathrm{risk}},
-\]
-where \(E_t\) is timestamped evidence and \(V_g\) represents user-defined delivery value. Inputs can include RMS availability, path-specific VOACAP results, current reported activity, local receiver observations, antenna bearing, modem compatibility, and historical session outcomes. Any learned estimate must disclose calibration limits and uncertainty.
-
-\subsection{How propagation and reentry evidence informs channel decisions}
-The planner treats a ``channel'' as an eligible RMS gateway/channel record (including its published frequency and supported mode), not a newly created Winlink service or a spectrum allocation. For each candidate path, the evidence service supplies the station and gateway locations, UTC planning interval, frequency, antenna/power assumptions, and compatible mode to a pinned local VOACAPL/VOACAP implementation. The result is stored with those inputs and the model version. The ranker uses the relevant hourly/monthly circuit reliability and signal-to-noise outputs to establish a statistical prior and identify promising frequency/time windows; it can combine that prior with current RMS status, reported activity, local measurements, and empirical outcomes. It cannot claim that the path is open now. Before an attempt, the link manager refreshes candidate inventory and station state, applies the installed station profile and regulatory limits, then autonomously selects and tunes the best eligible listed route for the bounded session flow.
-
-Reentry evidence follows a distinct path. A provider such as KeepTrack's v4 endpoint reports upcoming reentry predictions derived from Space-Track TIP messages, with updated predictions deduplicated by object [18]. These are forecasts with uncertainty, not confirmed event times or direct measurements of ionization. The research pipeline records object identifier, prediction issue time, predicted time/window, source, event status, and available spatial metadata. It aligns the event interval with geographically and temporally relevant sporadic-E/ionosonde observations and Linkwise's measured per-path session results. A reentry-associated feature is therefore a candidate explanatory variable for local E-region variability—not a universal channel-quality adjustment.
-
-The production ranker initially excludes this feature. In shadow/research mode, the system computes a parallel experimental score and explanation, then evaluates it retrospectively and prospectively against (a) a VOACAP-plus-operational-evidence baseline and (b) the same baseline without reentry features. Evaluation uses event/control windows, geographic relevance, source/prediction age, sufficient repeated observations, calibration, and held-out time/path scenarios. Only after controlled testing demonstrates repeatable out-of-sample improvement may a newly reviewed, calibrated profile be installed before a later deployment; enabling it is not a runtime operator action. Its weight and provenance remain visible, and it can never override eligibility, channel-clear checks, local policy, or PTT authorization. This conservative gate is warranted because recent peer-reviewed work examines a possible association between artificial reentries, metallic ions, and E-region anomalies, but does not establish a real-time HF path predictor [19].
-
-VOACAP reliability is statistical for modeled hour/month and is not a guarantee for a particular session [2]. RMS status is a reported gateway state, not RF reachability [3]. PSK Reporter and DX Maps provide reported activity and can be biased by who is transmitting/reporting. NOAA SWPC products such as solar radio flux, geomagnetic indices and forecasts, alerts, and D-Region Absorption Prediction (D-RAP) can characterize space-weather conditions that may affect HF circuits; they are contextual or mechanism-specific evidence, not end-to-end path measurements [24,27]. NASA CCMC DONKI contributes event analyses and linked solar/heliospheric context, while NASA GNSS-derived TEC products may support regional ionospheric studies. DONKI is research/prototyping-quality information, and TEC is not a direct measure of HF circuit success [25,26]. GIRO ionograms are local/remote ionosonde measurements, not full end-to-end channel measurements [4]. KeepTrack's API is licensed CC BY-NC 4.0, requires attribution, and is restricted to non-commercial use; a deployment must review these terms and may substitute another permitted source [18]. Each evidence item retains source, timestamp, assumptions, age, coverage, and confidence.
-
-\subsection{Research basis and engineering interpretation}
-The literature supports a causal, layered account of HF link conditions:
-solar and geomagnetic forcing changes ionospheric state; the state controls
-wave refraction, absorption, and scattering; path effects combine with
-antennas, noise, and equipment to determine the received channel; the modem
-and Winlink client then determine whether that channel supports a session and
-transfer. These layers have different observables and uncertainty. The
-architecture therefore stores propagation estimates separately from measured
-radio contact, modem connection, client acceptance, and delivery.
-
-At first order, the electron plasma frequency is
-\[
-  f_p = \frac{1}{2\pi}\sqrt{\frac{N_e e^2}{\epsilon_0 m_e}},
-\]
-where \(N_e\) is electron density, \(e\) is electron charge, \(m_e\) is
-electron mass, and \(\epsilon_0\) is free-space permittivity. In an
-unmagnetized, collisionless plasma the refractive index obeys
-\(n^2 \simeq 1-f_p^2/f^2\). This approximation explains why electron density
-and operating frequency govern refraction and a vertical-incidence critical
-frequency. The terrestrial ionosphere is magnetized, collisional, spatially
-structured, and time varying; practical HF analysis therefore requires
-magnetoionic dispersion (with ordinary and extraordinary modes), path geometry,
-and absorption treatment rather than applying the simple expression as a
-complete prediction [31,32,34]. Ray tracing is a computationally useful
-geometric-optics approximation where the medium varies slowly relative to the
-wave; full-wave methods are needed where that approximation or assumed layer
-geometry is inadequate [31].
-
-The complex refractive index also encodes attenuation. Absorption depends on
-electron density and collision frequency along the traversed path, with
-important contributions from the lower ionosphere. Zawdie et al. show that
-absorption calculations depend on the dispersion formulation and the
-collision-frequency model; under their comparisons, selecting consistent
-collision-frequency assumptions brought the Appleton--Hartree and Sen--Wyller
-calculations to within a few percent in the D/E regions, while mismatched
-assumptions produced much larger differences [40]. This result is a warning
-against treating model names as interchangeable or attaching confidence to a
-forecast without recording its ionospheric and absorption assumptions.
-
-Circuit quantities must also be distinguished. A critical frequency
-characterizes vertical-incidence reflection under specified conditions; the
-maximum usable frequency is path- and mode-dependent. The lowest usable and
-optimum working frequencies also depend on losses, noise, and the desired
-reliability. A field-strength or SNR estimate is not itself a probability of
-successful VARA/Winlink delivery. The latter also depends on time-varying
-fading, multipath delay and Doppler, interference, receiver performance,
-modem mode, and client behavior [32,34--36]. The link utility model must
-therefore keep modeled circuit support and measured service outcomes as
-separate response variables.
-
-Measurement types observe different parts of this chain. A vertical ionogram
-probes the ionosphere near the sounder; an oblique sounder or calibrated
-beacon is more directly associated with an actual radio path; wideband
-soundings can estimate delay/Doppler spreading and the channel scattering
-function [35,36]. GNSS TEC is an electron-density integral along a GNSS ray,
-not an HF-frequency electron-density profile or a measurement of a particular
-HF circuit [33,34]. Amateur-radio reporting networks provide valuable,
-time-stamped observations of real operating paths and have been used in
-peer-reviewed studies of flares and traveling ionospheric disturbances
-[41,43]. Their reports are opportunistic and mode/population dependent;
-researchers describe them as networks designed to reveal propagation
-openings, rather than finely calibrated ionospheric instruments [42]. Thus,
-an observed report is evidence that a particular transmission was received;
-no report is ambiguous and must not be recorded as proof of path closure.
-
-Published comparisons demonstrate why the service must expose model scope and
-uncertainty. In Walden's 23-month study of nine 5.29 MHz midlatitude NVIS
-beacon circuits, prediction residuals varied with season and path. The
-reported overall RMS difference was 7--15 dB for VOACAP and 9--16 dB for
-ASAPS, while the study also found signals during some periods when the
-models' support probabilities were zero [37]. In a 2026 global model
-comparison using the selected CCIR measurement data and a common evaluation
-procedure, REC533 had the lowest overall dispersion among the three models;
-ICEPAC and VOACAP showed larger, condition-dependent errors, especially in
-some long-distance, high-frequency, and low-latitude cases [39]. These are
-results for the papers' datasets and methods, not a ranking that can be
-transferred directly to Linkwise's RMS/VARA operating population. A forecast
-should be calibrated and stratified by path class, season, solar/geomagnetic
-regime, and operating configuration before it changes live candidate order.
-
-Short-term forecasting of an ionospheric state is a distinct research problem
-from predicting a particular oblique HF circuit. Moskaleva and Zaalov describe
-a simplified model that forecasts F2-layer critical frequency and electron
-density profiles one day ahead and compares the forecasts with ionograms [38].
-Such profile skill can inform path models, but does not by itself establish
-forecast accuracy for received field strength, channel availability, or
-successful application transfer. Validation should be done at each intended
-target metric using observations that represent that target; recent work
-demonstrates evaluation of ionospheric models against technologically
-relevant metrics including HF links [44].
-
-The resulting evidence-to-decision contract is:
-\begin{enumerate}
-  \item Store source value, physical unit, source/model version, issue and
-        observation times, validity window, path/location, frequency, and
-        assumptions. Keep forecast output, direct measurement, reception
-        report, and session outcome as different evidence classes.
-  \item Convert each input to a stated path/time/frequency feature, with
-        missingness, freshness, spatial coverage, uncertainty, and quality
-        preserved. Do not treat missing records or no spots as zero signal or
-        as a failed path observation.
-  \item Compare forecasts against measurements of the same target and scale.
-        Evaluate field strength, channel availability, and application-level
-        transfer success separately; do not validate an SNR prediction only
-        against session success or call both results “propagation accuracy.”
-  \item Use model estimates as calibrated statistical evidence for ranking,
-        not as a live reachability assertion or authorization input. Retain
-        exact input/model IDs so each recommendation and later outcome can be
-        replayed.
-\end{enumerate}
-
-This synthesis establishes the theory and engineering basis for the
-capability, but it does not qualify an implementation. Remaining empirical
-work is to characterize the chosen local VOACAPL/VOACAP configuration, build
-a path-matched dataset with calibrated observations and station-specific
-outcomes, test alternative model and assimilation approaches on
-time/path/season-held-out data, and quantify the improvement in the link
-ranking objective. The evaluation should report bias and error for continuous
-estimates, calibration and discrimination for probabilities, and
-denominator-bearing outcome and utility measures for ranking [44]. Any experimental
-covariate, including reentry-related evidence, remains shadow-only until it
-shows repeatable out-of-sample value over the non-experimental baseline.
-
-The ranker can refresh its recommendations as new evidence arrives, but a new
-score does not automatically mean a new radio setting. The link manager acts
-only when an improvement is meaningful, the evidence is fresh, and policy
-checks pass. It never retunes during PTT or an active transfer. With one
-radio, Linkwise selects one channel for the next session; multiple concurrent
-links would require separate radios, leases, and a different scheduler.
-
 \section{Simulation and decision evaluation}
 Agent link-management decisions require repeatable evaluation against an RF
 environment whose actual state is hidden from the agent. The proposed
@@ -872,143 +954,274 @@ agent must perform. The use cases follow its continuous loop: observe, compare,
 configure, authorize locally, operate, recover, and learn. The human runtime
 role is limited to the emergency stop.
 
-\section{Use cases}
-
-\subsection{UC-1: Observe station and opportunity set}
-The scheduler and agent obtain a snapshot. OLM reads radio, modem, client, and RMS state; attaches UTC timestamps and age; identifies unsupported fields; and returns a partial result if a subsystem is offline. No radio state is changed.
-
-\subsection{UC-2: Rank gateway alternatives}
-The installed station profile supplies message/service objectives and preferences. OLM filters unavailable, unauthorized, unsupported, stale, or out-of-profile channels; evaluates evidence per candidate; then gives the autonomous planner a ranking, confidence, rationale, and exclusions. When evidence is weak it reports that limitation rather than fabricating precision.
-
-\subsection{UC-3: Prepare a channel}
-The agent selects an eligible candidate. OLM acquires an exclusive lease, checks no active session/PTT, validates local limits, configures the full enabled CAT control profile through Hamlib, reads back supported values, and verifies modem/client readiness. Preparation cannot transmit. A mismatch invalidates the prepared state and triggers automatic recovery or a safe pause.
-
-\subsection{UC-4: Authorize and conduct a bounded Winlink session}
-Local policy automatically issues a one-session grant bounded by gateway, frequency, modem/client, power ceiling, queue scope, configuration hash, and expiry. No per-session operator approval is requested. The client begins the session; OLM monitors session/transfer/PTT and enforces time and duty ceilings. Completion, fault, expiry, loss of lease, emergency stop, or abort ends the attempt and records a summary.
-
-\subsection{UC-5: Recover from failure}
-On a failed connection, OLM releases PTT, classifies and records the failure, applies retry/cooldown, refreshes stale metadata, and re-ranks alternatives. It automatically prepares a new candidate and obtains a new policy grant if eligible; otherwise it waits or enters a latched safe state. It never reuses a previous grant.
-
-\subsection{UC-6: Maintain link opportunity coverage}
-At configured intervals, OLM refreshes RMS channels and external observations and recalculates candidate eligibility. A stable active channel is protected from score-driven churn; a material change is acted on at a safe session boundary without operator intervention.
-
-\subsection{UC-7: Use propagation forecasts and evaluate reentry evidence}
-At each planning cycle, the autonomous agent obtains a ranked candidate set. The ranker obtains VOACAP estimates for candidate path/frequency/time combinations, then combines them with fresh RMS availability, station profile, current reports, measured conditions, and empirical outcomes. The response identifies the likely planning window, input assumptions, score contributions, confidence, and stale/missing sources. Before preparation, the link manager refreshes state and obtains an automatic policy grant; forecasts do not themselves authorize transmission.
-
-In parallel, a research service ingests versioned reentry predictions and associates them with independent ionosonde/sporadic-E observations and per-session results. The agent may see the experimental score and its uncertainty labeled as non-operational. A validation report compares it to the VOACAP/operational baseline using event and control windows, held-out data, and shuffled covariates. Until a pre-deployment evidence/validation gate is satisfied, reentry data cannot alter the live candidate order. Even after enablement, it is only a bounded ranking covariate, never a reachability claim or authorization input.
-
-Together, these use cases define the exchanges the adapters must support. The
-interfaces below keep those exchanges explicit and prevent the AI-facing API
-from becoming a shortcut around radio policy.
-
 \section{Interfaces and control contracts}
 
-\subsection{Hamlib}
-The adapter exposes the complete set of control and state operations advertised by the selected Hamlib/radio backend, not only frequency and mode tuning. This includes supported VFO, mode/filter, power, antenna, split, level, function, memory, and device-specific controls. The AI can request all locally enabled controls through typed MCP operations; readback and support vary by backend and are reported explicitly. Features not represented by common Hamlib controls use registered, schema-defined vendor extensions with side-effect classification. Writes are serialized and audited; the preinstalled autonomous profile classifies disruptive/service operations and either authorizes a qualified procedure or denies the action without seeking live approval. The agent does not open rigctld or raw CAT connections.
+\subsection{Radio-control adapter: Hamlib/rigctld}
+The radio adapter exposes the complete control catalog advertised by the selected Hamlib backend, subject to the installed station profile. For the target IC-7200, Hamlib/rigctld is the CAT boundary; supported operations and meter levels must be discovered from the installed backend at runtime rather than inferred from the model name [22, 45]. The adapter does not promise that every Hamlib operation is supported or readable on this radio.
 
-\subsection{MCP tools}
-The MCP API separates observation from actuation. Representative read-only tools
-are \path{radio_get_state}, \path{radio_get_capabilities},
-\path{radio_get_controls}, \path{radio_get_control},
-\path{radio_get_ptt_state}, \path{winlink_get_inventory_summary}, and
-\path{link_rank_gateways}. The inventory/history tools expose additional
-station, gateway, and outcome detail. The full catalog is defined in the
-companion MCP interface design.
+The read-only tools are \path{radio_get_state} (optional maximum age),
+\path{radio_get_capabilities}, \path{radio_get_controls} (optional
+category/control filters), \path{radio_get_control} (exact catalog ID), and
+\path{radio_get_ptt_state}. Results include radio identity, observed values,
+per-field support/errors/freshness, control ranges/enums, readback status,
+and backend capability provenance. Signal-strength levels, if exposed, retain
+the Hamlib level token and radio-specific units/calibration; they are local
+receiver measurements, not modem link evidence.
 
-Propagation and history reads include
-\path{propagation_get_status}, \path{propagation_get_path_analysis},
-\path{link_get_candidate_analysis}, and \path{link_get_similar_sessions}.
-They return immutable evidence/analysis IDs, source and model versions,
-freshness, coverage, uncertainty, and bounded outcome summaries with counts
-and denominators. \path{propagation_refresh_sources} may request a bounded
-refresh of preconfigured providers; it cannot accept arbitrary provider URLs,
-credentials, or polling policies. Scheduled source collection and
-re-analysis continue independently of MCP calls. Exact tool schemas and
-resource URIs are defined in the companion MCP interface design.
+The mutating tools are \path{radio_set_control} and
+\path{radio_invoke_extension}. The first accepts an exact discovered control
+ID, a matching tagged value, and an optional expected state revision. The
+second accepts a registered extension ID and schema-validated arguments;
+arbitrary CAT bytes, shell commands, and direct rigctld requests are never
+accepted. Writes acquire/validate the station lease, apply profile limits,
+serialize CAT access, audit the request, and read the value back where
+supported. The response distinguishes accepted request from verified state;
+uncertain outcomes require a fresh observation. Access class and side-effect
+class are explicit per control. The IC-7200 target is not yet physically
+qualified, and the prototype's current local revision does not detect
+changes made by an external controller.
 
-For actuation, \path{radio_set_control} can set any supported, locally
-permitted CAT control, while \path{radio_invoke_extension} invokes a
-registered device-specific operation. Link workflows include
+\subsection{MCP shared contract}
+The MCP API separates observation from actuation and maps each purpose-specific
+tool to a typed Linkwise port. Results include request/correlation IDs,
+status, observation time, data, warnings, and errors; evidence retains source,
+source and retrieval times, units, quality, freshness, and provenance.
+Unknown, stale, unsupported, unavailable, and zero are distinct. Collection
+and history reads are bounded, and provider refreshes use preconfigured
+sources only. Exact schemas, resource URIs, common errors, and versioning are
+defined by the companion MCP interface design. MCP annotations are advisory;
+local deterministic policy authorizes every side effect.
+
+Each adapter section below defines its MCP surface, result evidence, and
+capability limits. The link-history adapter correlates their observations by
+session and attempt without conflating local RF activity, modem connection,
+Winlink session completion, CMS acceptance, and recipient delivery.
+
+\subsection{Actuation and link-session coordinator}
+The mutating radio tools are \path{radio_set_control} and
+\path{radio_invoke_extension}; their exact value schemas, side-effect classes,
+lease checks, audit records, and readback behavior are described in the
+radio-control adapter contract above. Link workflows use
 \path{link_prepare_candidate}, \path{link_request_session_authorization},
-and \path{link_start_session}. The AI can explicitly request PTT key-up or
-key-down with \path{radio_ptt_request}; key-up requires an authorized scope
-and one-use permit, and duration/duty limits come from local policy, never
-tool arguments. Key-down is always allowed and idempotent. The MCP standard
-provides tool discovery and invocation, not safety authorization [5].
+and \path{link_start_session}. Preparation re-fetches the candidate,
+acquires the station lease, confirms idle/PTT state, applies radio settings,
+verifies readback, and returns a short-lived handle bound to that state.
+Authorization is a separate local deterministic policy decision, bounded by
+candidate, configuration, service scope, power, and expiry. Starting a
+session consumes both handles; a prior MCP read is never authorization. MCP
+discovery/invocation does not itself grant authority [5].
 
-For normal modem operation, the modem adapter requests PTT through the same local arbiter. The AI may also directly request bounded key-up/key-down through the PTT tool; this is full PTT control through the product's command path, not raw line toggling. For digital sessions the modem remains responsible for protocol-accurate burst timing. Local policy issues a one-use key-up permit only after rechecking the session authorization (or a specifically approved test scope), lease, configuration, and remaining budget. The arbiter verifies the permit and PTT state before asserting the selected hardware route. A watchdog releases PTT at the local continuous-key-up cap and on permit/lease expiry, controller loss, session timeout, or abort. Key-down remains a high-priority release action.
+\subsection{PTT and transmit-arbitration adapter}
+PTT is separate from CAT configuration because it is a safety-critical
+transmit path. \path{radio_get_ptt_state} reports configured route,
+requested/observed state, readback support, watchdog status, and observation
+time. \path{radio_ptt_request} accepts \path{key_up} or \path{key_down};
+key-up is bound to an active session and one-use permit, with no caller-
+selected duration or duty limit. \path{link_request_ptt_permit} revalidates
+session authorization, lease, radio configuration, interlocks, and remaining
+budget before issuing that permit. Key-down is idempotent, always available,
+and does not require a session or permit.
 
-\subsection{VARA and Winlink}
-VARA and Winlink remain separate adapters. The modem provides radio-link establishment and status; the Winlink client handles channel/session/message operations. The exact supported client API is a design dependency. Pat is a candidate cross-platform client adapter where its supported interfaces permit; existing Winlink Express workflows require an explicitly verified integration and must not rely on fragile GUI automation. No Winlink Express automation contract is asserted here.
+The modem and client request burst timing only through the same local
+arbiter. It verifies the route and permit, enforces configured continuous-
+key-up and total-session limits, confirms release when readback is available,
+and records each transition. Watchdog, timeout, lease loss, abort, controller
+loss, and emergency stop all cause release; inability to confirm release
+produces a latched fault/inhibit according to station policy. The human
+emergency stop is physically independent and is not an MCP tool. These are
+proposed guarantees: the current Rust prototype denies key-up, has no permit
+arbiter or watchdog, and is not transmit-qualified.
+
+\subsection{Audio-device and routing adapter}
+The audio adapter discovers and reports the host audio endpoints used by the
+IC-7200 USB codec or a qualified external interface. Read-only
+\path{audio_get_status} reports selected input/output routes, stream state,
+sample format/rate, channel count, last buffer time, underrun/overrun counts,
+and measured route health. \path{audio_get_capabilities} lists available
+devices and supported formats without exposing OS handles or arbitrary
+device paths. Status fields distinguish device-present, stream-open, and
+audio-observed states; an open stream is not proof that audio is correctly
+decoded by the modem.
+
+Route selection is limited to preconfigured, qualified profile IDs. If
+runtime selection is enabled, \path{audio_set_route} can select only a
+profile while PTT is released and no session is active; it returns the
+effective route and readback/stream validation. Arbitrary device names,
+filesystem paths, gain values, and routing graphs are not MCP inputs. The
+modem adapter consumes the route's readiness and health signals, while the
+link coordinator owns when a route change is permitted. The current Rust
+prototype has no native audio-device adapter or audio MCP tools.
+
+\subsection{RF-environment observation adapter}
+This read-only adapter ingests compact results from a configured
+receive-only SDR and DSP pipeline, such as GNU Radio/SoapySDR. It supplements
+the IC-7200's tuned-channel observations; the IC-7200 USB audio is demodulated
+audio, not a wideband IQ feed, so it cannot survey other channels while
+serving an active link. The adapter does not tune or key the IC-7200 and does
+not control arbitrary SDR parameters at runtime.
+
+Its question is whether a configured receiver observed measurable RF
+activity in a specified span and interval, and how trustworthy that
+measurement is. It does not decide whether a peer decoded a frame or whether
+a protocol link was established. Spectrum occupancy, calibrated noise floor,
+energy bursts, and channel-power summaries require an IQ-capable receive
+source and are reported only when supported by that source and profile.
+Measurements derived from IC-7200 USB audio are audio-domain observations of
+the tuned, demodulated channel; they are not interchangeable with RF power or
+a wideband channel survey. Any uncalibrated audio-level or SNR-like estimate
+must be labeled as a proxy with its estimator and limitations.
+
+\path{rf_get_status} reports receiver/collector health, configured profiles,
+last collection time, and coverage. \path{rf_get_capabilities} describes
+supported bands/spans, metrics, resolution, sample configuration, and
+calibration state. \path{rf_get_snapshot} reads the latest immutable
+observation for a configured profile; \path{rf_get_history} returns a
+bounded time range and result count. A separately authorized
+\path{rf_request_observation} may request one bounded capture using a
+preinstalled profile ID and dwell limit; it cannot supply arbitrary
+frequencies, gain, sample rate, or device path. Results may include noise
+floor, spectrum bins or summaries, occupied-bandwidth/energy candidates,
+receiver gain/configuration, frequency span, units, calibration/quality
+flags, sample interval, estimator identity, capture source, uncertainty, and
+missing-coverage reasons. Capabilities identify which of these are available
+for each profile; unavailable or invalid measurements are represented as
+such, never as zero. Results include capture start/end times and freshness so
+the consumer can distinguish a current observation from stale data. Raw IQ
+and continuous waterfall frames remain local to the DSP pipeline and are
+never MCP tool payloads or ordinary audit records. Energy detection indicates
+local activity only; it does not identify a callsign, prove decoding, or
+establish gateway reachability. During local transmission, desense, or a
+receive gap, the adapter reports degraded or absent coverage rather than
+interpreting that interval as a quiet channel.
+
+\subsection{Modem adapter: VARA or future Linkwise modem}
+The modem adapter owns waveform/modem lifecycle and protocol-level link
+state, not Winlink message routing or radio CAT. \path{modem_get_state}
+reports process/device readiness, audio/PTT route health, and current state.
+The \path{linkwise://modem/state} resource exposes the latest read-only
+snapshot with source time and freshness;
+\path{modem_get_capabilities} reports only verified operations and fields
+for the configured modem/version. \path{modem_get_session} returns one
+session's state and negotiated parameters where available.
+\path{modem_get_events} accepts a session ID, cursor, and bounded limit to
+return ordered acquisition, peer-decode, handshake, link-up/down, quality,
+and termination events. Event data preserves native event code, normalized
+event class, peer identity only when actually decoded, source time, and
+adapter version. A link-up event means the modem's protocol state machine has
+completed the protocol's required bidirectional handshake and entered its
+connected state. Carrier/energy detection, synchronization or acquisition,
+one decoded peer frame, or a locally issued connect request is only evidence
+of an earlier stage and must not be normalized as link-up. The session
+snapshot records the protocol state, transition time, peer identity when
+provided by the modem, negotiated parameters, and termination reason when
+available. BER, SINAD, SNR, throughput, or retry counters are included
+only when the selected modem actually exposes them, with native units and
+measurement semantics; Linkwise does not infer missing values.
+
+Session lifecycle commands are issued through the link coordinator, not a
+raw modem-control MCP tool. The adapter may offer internal start/stop/status
+operations to that coordinator over a verified client interface. VARA's
+external command/status behavior must be qualified against the selected
+release before its fields become stable MCP contracts. For VARA, Linkwise
+must consume a qualified explicit status/event from the selected release and
+preserve its native code and semantics; it must not infer connection from
+audio, RF energy, or a locally requested connect. A future native modem uses
+the same domain event contract, with its distinct implementation version.
+The evidence layers are intentionally separate: RF activity is a DSP
+observation; modem link-up is a protocol connection; Winlink session and
+transfer completion come from the Winlink client; CMS acceptance or recipient
+delivery is reported only when the client explicitly confirms it. Modem
+link-up alone proves none of the latter outcomes.
+
+\subsection{Winlink RMS inventory adapter}
+This adapter refreshes and normalizes the configured published RMS channel
+source. \path{winlink_refresh_inventory} accepts optional maximum age and
+preconfigured protocol/service filters, and returns an immutable snapshot
+ID, source/retrieval times, per-source status, warnings, and count deltas.
+\path{winlink_get_inventory_summary} returns unique gateway/channel counts
+and status/report-age buckets. \path{winlink_get_gateway_channels} accepts
+a gateway identity and returns its listed channel frequencies, modes,
+services, source identifiers, status, and freshness. The
+\path{linkwise://winlink/channels} resource exposes the corresponding cached
+channel view with snapshot identity and freshness; it does not perform a live
+probe.
+
+Inventory records identify callsign/station, channel frequency, protocol,
+service, location/grid where published, source timestamp, local retrieval
+time, and normalization warnings. Directory status and report age are
+discovery evidence only. They do not establish that the gateway is currently
+on air, that the HF path is open, or that the local station can reach it.
+Refresh performs bounded network I/O against configured sources and cannot
+accept arbitrary URLs, credentials, or polling schedules. A partial refresh
+preserves the prior snapshot as stale and reports the failure rather than
+replacing unavailable counts with zero.
+
+\subsection{Winlink client and session adapter}
+The client adapter owns queue/session/message-service interaction and keeps
+those outcomes separate from modem link state. \path{winlink_get_status}
+reports client readiness, supported connection methods, and modem/client
+association. \path{winlink_get_queue_summary} returns only aggregate counts
+or bytes for supported clients, with queue direction, observation time, and
+capability status; payloads, recipients, and message contents are excluded
+by default. \path{winlink_get_session} returns client session ID, selected
+RMS gateway/channel, lifecycle stage, timestamps, transfer progress when
+available, and terminal reason. \path{winlink_get_events} returns bounded
+ordered session/transfer events. Deduplicated cross-session outcomes are
+queried through \path{link_get_history}, which omits message contents by
+default. The \path{linkwise://winlink/queue-summary} resource exposes only
+the supported aggregate queue view; session resources remain addressed by
+session ID.
+
+Session start and abort are routed through the link coordinator and local
+authorization and PTT arbiter, not directly from the inventory or modem
+adapter. A client adapter is implemented only against a verified supported
+interface; Pat remains a candidate, and the design does not assume Winlink
+Express GUI automation. Outcomes distinguish gateway contact, RF/modem link,
+client session completion, CMS acceptance, and recipient delivery only if
+explicitly confirmed by the client.
 
 \subsection{Propagation and gateway data}
-RMS channels are refreshed before each new attempt. VOACAP is used as a statistical planning signal, not single-opening prediction. PSK Reporter/DX Maps activity and GIRO measurements are attached with provenance and times. Data providers may be unavailable, delayed, or rate-limited; absence is explicit.
+\path{propagation_get_status} returns provider health, latest source and
+retrieval times, coverage, and adapter errors.
+\path{propagation_get_path_analysis} accepts a station/path, channel or
+frequency, UTC planning window, and optional maximum age; it returns an
+immutable analysis ID, exact evidence input IDs/roles, model/config and
+station-profile revisions, estimates, uncertainty, coverage, and
+stale/missing-input reasons. \path{propagation_refresh_sources} requests a
+bounded refresh from preconfigured providers and returns collection-run and
+evidence IDs with per-provider outcomes. It cannot change polling policy or
+name arbitrary URLs. VOACAP forecasts, PSK Reporter/DX Maps spots, GIRO
+measurements, and space-weather sources remain separately attributed
+evidence classes; none acts as a reachability guarantee or transmit permit.
+Scheduled collection and analysis run independently of MCP calls.
+
+\subsection{Link coordination, history, and evidence adapter}
+\path{link_rank_gateways} accepts a service objective and permitted
+band/mode/filter set, then returns an immutable ranking snapshot with
+gateway/channel IDs, eligible/excluded status, component scores, evidence
+references, freshness, uncertainty, and reasons.
+\path{link_get_candidate_analysis} returns the pinned analysis and
+ranking-entry IDs, input provenance, and any associated policy decision.
+\path{link_get_similar_sessions} accepts bounded matching dimensions and a
+UTC window; it returns measured outcome counts, denominators, sample size,
+coverage, and uncertainty, retaining sparse data as sparse.
+
+\path{link_get_session}, \path{link_get_history}, and
+\path{link_get_metrics} return ordered attempts and distinct connection and
+transfer numerators/denominators with data coverage. Retries create new
+attempts; session records are append-only and omit message payloads. The
+correlated evidence view distinguishes radio configuration/readback,
+transmission attempt, valid peer response, modem link establishment, Winlink
+session completion, CMS acceptance, and message-transfer confirmation.
+Energy detection, an S-meter value, PTT assertion, or RMS directory listing
+cannot independently establish a link. The full machine-readable schemas,
+resources, common errors, and versioning policy remain defined by the
+companion MCP interface design; this section specifies each adapter's
+architecture-level capability boundary.
 
 These interfaces cross trust boundaries: the model can ask, external sources
 can inform, but only local policy can authorize side effects. The safety and
 security design makes that distinction enforceable.
-
-\section{Safety, security, and reliability}
-
-\subsection{Safety invariants}
-\begin{enumerate}
-  \item PTT key-up may be requested by the AI or modem, but can occur only through the arbiter under an automatically authorized session; key-down is always permitted.
-  \item Policy is enforced in deterministic local code, not model instructions.
-  \item Authorization is one-use, short-lived, and bound to channel/configuration/session limits.
-  \item Frequency, mode, power, and service rules are checked locally before session start.
-  \item No tune/switch while PTT is asserted or a transfer is active, except emergency abort.
-  \item A watchdog, session timeout, autonomous abort, human-only emergency stop, and physical inhibit are independent of AI.
-  \item Stale/unknown measurements are never converted to favorable defaults.
-  \item Loss of AI or internet access triggers deterministic safe fallback/receive-only behavior and cannot prevent emergency stop.
-\end{enumerate}
-
-\subsection{Threats and failure modes}
-Prompt injection, malformed tool arguments, stale RMS data, inaccurate propagation reports, external radio changes, multiple clients racing rigctld, modem/client crash, stuck PTT, unauthorized MCP access, and sensitive payload logging are in-scope threats. Controls include typed schemas, allowlists, capability-aware validation, single-writer leases, readback, freshness limits, watchdogs, loopback binding, audit trails, and payload-free default logging.
-
-\subsection{Anti-oscillation}
-Channel management uses configurable minimum dwell, switch hysteresis, switch penalties, retry limits, failure cooldowns, and deferral during active sessions. Numeric thresholds remain \todo{} until tested on real station hardware and realistic gateway sets.
-
-The invariants above need observable acceptance evidence, not just design
-intent. The requirements below state what should be checked and how; TBD
-limits remain open until station-specific testing supplies defensible values.
-
-\section{Requirements and verification strategy}
-
-\clearpage
-\begin{landscape}
-\thispagestyle{plain}
-\begin{longtable}{@{}p{0.95in}p{0.55in}p{4.95in}p{0.7in}@{}}
-\caption{Representative system requirements and proposed verification methods.}\label{tab:requirements}\\
-\toprule
-\textbf{ID} & \textbf{Prio.} & \textbf{Proposed requirement} & \textbf{Method}\\
-\midrule
-\endhead
-OVR-F-001 & P0 & Report radio state with field-level support, freshness, and errors. & Test \\
-OVR-F-002 & P0 & Route all radio writes through the policy-controlled path. & Inspect/Test \\
-OVR-F-003 & P1 & Normalize RMS gateway/channel fields and source retrieval time. & Test \\
-OVR-F-005 & P1 & Rank eligible gateways with evidence, uncertainty, and switching cost. & Analysis/Test \\
-OVR-F-006 & P1 & Explain ranking factors, source provenance, freshness, and exclusions. & Test \\
-OVR-F-007 & P0 & Enforce one exclusive radio-control lease. & Test \\
-OVR-F-008 & P0 & Read back and verify configuration before marking a candidate prepared. & Test \\
-OVR-F-009 & P0 & Prohibit retuning during PTT or active payload transfer except abort. & Test \\
-OVR-F-011 & P0 & Automatically grant a bounded session when the installed authority and live interlocks pass; no session-by-session human approval. & Demo/Test \\
-OVR-F-012 & P0 & Expire authorization at configured time/session/lease boundary. & Test \\
-OVR-F-017 & P0 & Provide a human-only emergency stop independent of AI, MCP, network, and application availability. & Demo/Test \\
-OVR-F-019 & P0 & Gate PTT key-up on active session, permit, lease, verified configuration, and local duration/duty limits; allow unconditional idempotent key-down. & Test \\
-OVR-F-018 & P0 & Autonomously start, monitor, recover, and retry within preinstalled authority; no routine human intervention or controls. & Demo/Test \\
-OVR-F-020 & P0 & On session/permit/lease/watchdog fault, request and audit PTT release and confirmation state. & Test \\
-OVR-F-025 & P1 & Exercise production tool contracts using simulated adapters and virtual time. & Test \\
-OVR-F-026--029 & P1 & Reproduce scenarios, isolate hidden truth, compare baselines, and report distinct outcomes. & Analysis/Test \\
-OVR-F-030--031 & P2 & Qualify modem channel tests and inhibited hardware-in-loop behavior separately. & Test \\
-OVR-Q-001 & P0 & Release software PTT and enter configured safe state within \todo{} after controller loss. & Test \\
-OVR-Q-005 & P1 & Apply hysteresis, dwell, cooldown, and retry bounds to automatic selection. & Test \\
-OVR-Q-009 & P1 & Claim modem compatibility only after bidirectional reference interoperability. & Demo/Test \\
-\bottomrule
-\end{longtable}
-\end{landscape}
-\clearpage
-
-The full actor, use-case, and requirement traceability baseline is maintained in \url{docs/architecture/requirements-and-use-cases.md}. Early qualification should use a dummy rig backend and simulated adapters for stale data, concurrent controllers, readback mismatch, and PTT/session timeouts. Simulation evidence, modem channel qualification, and real hardware qualification are distinct; build checks are not interoperability evidence.
 
 \section{Deployment profiles}
 
@@ -1073,6 +1286,38 @@ emergency stop. This architecture offers a path to autonomous communications
 only after each adapter, control path, and operating limit has been validated.
 
 \appendix
+\section{Extended propagation model evidence}\label{app:model-evidence}
+This appendix records model-comparison evidence that informs the
+calibration limits discussed in the main text. Findings are specific
+to their datasets, models, and evaluation methods.
+
+Published comparisons demonstrate why the service must expose model scope and
+uncertainty. In Walden's 23-month study of nine 5.29 MHz midlatitude NVIS
+beacon circuits, prediction residuals varied with season and path. The
+reported overall RMS difference was 7--15 dB for VOACAP and 9--16 dB for
+ASAPS, while the study also found signals during some periods when the
+models' support probabilities were zero [37]. In a 2026 global model
+comparison using the selected CCIR measurement data and a common evaluation
+procedure, REC533 had the lowest overall dispersion among the three models;
+ICEPAC and VOACAP showed larger, condition-dependent errors, especially in
+some long-distance, high-frequency, and low-latitude cases [39]. These are
+results for the papers' datasets and methods, not a ranking that can be
+transferred directly to Linkwise's RMS/VARA operating population. A forecast
+should be calibrated and stratified by path class, season, solar/geomagnetic
+regime, and operating configuration before it changes live candidate order.
+
+Short-term forecasting of an ionospheric state is a distinct research problem
+from predicting a particular oblique HF circuit. Moskaleva and Zaalov describe
+a simplified model that forecasts F2-layer critical frequency and electron
+density profiles one day ahead and compares the forecasts with ionograms [38].
+Such profile skill can inform path models, but does not by itself establish
+forecast accuracy for received field strength, channel availability, or
+successful application transfer. Validation should be done at each intended
+target metric using observations that represent that target; recent work
+demonstrates evaluation of ionospheric models against technologically
+relevant metrics including HF links [44].
+
+
 \section{Template survey and document lineage}
 The specified \urlref{https://github.com/8r4n/acq-latex-templates}{acq-latex-templates repository} was cloned and surveyed at commit \texttt{fef160e}. The Software Architecture Description (SAD) template draws on ISO/IEC/IEEE 42010: stakeholders and concerns, viewpoints and views, correspondences, and decisions with rationale. The Software Design Description (SDD) and Software Requirements Specification (SRS) templates add component-level design, execution behavior, interface and data design, traceability, and qualification methods. Those structures informed this paper and its companion design documents.
 
@@ -1171,6 +1416,12 @@ explicit so they are not mistaken for implementation facts.
   \item Frissell, N. A., et al., “First Observations of Large Scale Traveling Ionospheric Disturbances Using Automated Amateur Radio Receiving Networks,” \emph{Geophysical Research Letters}, 49, e2022GL097879, 2022, \url{https://doi.org/10.1029/2022GL097879}.
   \item Frissell, N. A., et al., “Heliophysics and amateur radio: citizen science collaborations for atmospheric, ionospheric, and space physics research and operations,” \emph{Frontiers in Astronomy and Space Sciences}, 10, 1184171, 2023, \url{https://doi.org/10.3389/fspas.2023.1184171}.
   \item Chartier, A. T., J. Steele, G. Sugar, D. R. Themens, S. K. Vines, and J. D. Huba, “Validating Ionospheric Models Against Technologically Relevant Metrics,” \emph{Space Weather}, 21, e2023SW003590, 2023, \url{https://doi.org/10.1029/2023SW003590}.
+  \item Icom, “IC-7200,” product specifications and USB/CI-V capabilities, \url{https://www.icomjapan.com/lineup/products/IC-7200/}.
+  \item Icom, “IC-7200 Instruction Manual,” official support/download page, \url{https://www.icomjapan.com/support/manual/1507/}.
+  \item U.S. Department of Defense, “MIL-STD-188-141, Interoperability and Performance Standards for Medium and High Frequency Radio Systems,” ASSIST document record, \url{https://quicksearch.dla.mil/qsDocDetails.aspx?ident_number=67563}.
+  \item Barrett Communications, “ALE 2G and 3G User Guide,” LQA exchange, averaging, decay, and threshold configuration, \url{https://www.barrettcommunications.com.au/Manuals/Barrett_ALE_User_Guide.pdf}.
+  \item SoapySDR, “Device Class Reference,” device configuration and streaming API, \url{https://pothosware.github.io/SoapySDR/doxygen/latest/classSoapySDR_1_1Device.html}.
+  \item GNU Radio, “Soapy,” source-block integration documentation, \url{https://wiki.gnuradio.org/index.php/Soapy}.
 \end{enumerate}
 
 \end{document}

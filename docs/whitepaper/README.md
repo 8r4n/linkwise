@@ -10,6 +10,9 @@ Install PlantUML and Tectonic using your platform's package manager. For
 example, macOS with Homebrew: `brew install plantuml tectonic`. Java is needed
 only when using PlantUML's JAR distribution. The build selects PlantUML's
 built-in Smetana layout, so a separate Graphviz installation is not required.
+When using the JAR distribution, the build uses `LINKWISE_JAVA_HOME` or
+`JAVA_HOME` if set, and also detects a workspace-local runtime at
+`build/tools/jre`.
 PlantUML is used locally; no remote diagram-rendering service is involved. The build
 validates each `.puml` source, generates standalone LaTeX/TikZ through
 PlantUML, compiles each figure to a vector PDF with Tectonic, then compiles the

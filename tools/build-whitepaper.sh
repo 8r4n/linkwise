@@ -5,6 +5,22 @@ REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 WHITEPAPER_DIR="$REPO_ROOT/docs/whitepaper"
 PLANTUML="${LINKWISE_PLANTUML:-plantuml}"
 TECTONIC="${LINKWISE_TECTONIC:-tectonic}"
+JAVA_HOME="${LINKWISE_JAVA_HOME:-${JAVA_HOME:-}}"
+
+# Prefer a workspace-local JRE when one is provisioned. This also avoids
+# macOS's /usr/bin/java launcher masking the absence of an installed runtime.
+if [ -z "$JAVA_HOME" ] &&
+  [ -x "$WHITEPAPER_DIR/build/tools/jre/bin/java" ]; then
+  JAVA_HOME="$WHITEPAPER_DIR/build/tools/jre"
+fi
+if [ -n "$JAVA_HOME" ]; then
+  PATH="$JAVA_HOME/bin:$PATH"
+  export PATH
+fi
+# PlantUML is used only for file generation, so run its JVM headlessly. This
+# also avoids native desktop/font initialization on minimal macOS runtimes.
+JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.awt.headless=true"
+export JAVA_TOOL_OPTIONS
 
 # Reuse explicitly provisioned workspace-local tools when they are not on PATH.
 if ! command -v "$PLANTUML" >/dev/null 2>&1 &&
