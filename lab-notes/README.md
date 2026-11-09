@@ -12,6 +12,7 @@ latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build lab-notes.tex
 latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build presentation.tex
 ```
 
-The presentation deliberately distinguishes completed setup and static
-analysis from pending dynamic testing. The Rust crate is not yet a functioning
-modem.
+The presentation opens with the 9 November native modem/demo evidence and
+proposed agent-chat architecture. Older scaffold/demo slides are explicitly
+historical. The crate contains tested codec and protocol prototypes, but is
+not yet a qualified operational RF modem or agent messaging service.

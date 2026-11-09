@@ -1,0 +1,365 @@
+% Proposed messaging design; included by the main whitepaper.
+\section{Agent-to-agent messaging across a global HF station network}
+\label{sec:agent-chat}
+
+\subsection{Scope, status, and architectural intent}
+\label{sec:chat-scope}
+This chapter proposes an asynchronous messaging service through which agents
+at independently operated stations exchange compact text and structured
+messages over eligible HF contacts. ChatGPT Agent and Codex are possible
+local orchestration clients. MCP connects each agent host to its own station;
+it is not the over-the-air protocol, a globally shared agent bus, or a source
+of modem timing. A remote agent need not use the same model or host software.
+
+\textbf{Implementation status.} The Rust project contains native BW500 codec,
+streaming reception, framing, handshake and ARQ prototypes, radio-control MCP,
+and a SigPlot audio demonstration. These do not yet constitute an integrated
+operational modem or an agent messaging service. All chat interfaces, durable
+stores, receipt protocols, schedulers, identity bindings, and relay behavior in
+this chapter are \emph{proposed}. Native codec round trips and recorded-signal
+replay are not qualification of live stock VARA, RF messaging, or global
+reachability. Section~\ref{sec:modem-software} remains the implementation and
+DSP evidence baseline.
+
+The initial product objective is deliberately observable: agent A queues
+``Hello'', station B stores it once, agent B reads it and queues a reply, and
+station A receives that reply despite an interrupted contact and a lost
+receipt. A continuous interactive RF session is unnecessary. Global operation
+extends this exchange to delayed contact windows and optional relay custody;
+it does not assume simultaneous end-to-end connectivity.
+
+The model views below use PlantUML as their version-controlled source. Views
+identified as UML describe software structure, interaction, deployment,
+activity, and state. The SysML-style block definition (bdd), internal block
+(ibd), and requirements views use explicit stereotypes and trace relationships
+for system engineering. They are lightweight architectural views, not a
+machine-validated SysML model, formal port typing, or proof of standards
+conformance. Requirements are proposal obligations, not claims of satisfaction.
+
+\landscapeplantuml{build/diagrams/Linkwise_Chat_BDD}{SysML-style block definition: independently administered stations and their agent, messaging, execution, storage, modem, and RF responsibilities. All messaging assembly is proposed.}{fig:chat-bdd}
+\portraitplantuml{build/diagrams/Linkwise_Chat_IBD}{SysML-style internal block view: logical station interfaces from MCP to durable messages, local execution, continuous audio, PTT, and the HF peer. Connectors name contracts rather than formally typed SysML ports.}{fig:chat-ibd}
+
+\subsection{Requirements and traceable evidence}
+\label{sec:chat-requirements}
+The following requirements define the first service boundary. Concrete limits
+are installed station configuration, versioned with the tests and operating
+profile; an agent cannot enlarge them by including values in a message.
+
+\begin{longtable}{@{}p{0.13\textwidth}p{0.44\textwidth}p{0.36\textwidth}@{}}
+\caption{Proposed chat requirements and acceptance evidence.}\label{tab:chat-requirements}\\
+\toprule
+\textbf{ID} & \textbf{Required behavior} & \textbf{Acceptance evidence}\\
+\midrule
+\endhead
+CHAT-01 & Return local acceptance only after an atomic durable outbox commit,
+including idempotency mapping and initial event. & Crash at each commit boundary;
+an accepted message and its identity survive restart.\\
+CHAT-02 & Publish final remote receipt only after full validation and an atomic
+destination inbox, deduplication, and receipt commit. & Lost-receipt retry yields
+one inbox record; conflicting bytes under the same identity are rejected.\\
+CHAT-03 & Enforce expiry, storage, body-size, retry, hop, and airtime bounds
+independently at every station. & Expiry and exhausted-budget tests stop further
+work; cancellation never claims remote deletion.\\
+CHAT-04 & Separate claimed address, authenticated principal, station authority,
+and received content. & Spoofed bindings and unsupported identity evidence fail
+closed; message content cannot authorize CAT, PTT, or tool execution.\\
+CHAT-05 & Expose durable, ordered, bounded observations with explicit gaps and
+unknown delivery evidence. & Reconnect resumes from cursor or receives an
+explicit resynchronization response; stale evidence is not reported as current.\\
+CHAT-06 & Reassemble bounded messages and reject malformed or inconsistent
+fragments without unbounded allocation. & Reordered, repeated, missing,
+oversized, and conflicting fragments have deterministic outcomes.\\
+CHAT-07 & Retain local ownership of audio continuity, ACK deadlines, PTT release,
+and protocol progress. & Delayed or disconnected MCP does not violate timing,
+renew authority, or duplicate contact starts.\\
+CHAT-08 & Make relaying optional and distinguish custody from final delivery. &
+Multi-hop interruption, loop, capacity, and custody-expiry tests preserve
+explicit message location and receipt uncertainty.\\
+\bottomrule
+\end{longtable}
+
+Figure~\ref{fig:chat-requirements} illustrates the core trace relationships;
+Table~\ref{tab:chat-qualification} extends verification to fragmentation,
+local execution, and relaying. In the requirements view, a test case's
+\texttt{verify} relationship means that it is intended to establish evidence,
+not that the test has already passed. The complete requirement registry must
+retain all eight identifiers when the implementation design is decomposed.
+
+\landscapeplantuml{build/diagrams/Linkwise_Chat_Requirements}{SysML-style requirements view: selected derived obligations, proposed responsible blocks, and planned verification cases. Satisfaction and verification edges express design allocation, not achieved qualification.}{fig:chat-requirements}
+
+\subsection{Software responsibilities and deployment}
+The inbound messaging MCP adapter validates identity, schema, quotas, and
+request bounds. A message application service owns acceptance, inbox access,
+receipt interpretation, and transactional changes. A durable spool stores
+bounded bodies and immutable envelope metadata, while a journal provides
+ordered observations. A directory resolves agent addresses to station
+bindings with provenance and expiry; route evaluation returns evidence and
+exclusions rather than an unsupported assertion that a peer is reachable.
+
+The agent selects objectives and eligible routes or delegates a bounded
+selection rule. A contact scheduler executes that installed rule and waits
+for eligible windows. It does not become a competing strategic agent.
+Station execution retains the existing preparation, lease, configuration
+revision, automatic policy-grant, and bounded-start contract. A chat send is
+permission to queue a message within the authenticated principal's scope;
+it is not an unconditional PTT permit. Scheduling intent and transmission
+authority remain separate records.
+
+The modem backend exchanges bounded bytes below the message service. It
+must not infer application delivery from a link ACK. A supported Winlink
+client adapter is an optional alternative route, with distinct addressing,
+service semantics, and confirmation evidence; a generic agent envelope is
+not assumed to be accepted or delivered by Winlink without that integration.
+
+Each deployed station has its own radio, antenna, durable state, policy,
+identity, agent-host relationship, and administrative failure domain. Several
+agents may share one station subject to quotas and fair scheduling. A station
+may also receive and retain messages while no agent process is running.
+An RF packet does not automatically wake ChatGPT or Codex: a separately
+qualified host runner, supported event integration, or polling loop must
+arrange agent execution and retain its own processing checkpoints.
+
+\landscapeplantuml{build/diagrams/Linkwise_Chat_Components}{UML component view: the proposed messaging service and contact scheduler sit above the station execution contract; optional Winlink service evidence remains separate from modem-link evidence.}{fig:chat-components}
+\landscapeplantuml{build/diagrams/Linkwise_Chat_Deployment}{UML deployment view: illustrative stations across regions, with direct and delayed relay contact possibilities. Edges are candidate opportunities, not validated propagation paths or a guaranteed worldwide mesh.}{fig:chat-deployment}
+
+\subsection{Addresses, envelope, fragmentation, and receipts}
+An agent address names an authority namespace and stable agent identifier.
+A station identity names an operational endpoint; a directory binding maps
+an agent to one or more authorized endpoints at a stated revision and expiry.
+A callsign or decoded setup field alone is not application authentication.
+The selected identity profile must define provisioning, issuer trust,
+binding validation, revocation, and what unauthenticated observations mean.
+Cryptographic authentication, payload confidentiality, and RF protocol
+compatibility are separate capabilities. Any selected profile must fit the
+station's configured service constraints; this chapter does not prescribe an
+unqualified over-the-air security scheme.
+
+The immutable end-to-end envelope contains a protocol version, stable message
+ID, sender and recipient addresses, conversation ID, optional reply-to message
+ID, creation time, expiry time, content type, payload length, and payload
+digest. Encoding must define canonical byte order, maximum field lengths,
+version negotiation, and the exact bytes covered by identity evidence before
+implementation. A digest detects content corruption; it does not establish
+sender authenticity. Local filesystem paths, executable instructions, and
+unchecked tool commands are not envelope capabilities.
+
+Messages are compact UTF-8 text or explicitly versioned structured payloads.
+The body is fragmented below the application boundary with message identity,
+byte offset, total bounded length, and fragment consistency checks. The
+receiver validates bounds before allocating or writing, permits identical
+retransmitted fragments, rejects conflicting overlaps, and publishes no inbox
+message until reassembly, digest, expiry, recipient, and identity checks pass.
+Persisted range checkpoints may support resumption only where a negotiated
+application transport defines them; native modem support does not imply that
+such a resume protocol already exists. Link frames remain owned by the modem
+session, with a separate application reassembly lifetime and memory budget.
+
+The deduplication key is the validated sender namespace plus message ID.
+The associated digest must be immutable: the same key and same digest replays
+the existing receipt; the same key and different digest is a conflict.
+Deduplication records and tombstones must survive at least the supported
+message lifetime plus the configured clock-skew and replay-retention window.
+Storage pressure must reject new acceptance or advertise reduced capacity,
+not silently discard records still required by that contract. Unknown clocks
+or expiry uncertainty require explicit policy decisions and observations.
+
+Receipts bind message ID, digest, issuer, kind, and relevant authentication
+and observation evidence. Distinct kinds include local acceptance, relay
+custody, final destination inbox receipt, and optional agent processing
+acknowledgment. An application's processing receipt may report a result or
+rejection; it cannot prove every external side effect occurred exactly once.
+Receipt forwarding, retention, retry, and expiry have their own bounded
+budget. A transport ACK is never promoted to a stronger receipt kind.
+
+\landscapeplantuml{build/diagrams/Linkwise_Chat_Message_Model}{UML class view: immutable envelopes are distinct from station copies, contact attempts, route evidence, and receipts. Attribute lists describe draft domain data, not a finalized wire serialization.}{fig:chat-message-model}
+
+\subsection{Proposed agent-facing MCP contract}
+The names below are new proposal names and are not currently registered MCP
+tools. Each mutation carries authenticated principal, request/correlation ID,
+idempotency key, policy revision, and a bounded deadline. Retried acceptance
+with the same key and same content returns the original result; a changed
+request under the same key is rejected. Tool results contain explicit unknown,
+stale, unsupported, and terminal reasons rather than inferred success.
+
+\begin{longtable}{@{}p{0.35\textwidth}p{0.58\textwidth}@{}}
+\caption{Draft messaging MCP application surface.}\label{tab:chat-tools}\\
+\toprule
+\textbf{Proposed tool} & \textbf{Contract}\\
+\midrule
+\endhead
+\path{chat_send} & Accept recipient, bounded content or authorized body
+reference, conversation/reply references, expiry and eligible delivery intent;
+return stable message ID and durable local acceptance. No RF success implied.\\
+\path{chat_list_messages} & Return a bounded page of authorized inbox metadata
+and opaque body references, with explicit cursor retention and gap behavior.\\
+\path{chat_read_message} & Read an authorized bounded body or chunk. Mark content
+as received, untrusted data; reading is not processing acknowledgment.\\
+\path{chat_get_delivery_status} & Return local work state plus separately
+attributed contact, custody, remote-receipt, and processing evidence.\\
+\path{chat_get_events} & Return ordered, bounded journal events after a cursor;
+on retention gaps require snapshot resynchronization rather than silent loss.\\
+\path{chat_cancel} & Stop eligible local work for a message; return cancellation
+operation and residual uncertainty. Cannot retract remote or relay copies.\\
+\path{chat_ack_processed} & Record the local agent's explicit processing
+checkpoint or outcome under its authenticated identity; repeat idempotently.\\
+\bottomrule
+\end{longtable}
+
+Message bodies stay in a bounded spool or application stream by default.
+MCP snapshots and event feeds carry metadata and body references; authorized
+body retrieval is explicit and capped. Existing modem observation tools remain
+observational. Message intent reaches station preparation and start through
+application services, never by exposing raw modem bytes or ad hoc PTT commands
+inside \path{chat_send}. An accepted long-running operation returns promptly;
+no MCP request must stay open throughout an HF contact. Event cursors are
+service-issued opaque tokens, scoped to principal and journal epoch.
+
+Agent hosts retain durable processing checkpoints and reconcile external actions
+before retrying them. Replies require turn limits, maximum reply depth,
+conversation expiry, per-peer quotas, and an explicit stop outcome. Received
+content cannot grant tool access or change station limits.
+
+\portraitplantuml{build/diagrams/Linkwise_Chat_Direct}{UML sequence: durable local acceptance, a bounded direct contact, committed remote inbox receipt, agent polling, and an independently queued reply. Link ACKs and agent processing are separate boundaries.}{fig:chat-direct}
+
+\subsection{State, interruption, cancellation, and restart}
+Delivery work and delivery knowledge must not share one ambiguous success
+flag. Local work moves through queued, transferring, waiting for receipt,
+expired, cancelled, or failed states. Valid remote-receipt and agent-processing
+evidence are retained separately and can arrive late. The sender-view state
+machine summarizes common progress; a terminal local state never deletes or
+suppresses later evidence, nor does such evidence restart transmission.
+
+Cancellation is best-effort stopping of local execution. A contact interrupted
+after the last byte may already have produced a remote inbox copy. Expiry stops
+future delivery work but cannot undo an earlier receipt. A timeout with no
+receipt means uncertainty, not proof of non-delivery. A successful contact
+also need not contain a successful application message transfer.
+
+Inbox acceptance, deduplication record, and receipt must be committed in one
+transaction or an equivalent recoverable write-ahead protocol. A crash after
+commit but before receipt transmission is recovered by replaying the receipt
+when the sender retries. A crash before commit cannot produce an authoritative
+remote-receipt. Process restart invalidates old preparation handles, leases,
+and grants; recovery reconciles device/PTT state and re-evaluates unresolved
+messages before any new RF attempt. MCP disconnection alone follows the
+already installed operation policy and never extends a permit.
+
+\landscapeplantuml{build/diagrams/Linkwise_Chat_Message_States}{UML sender-view message state machine. Local work termination and remote delivery evidence remain distinct; late receipts are journaled even when no further sending is permitted.}{fig:chat-message-states}
+\portraitplantuml{build/diagrams/Linkwise_Chat_Contact_States}{UML lifecycle of one local contact operation, separate from message delivery: fresh authority, establishment, exchange, release, and fault reconciliation. Initial/final nodes delimit the operation; the station owner returns to idle only after release or reconciliation.}{fig:chat-contact-states}
+\portraitplantuml{build/diagrams/Linkwise_Chat_Recovery}{UML recovery sequence: restart and a lost receipt cause a policy-checked retry with the same message identity, not duplicate inbox acceptance or an exactly-once agent-action claim.}{fig:chat-recovery}
+
+\subsection{Global contact planning and optional relay custody}
+The first route is direct delivery between two configured peers. Worldwide
+scope requires asynchronous availability: frequency eligibility, time of day,
+antenna/radio capabilities, measured noise, prior contacts, propagation
+evidence, and peer listening schedules affect candidate contacts. Propagation
+predictions inform ranking; they do not prove reachability or authorize RF.
+Each candidate has evidence age, confidence, exclusions, and an expiry. A
+scheduler must revalidate these at execution time, honor half-duplex station
+ownership, avoid channel contention under its installed access profile, and
+apply fairness across agents and conversations.
+
+If no route is eligible, the message remains queued with a next-review time
+and an explicit reason, until cancellation, expiry, or a terminal budget
+condition. It does not spin in an unbounded autonomous retry loop. Listening
+schedules and directory updates also require a bootstrap mechanism: initial
+peer addresses, compatible application protocol versions, listening windows,
+and relay permissions must be provisioned or learned from a separately
+qualified discovery service. No worldwide discovery infrastructure is assumed.
+
+Relaying is an optional later capability, not a consequence of direct modem
+interoperability. A relay accepts custody only after validating recipient
+routing, identity profile, remaining lifetime, available durable capacity,
+per-peer quotas, permitted forwarding scope, and hop history. It records its
+commitment and retention/expiry contract before issuing a custody receipt.
+The original end-to-end envelope is preserved; bounded, separately validated
+hop metadata carries relay identity, visited stations, remaining hop budget,
+and the next-hop decision. Repeated station visits, exhausted budgets, and
+conflicting identities are rejected. A sender may retain its copy until a
+final receipt or until an explicitly chosen custody policy permits release;
+there is no deletion merely because a link ACK was received.
+
+Final receipts may need a later reverse contact or another eligible route.
+They are deduplicated and rate-limited so acknowledgment traffic cannot become
+an unbounded relay loop. Relay custody does not prove delivery to the final
+agent or destination station, and a relay failure may leave the sender's
+knowledge uncertain. Direct and relay modes must use the same evidence labels
+while recording different receipt issuers and copy locations.
+
+\portraitplantuml{build/diagrams/Linkwise_Chat_Routing}{UML activity: a message is sent only after route, contact-window, station, and automatic policy checks; missing evidence leads to bounded deferral rather than presumed global connectivity.}{fig:chat-routing}
+\portraitplantuml{build/diagrams/Linkwise_Chat_Relay}{UML relay sequence: durable custody, a later destination contact, and a separately routed final receipt. No continuously connected global path is required or promised.}{fig:chat-relay}
+
+\subsection{Connection to the native DSP and timing pipeline}
+The outbound data path is envelope and body, durable spool, application
+fragmentation, bounded session byte stream, modem framing/FEC, waveform
+synthesis, audio playback, and the radio. The inbound path reverses it through
+continuous capture, acquisition, soft decisions, FEC and CRC, link/session
+recovery, fragment reassembly, and committed inbox acceptance. The station
+interface view in Figure~\ref{fig:chat-ibd} locates the stream and audio
+boundaries; the detailed DSP diagrams in Section~\ref{sec:modem-software}
+describe the currently implemented algorithms.
+
+There are three distinct integrity scopes: modem CRC validates a frame,
+application digest validates a complete reassembled payload, and the selected
+identity profile validates whatever sender/issuer assertions it supports.
+None substitutes for durable remote receipt. An agent does not choose
+symbol boundaries, write audio blocks, or supply ACK timing. Local session
+ownership enforces these deadlines independently of MCP latency, model
+availability, and network interruptions to the agent host.
+
+Receive overflow, lost audio continuity, playback failure, and unconfirmed
+PTT release terminate or fault the affected contact under local policy. The
+message service retains unresolved delivery work and evidence rather than
+silently stitching samples or treating attempted playback as delivery. The
+current CPAL input adapter and synthetic demo are foundations for this path;
+output-device integration and qualified operational session assembly remain
+prerequisites for an RF chat claim.
+
+\subsection{Qualification gates and open design decisions}
+\label{sec:chat-qualification}
+Implement direct messaging before routing, and qualify failure handling before
+unattended agent replies. Every gate records software/configuration versions,
+peer identity, exact payloads, timestamps, receipt provenance, terminal causes,
+and local radio/authority observations appropriate to that stage.
+
+\begin{longtable}{@{}p{0.16\textwidth}p{0.38\textwidth}p{0.39\textwidth}@{}}
+\caption{Planned messaging qualification gates; none is claimed complete by this draft.}\label{tab:chat-qualification}\\
+\toprule
+\textbf{Gate} & \textbf{Scope and requirements} & \textbf{Required acceptance evidence}\\
+\midrule
+\endhead
+Q1: durable service & Simulated byte transport and two agent-host runners;
+CHAT-01, 02, 04--06. & Exact bidirectional bodies; one committed inbox entry under
+retries; crash-point recovery; content conflicts rejected; cursor gaps explicit;
+idempotent agent processing and reply-loop bounds exercised.\\
+Q2: audio transport & Native synthesized and controlled physical audio path;
+CHAT-02, 03, 06, 07. & Audio gaps and corruption cannot become delivery; exact
+bodies through full session assembly; lost ACK/receipt, overflow, and playback
+faults preserve bounded recovery. Physical audio and synthetic evidence are labeled
+separately; any stock-peer qualification is a separate recorded result.\\
+Q3: two-station HF & Qualified radio/audio/PTT chain and configured peers;
+CHAT-01--07. & A message and reply delivered over RF with traceable final receipts;
+interrupted contacts, unavailable peer, station restart, and budget expiry produce
+correct local state and release evidence.\\
+Q4: relay network & Three or more stations, non-overlapping contact windows;
+CHAT-01--08. & Durable custody and later final receipt; loop prevention, relay
+capacity rejection, expiry, relay restart, and return-receipt failure tested.\\
+\bottomrule
+\end{longtable}
+
+Correctness criteria are exact payload bytes, bounded resources, no duplicate
+committed inbox entry within the documented deduplication lifetime, and no
+promotion of weaker evidence into stronger delivery claims. Report latency
+as queue wait, contact establishment, transfer, receipt return, and agent
+processing time separately. Measure useful payload goodput, retries,
+application overhead, storage occupancy, and keyed airtime. Numerical service
+objectives depend on an explicitly qualified station/channel profile; the
+whitepaper does not promise a worldwide latency or throughput figure.
+
+Before implementation, resolve the wire encoding and negotiation profile,
+identity/address bootstrap and revocation, spool transaction and retention
+scheme, clock-skew policy, agent-host wake/poll integration, contact access
+profile, and any relay-custody semantics. A versioned interoperability test
+suite must fix these choices. The first implementation deliverable is the
+small two-agent exchange defined in Section~\ref{sec:chat-scope}, with honest
+receipt evidence and failure recovery, rather than an unqualified global mesh.

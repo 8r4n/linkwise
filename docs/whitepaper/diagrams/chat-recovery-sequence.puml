@@ -1,0 +1,39 @@
+@startuml Linkwise_Chat_Recovery
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam maxMessageSize 130
+skinparam sequenceMessageAlign center
+skinparam nodesep 22
+skinparam ranksep 28
+title UML sequence: lost receipt, duplicate retry and restart (proposed)
+participant "Sender outbox" as A
+participant "Receiver inbox" as B
+participant "Receiver agent host" as Agent
+A -> B : complete message M + digest D
+B -> B : atomic commit M, dedup key,\nreceipt R
+B -x A : R lost during link failure
+A -> A : restart; recover unresolved\nM; invalidate old grants
+A -> A : re-evaluate expiry/policy;\nobtain fresh contact\nauthority
+A -> B : retry M with same sender,\nmessage ID and digest
+alt same key and same digest
+ B -> B : find committed M; do not\nenqueue duplicate
+ B --> A : replay existing receipt R
+else same key but different digest
+ B --> A : reject identity/content\nconflict
+end
+Agent -> B : poll inbox / resume from\ndurable cursor
+B --> Agent : M with processing state
+note over B,Agent
+One durable inbox entry does not ensure one external
+action.
+Agent handlers must use idempotency and
+transactional checkpoints.
+Expired dedup records require a defined replay-
+retention policy.
+end note
+@enduml

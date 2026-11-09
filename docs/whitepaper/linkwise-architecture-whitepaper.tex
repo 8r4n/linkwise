@@ -34,7 +34,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \lhead{\small\color{ovgray}LINKWISE \textbullet{} SYSTEM ARCHITECTURE}
-\rhead{\small\color{ovgray}Whitepaper 0.2 \textbullet{} Proposed}
+\rhead{\small\color{ovgray}Whitepaper 0.3 \textbullet{} Proposed}
 \cfoot{\small\color{ovgray}\thepage\ of \pageref{LastPage}}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{ovblue}\leaders\hrule height \headrulewidth\hfill}}
@@ -61,6 +61,22 @@
   \clearpage
 }
 
+
+% Tall system/interaction views retain readable type on a portrait page.
+\newcommand{\portraitplantuml}[3]{%
+  \clearpage
+  \begingroup
+  \thispagestyle{plain}
+  \centering
+  \includegraphics[width=0.96\linewidth,height=0.88\textheight,keepaspectratio]{#1}\par
+  \vspace{0.10in}
+  \captionsetup{width=0.96\linewidth}
+  \captionof{figure}{#2}
+  \label{#3}
+  \par\endgroup
+  \clearpage
+}
+
 \begin{document}
 
 \hypersetup{pageanchor=false}
@@ -77,7 +93,7 @@
   \vspace{0.65in}
   \vfill
   \textbf{Document:} LINKWISE-WP-001\par
-  \textbf{Version:} 0.2 --- Architecture proposal\par
+  \textbf{Version:} 0.3 --- Architecture proposal\par
   \textbf{Date:} November 2026\par
   \textbf{Status:} Proposed system; radio MCP and native modem prototypes; operational qualification pending\par
   \vspace{0.25in}
@@ -91,6 +107,13 @@
 
 \begin{abstract}
 \noindent\system{} is a proposed system for helping a radio station send and receive Winlink messages over HF radio. It brings together radio settings, the VARA modem, Winlink gateways, and information about radio conditions. An AI agent would use this information to choose a promising gateway, configure the radio, and manage message sessions automatically within limits set before operation. The operator would not need to supervise routine activity and could stop transmissions using an independent emergency stop. The system would record session results to guide future choices. VOACAP forecasts can help compare possible radio paths, but they cannot guarantee a connection; the possible effects of satellite reentry remain a research question. One radio can use only one HF channel at a time. Linkwise has not yet implemented this full system, so the paper describes a design that still needs to be built and tested.
+
+A proposed extension enables agents at independent stations to exchange durable
+messages over direct or delayed relay contacts. Local MCP tools manage message
+intent and evidence; station services retain radio timing and authority.
+Section~\ref{sec:agent-chat} specifies this extension using UML and SysML-style
+views, explicit receipt boundaries, and staged qualification gates. Worldwide
+scope is a deployment objective, not a demonstrated connectivity guarantee.
 \end{abstract}
 
 \vspace{0.12in}
@@ -1238,6 +1261,8 @@ security design makes that distinction enforceable.
 
 \input{modem-software-architecture}
 
+\input{agent-chat-architecture}
+
 \section{Deployment profiles}
 
 \begin{description}[leftmargin=1.45in,style=nextline]
@@ -1262,6 +1287,9 @@ safety acceptance.
   \item \textbf{Preparation:} exclusive lease, configuration writes, readback, and mismatch handling; no transmission.
   \item \textbf{Session supervision:} supported Winlink client adapter, separate authorization, watchdog, timeouts, abort and recovery.
   \item \textbf{Modem interoperability:} build waveform analyzer and receivers/transmitter from verified captures; test against unmodified VARA in controlled conditions.
+  \item \textbf{Direct agent messaging:} implement the durable inbox/outbox, typed chat MCP contract, identity bindings, and receipt semantics; pass simulated and controlled-audio gates Q1--Q2 in Section~\ref{sec:chat-qualification}.
+  \item \textbf{HF agent exchange:} qualify a message and reply between two physical stations, including interruption, restart, and bounded retry behavior, before claiming Q3 delivery.
+  \item \textbf{Optional global relaying:} qualify custody, loop prevention, delayed contacts, and receipt return under Q4; geographic scope alone is not connectivity evidence.
   \item \textbf{Adaptive operation:} learn from historical outcomes and enable only bounded automation that has passed station-specific review.
 \end{enumerate}
 

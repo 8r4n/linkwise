@@ -18,12 +18,45 @@
 \subtitle{VARA HF interoperability research - progress briefing}
 \author{Engineering research project}
 \institute{Lab update}
-\date{30 October 2026}
+\date{9 November 2026}
 
 \begin{document}
 
 \begin{frame}
   \titlepage
+\end{frame}
+
+
+\begin{frame}{Current evidence: 9 November 2026}
+  \begin{itemize}
+    \item Rust BW500 codec, streaming receive, handshake, DATA/ARQ and host prototypes.
+    \item Local SigPlot demo: dark mode, paced streaming, noise/dropout tests,
+          decoder evidence and exact payload verification.
+    \item GIF ends with three verified level-1 frames; four synthesized PCM16
+          WAV examples independently decode correctly.
+    \item Latest implementation validation: 45 tests including external fixtures;
+          Clippy and formatting checks pass.
+  \end{itemize}
+  \begin{alertblock}{Evidence boundary}
+    No qualified integrated RF modem, live stock VARA exchange, or agent-chat service.
+    Later scaffold/demo slides are explicitly historical.
+  \end{alertblock}
+\end{frame}
+
+\begin{frame}{Proposed global agent messaging}
+  \begin{itemize}
+    \item Whitepaper 0.3: durable inbox/outbox, addresses, fragments, receipts,
+          MCP contracts, bounded contacts and optional delayed relay custody.
+    \item Twelve PlantUML UML/SysML-style views; requirements CHAT-01--08.
+    \item Gates: simulated messaging, controlled audio, two-station HF,
+          then optional multi-station relaying.
+    \item Station services retain timing and authority; received content is untrusted.
+    \item Agent host polling/events arrange execution; reception does not wake a model.
+  \end{itemize}
+  \begin{block}{Next deliverable}
+    Two agents exchange a durable message and reply through simulated transport,
+    with lost-receipt, duplicate, restart and reply-limit tests. Messaging is proposed.
+  \end{block}
 \end{frame}
 
 \begin{frame}{Objective and guardrails}
@@ -89,7 +122,7 @@
   Native audio validation is still required on each OS.
 \end{frame}
 
-\begin{frame}{Rust scaffold status}
+\begin{frame}{Historical scaffold status: 30 October}
   \begin{itemize}
     \item \texttt{cargo fmt --check}: passed
     \item \texttt{cargo clippy --all-targets -- -D warnings}: passed
@@ -103,7 +136,7 @@
   \end{block}
 \end{frame}
 
-\begin{frame}{Next gates}
+\begin{frame}{Historical next gates: 30 October}
   \begin{enumerate}
     \item User reports written authorization for VARA research; honor its
           boundaries and do not redistribute the software.
@@ -118,7 +151,7 @@
   \end{enumerate}
 \end{frame}
 
-\begin{frame}{Demo readiness: honest status}
+\begin{frame}{Historical demo readiness: 30 October}
   \begin{columns}[T]
     \column{0.48\textwidth}
       \begin{block}{Can show now}

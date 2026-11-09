@@ -8,6 +8,7 @@
 \usepackage{enumitem}
 \usepackage{xcolor}
 \usepackage{hyperref}
+\usepackage{xurl}
 \usepackage{listings}
 \usepackage{fancyhdr}
 \usepackage{parskip}
@@ -43,6 +44,7 @@
 \rhead{Lab notes}
 \cfoot{\thepage}
 \setlength{\headheight}{14pt}
+\setlength{\emergencystretch}{2em}
 
 \newcommand{\statusverified}{\textcolor{verified}{\textbf{Verified}}}
 \newcommand{\statusclue}{\textcolor{clue}{\textbf{Static clue}}}
@@ -65,7 +67,8 @@ on macOS, Windows, and Linux. It distinguishes direct observations from
 hypotheses and local tests from reference-peer qualification. Native BW500
 codec, streaming receive, audio-handshake, DATA/ARQ, and host-stream components
 now exist; they do not yet form a qualified operational modem. The dated
-9 November entry records their implementation, validation, and remaining gates.
+9 November entries record implementation, validation, the streaming demo, and
+the proposed agent-chat architecture with remaining qualification gates.
 \end{abstract}
 
 \tableofcontents
@@ -1089,19 +1092,19 @@ Use staged campaigns:
         available, interference, frequency offset if measurable, and decode
         outcome. Obtain permission and protect private content.
   \item \textbf{Failure and recovery:} collect poor synchronization, weak
-        signals, failed DATA, NACK/retransmission, failed-ACK recovery,
+        signals, failed DATA, NACK/\allowbreak{}retransmission, failed-ACK recovery,
         termination, and interrupted sessions under controlled, authorized
         conditions.
 \end{enumerate}
 
 \subsection{Storage, analysis, and corpus admission}
-The proposed repository layout is a dedicated \texttt{data/} tree with
-\texttt{public/vara\_hf} and \texttt{public/vara\_fm},
-\texttt{generated/clean}, \texttt{generated/bandwidth},
-\texttt{generated/data\_levels}, \texttt{generated/acknowledgments},
-\texttt{generated/sessions}, field-capture folders for clean/fading/
-interference/weak-signal cases, \texttt{derived/} folders for plots and
-measurements, and \texttt{reports/} for coverage and analyses. This is a
+The proposed repository layout is a dedicated \pathtext{data/} tree with
+\pathtext{public/vara_hf} and \pathtext{public/vara_fm},
+\pathtext{generated/clean}, \pathtext{generated/bandwidth},
+\pathtext{generated/data_levels}, \pathtext{generated/acknowledgments},
+\pathtext{generated/sessions}, field-capture folders for clean/fading/
+interference/weak-signal cases, \pathtext{derived/} folders for plots and
+measurements, and \pathtext{reports/} for coverage and analyses. This is a
 proposal, not a statement that these directories currently exist. Keep large
 or restricted files outside the public source tree where appropriate; retain
 a manifest and approved-storage references. Do not commit recordings without
@@ -1432,6 +1435,166 @@ unbreakable reference phrase, and reduced the requirements table font so its
 final row no longer occupied a separate landscape page. The rebuilt paper had
 no overfull-box warnings; affected pages were rendered and visually inspected.
 This layout/build result is separate from modem implementation evidence.
+
+\endgroup
+
+\begingroup
+\setlength{\emergencystretch}{2em}
+\section{2026-11-09: Streaming demo, media, and agent-chat architecture draft}
+\label{sec:chat-nov09}
+
+This entry records the work following the native-modem checkpoint in
+Section~\ref{sec:modem-nov09}. It updates demonstration and documentation
+readiness, not operational RF or live VARA interoperability qualification.
+The user requested a Rust/SigPlot modem demo, dark mode, streaming reception,
+README media, a commit and PR, and then a whitepaper design for agents chatting
+between independent HF stations around the globe.
+
+\subsection{Rust demonstration and captured evidence}
+\statusverified{} local behavior: the optional \texttt{demo} Cargo feature adds
+\texttt{modem-demo}, a loopback-only Rust HTTP server with bundled SigPlot 3.1.7.
+The Rust backend generates native BW500 audio, applies optional seeded Gaussian
+noise or a middle-third dropout, feeds actual receiver chunks, and compares
+CRC-valid frame bytes with the expected input. It computes a 2048-point Hann
+STFT, a 1024-sample hop, and a 512-sample min/max waveform envelope. The browser
+renders the waterfall, waveform, spectrum slice, and decoder evidence. Level 4
+requires the external measurement profile; recorded replay requires separately
+fetched, checksum-pinned inputs. No stock recordings were added to tracked media.
+
+The UI now has persistent light/dark selection, system-appearance fallback,
+and a streaming mode enabled by default. The NDJSON stream carries incremental
+Rust results, paced against the 48 kHz sample clock, roughly every 107 ms.
+It uses bounded backpressure and shared worker limits; disconnect/Stop cancels
+partial work. Final verification follows receiver flush. A fixed sample stream
+and known message length are demonstration metadata, not a complete live
+application protocol. Streaming elapsed times include pacing and backpressure.
+
+Recorded HTTP checks observed 48 incremental updates across approximately
+5.2 seconds with the exact input recovered, as well as validation errors,
+partial-stream disconnection, continued batch decoding, and WAV downloads.
+The latest pre-documentation Rust run passed 45 tests with all features and
+external profile/capture tests enabled. Clippy, formatting, JavaScript syntax,
+and whitespace checks also passed. These are recorded implementation checks;
+no new RF test is implied by rebuilding documentation.
+
+Native Chrome access subsequently allowed visual inspection and recording.
+An initial capture reused stale frames; reacquiring the browser application
+binding between captures produced changing frames. After clicking
+\textbf{Run modem}, the recorded level-1 stream ended with \textbf{3/3 verified}
+and decoded \texttt{HELLO FROM LINKWISE}. The published GIF is a cropped,
+silent excerpt sampled approximately every two seconds, with the final result
+held longer; it is not a continuous high-frame-rate video.
+
+The root README now embeds \pathtext{docs/media/modem/modem-streaming.gif}
+and links four mono 48 kHz PCM16 WAVs: clean levels 1, 2, and 3, plus level 3
+with 24 dB SNR noise. The level-1 example spans three frames; the others span
+one each. Exported PCM16 files were independently decoded by the Rust
+\texttt{decode-wav} CLI and their frame bytes matched the original float32
+runs. Hashes, requests, frame evidence, and conversion details are in
+\pathtext{docs/media/modem/audio-manifest.json}; regeneration uses
+\pathtext{tools/export-demo-audio.py}. These files contain native synthesized
+audio, not stock VARA transmissions or on-air recordings.
+
+Commit \texttt{ca1a993} records the modem/demo, architecture, lab notes, and
+media work through that point. Existing draft
+\href{https://github.com/8r4n/linkwise/pull/1}{PR \#1} was updated to
+``Add native Rust BW500 modem and streaming SigPlot demo''. The agent-chat
+chapter and this later lab entry are subsequent working-tree changes; they
+are not retroactively included in that commit.
+
+\subsection{Agent-to-agent messaging design}
+\statuspending{} implementation: drafted
+\pathtext{docs/whitepaper/agent-chat-architecture.tex}, included it from the
+main whitepaper, and advanced the document to version 0.3. Updated the abstract,
+implementation roadmap, and whitepaper maintenance guide to describe the
+extension. The new chapter is approximately 3,150 words and separates proposal
+obligations from the existing Rust evidence baseline.
+
+The proposed system connects each agent to its own station through MCP;
+over-the-air message exchange occurs below a durable message service, local
+contact execution, and modem backend. Agents select objectives and eligible
+routes; station services retain leases, automatic policy grants, protocol
+and audio deadlines, PTT ownership, and bounded operation lifecycles. A send
+request commits an outbox item, not an unconditional transmission permit.
+A host runner or supported polling/event integration must arrange agent
+execution: an HF message does not itself wake ChatGPT or Codex.
+
+The draft covers stable agent/station addressing, versioned envelopes,
+fragmentation, complete-message integrity, deduplication, durable inbox/outbox,
+receipt provenance, idempotency, cancellation, expiry, and restart recovery.
+It distinguishes local acceptance, link acknowledgments, relay custody,
+final destination inbox receipt, and optional agent-processing acknowledgment.
+Timeout or local cancellation cannot prove the remote station has no copy;
+one inbox entry does not guarantee exactly-once external agent actions.
+Received content remains untrusted and cannot grant station authority.
+
+Seven draft tool names describe the application contract:
+\pathtext{chat_send}, \pathtext{chat_list_messages},
+\pathtext{chat_read_message}, \pathtext{chat_get_delivery_status},
+\pathtext{chat_get_events}, \pathtext{chat_cancel}, and
+\pathtext{chat_ack_processed}. None is currently registered as a Linkwise MCP
+tool. Bodies remain in bounded spools/streams with explicit authorized reads;
+metadata snapshots and events use durable identities and bounded cursors.
+
+Global operation is modeled as intermittent, asynchronous contact opportunities,
+with direct delivery first and optional later relay custody. The design calls
+for fresh route evidence, listening-window bootstrap, hop and airtime limits,
+loop prevention, capacity rejection, and bounded return-receipt routing.
+Illustrative geographic deployment edges are not measured propagation paths
+or promises of worldwide connectivity. A supported Winlink route remains a
+separate adapter with its own service evidence.
+
+\subsection{PlantUML, UML, and SysML-style views}
+Twelve version-controlled \pathtext{chat-*.puml} sources were added under
+\pathtext{docs/whitepaper/diagrams/}. They cover:
+\begin{itemize}[leftmargin=*]
+  \item SysML-style block definition, station internal interfaces, and
+        requirements allocation/verification relationships;
+  \item UML software components, illustrative global deployment, and
+        message/copy/attempt/receipt data;
+  \item UML direct-chat, lost-receipt/restart, and delayed-relay sequences;
+  \item UML sender-view message and local contact-operation state machines;
+  \item UML activity for bounded route/contact selection.
+\end{itemize}
+
+These are lightweight architectural SysML views rendered through PlantUML,
+not a formally validated SysML repository or a conformance claim. Requirement
+IDs CHAT-01 through CHAT-08 cover durability, final receipt, bounds, trust,
+recoverable observation, reassembly, local timing, and optional relaying.
+Planned gates Q1--Q4 progress from simulated durable messaging through audio,
+two-station HF, and multi-station custody. No gate is marked complete.
+
+\subsection{Build, layout verification, and remaining work}
+\statusverified{} documentation: built the whitepaper and all PlantUML figures
+locally with \pathtext{tools/build-whitepaper.sh}, using standalone vector
+figure PDFs and the repository's Tectonic/PlantUML toolchain. Fixed multiline
+label syntax, shortened long transitions/messages, and selected portrait pages
+for tall interface, interaction, activity, and contact-state views. Removed a
+nearly empty paragraph spill page. The final paper has 95 physical PDF pages,
+with no unresolved references, overfull-box warnings, or extracted text outside
+page bounds. Rendered the new chapter and affected abstract/roadmap pages for
+visual review; the final contact view was also checked separately. Existing
+underfull-box warnings remain non-fatal typography diagnostics.
+
+The maintained sources are the chapter, main whitepaper, diagram files, and
+whitepaper README. Generated output remains in the ignored
+\pathtext{docs/whitepaper/build/} directory. No messaging runtime, over-the-air
+chat protocol, relay deployment, security profile, or new MCP tool was
+implemented by this documentation change.
+
+Next decisions are wire encoding/version negotiation, identity/address
+bootstrap and revocation, durable transaction/retention semantics, clock-skew
+handling, host wake/poll integration, and contact-access policy. The first
+implementation target is the Q1 two-agent message and reply over simulated
+transport, including lost receipt, duplicate retry, cursor recovery, process
+restart, and bounded replies. Operational modem assembly, physical audio/PTT,
+live reference-peer qualification, and two-station HF remain separate gates.
+
+This update also refreshed the progress briefing with current evidence and
+explicitly historical scaffold slides. Both lab PDFs were rebuilt and their
+new pages rendered for review; final checks found no unresolved references,
+overfull-box warnings, or text outside physical page bounds. Breakable paths
+and emergency line stretch also removed pre-existing ledger overflow.
 
 \endgroup
 

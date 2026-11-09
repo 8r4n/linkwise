@@ -1,0 +1,36 @@
+@startuml Linkwise_Chat_Routing
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 28
+title UML activity: policy-bounded contact selection (proposed)
+start
+:Read queued message and installed delivery policy;
+if (Expired or locally cancelled?) then (yes)
+ :Record terminal local state;
+ stop
+endif
+:Resolve binding and fresh route evidence;
+:Select eligible route under agent intent;
+if (Eligible route and airtime budget?) then (yes)
+ :Wait for eligible contact window;
+ :Revalidate lease, route, station state and message expiry;
+ :Prepare, authorize and start bounded contact;
+ :Observe durable operation and receipt evidence;
+ if (Final inbox receipt?) then (yes)
+  :Record remote_received;
+  stop
+ else (no)
+  :Retain unresolved work; bound next retry;
+  stop
+ endif
+else (no)
+ :Defer with exclusion reason and next review time;
+ stop
+endif
+@enduml

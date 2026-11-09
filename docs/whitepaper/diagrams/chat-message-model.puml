@@ -1,0 +1,64 @@
+@startuml Linkwise_Chat_Message_Model
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 28
+title UML domain model: messages, copies and evidence (proposed)
+class AgentAddress {
+ authority_id
+ agent_id
+ binding_revision
+}
+class MessageEnvelope {
+ version
+ message_id
+ conversation_id
+ in_reply_to
+ sender / recipient
+ created_at / expires_at
+ content_type / payload_length
+ payload_digest
+}
+class StationCopy {
+ station_id
+ local_state
+ accepted_at
+ retention_until
+}
+class TransferAttempt {
+ attempt_id / contact_id
+ peer_station
+ byte_ranges / retry_count
+ terminal_reason
+}
+class Receipt {
+ receipt_id / message_id
+ kind / issuer_station
+ payload_digest
+ authenticated_evidence
+}
+class RouteEvidence {
+ route_id / next_hop
+ observed_at / valid_until
+ eligibility / exclusions
+ policy_revision
+}
+MessageEnvelope --> "2" AgentAddress : sender / recipient
+MessageEnvelope "1" -- "1..*" StationCopy : local / relay copies
+StationCopy "1" -- "0..*" TransferAttempt
+MessageEnvelope "1" -- "0..*" Receipt
+TransferAttempt --> RouteEvidence
+note bottom of MessageEnvelope
+Stable end-to-end envelope; hop metadata is
+separate.
+A digest detects corruption, not sender
+authenticity.
+Message bodies have configured size and content-type
+limits.
+end note
+@enduml

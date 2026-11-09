@@ -1,0 +1,42 @@
+@startuml Linkwise_Chat_IBD
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 28
+title SysML-style ibd: station interfaces and data flow (proposed)
+top to bottom direction
+rectangle "agent : AgentHost" as Agent <<part>>
+rectangle "localStation : LinkwiseStation" {
+ rectangle "mcp : MessagingAdapter\nprovided: ChatService" as MCP <<part>>
+ rectangle "messages : MessagingService" as Msg <<part>>
+ database "spool : DurableStore" as Store
+ rectangle "execution : StationExecution\nrequired: ModemSessionPort" as Exec <<part>>
+ rectangle "modem : ModemBackend" as Modem <<part>>
+ rectangle "audio : AudioAdapter" as Audio <<part>>
+ rectangle "ptt : ArbiterAndWatchdog" as PTT <<part>>
+}
+rectangle "radio : Transceiver" as Radio <<part>>
+rectangle "peer : RemoteStation" as Peer <<part>>
+Agent --> MCP : typed requests / cursor\nevents
+MCP --> Msg : validated application\ncommands
+Msg <--> Store : bounded bodies / durable\ntransactions
+Msg --> Exec : route intent + message\nreferences
+Exec --> Modem : lifecycle / bounded byte\nstream
+Exec --> PTT : locally authorized keying
+Modem <--> Audio : continuous PCM + completion\nevidence
+Audio <--> Radio : receive / transmit audio
+PTT --> Radio : exclusive PTT / release
+Radio <--> Peer : HF channel
+note bottom of Msg
+Envelope bytes use bounded streams/spools below MCP.
+Station preparation, lease and grant checks remain
+authoritative.
+Interfaces shown are contracts, not formal SysML
+port declarations.
+end note
+@enduml

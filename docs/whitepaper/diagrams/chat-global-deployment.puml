@@ -1,0 +1,41 @@
+@startuml Linkwise_Chat_Deployment
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 28
+title UML deployment: illustrative intermittent global topology (proposed)
+node "Station A / Americas" as A {
+ artifact "Agent A + local MCP" as AA
+ artifact "Message store + station\nruntime" as AS
+}
+node "Station R / Atlantic region" as R {
+ artifact "Relay service + local policy" as RS
+ artifact "Durable relay spool" as RQ
+}
+node "Station B / Europe" as B {
+ artifact "Agent B + local MCP" as BA
+ artifact "Message store + station\nruntime" as BS
+}
+node "Station C / Asia-Pacific" as C {
+ artifact "Agent C + local MCP" as CA
+ artifact "Message store + station\nruntime" as CS
+}
+A <--> B : direct HF contact when\neligible
+A <--> R : scheduled HF window
+R <--> B : later HF window
+B <--> C : intermittent HF contact
+A <..> C : possible future route; no\nreachability claim
+note bottom of R
+Each station includes its own radio, antenna,
+identity and authority.
+Lines represent candidate contacts, not always-on
+network connections.
+Geography is illustrative; route evidence must
+establish eligibility.
+end note
+@enduml

@@ -1,0 +1,38 @@
+@startuml Linkwise_Chat_BDD
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 28
+title SysML-style bdd: global agent messaging system (proposed)
+class "Global messaging system" as Network <<block>>
+class "Linkwise station" as Station <<block>>
+class "Agent host" as Agent <<block>>
+class "Messaging service" as Messaging <<block>>
+class "Station execution service" as Execution <<block>>
+class "HF transceiver + antenna" as RF <<block>>
+class "Durable message store" as Store <<block>>
+class "Modem backend" as Modem <<block>>
+Network "1" o-- "2..*" Station
+Station "1" *-- "1" Messaging
+Station "1" *-- "1" Execution
+Station "1" *-- "1" Store
+Station "1" o-- "1..*" Agent
+Station "1" o-- "1" RF
+Execution "1" o-- "1" Modem
+Messaging --> Store : persist envelopes / receipts
+Messaging --> Execution : request bounded contacts
+Agent --> Messaging : local authenticated MCP
+note bottom of Network
+Stations have independent administration and station
+authority.
+Global scope does not imply continuous or universal
+RF reachability.
+Agent instances and stations have different
+identities and lifetimes.
+end note
+@enduml

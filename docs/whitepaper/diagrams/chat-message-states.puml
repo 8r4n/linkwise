@@ -1,0 +1,35 @@
+@startuml Linkwise_Chat_Message_States
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 28
+title UML state machine: sender delivery knowledge (proposed)
+[*] --> Queued : outbox committed
+Queued --> Transferring : contact starts
+Transferring --> AwaitingReceipt : bytes sent
+Transferring --> Queued : retry eligible
+AwaitingReceipt --> Queued : retry eligible
+AwaitingReceipt --> RemoteReceived : inbox receipt
+Queued --> RemoteReceived : late receipt
+RemoteReceived --> AgentProcessed : processing receipt
+Queued --> Expired : expired
+AwaitingReceipt --> Expired : expired
+Queued --> Cancelled : cancel
+Transferring --> Cancelling : cancel
+Cancelling --> Cancelled : stopped
+Transferring --> Failed : budget exhausted
+Queued --> Failed : rejected
+note bottom of Cancelled
+Cancelled/expired/failed stop local delivery work.
+They do not prove the remote station has no copy.
+Late receipts are retained as evidence without
+restarting transmission.
+AgentProcessed is optional and not an exactly-once
+side-effect guarantee.
+end note
+@enduml

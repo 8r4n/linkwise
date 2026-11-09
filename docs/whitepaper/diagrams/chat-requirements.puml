@@ -1,0 +1,35 @@
+@startuml Linkwise_Chat_Requirements
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 28
+left to right direction
+title SysML-style requirements and verification trace (proposed)
+rectangle "CHAT-01 Durable acceptance\nA committed message survives\nprocess restart" as R1 <<requirement>>
+rectangle "CHAT-02 Complete remote\nreceipt\nReceipt follows validated\ndurable inbox commit" as R2 <<requirement>>
+rectangle "CHAT-03 Bounded operation\nExpiry, retry, hop and airtime\nlimits apply" as R3 <<requirement>>
+rectangle "CHAT-04 Trust boundary\nReceived content cannot grant\nstation authority" as R4 <<requirement>>
+rectangle "CHAT-05 Recoverable\nobservation\nCursor gaps and receipt\nuncertainty are explicit" as R5 <<requirement>>
+rectangle "Durable store + deduplication" as Store <<block>>
+rectangle "Policy + contact executor" as Exec <<block>>
+rectangle "Inbox boundary + event journal" as Inbox <<block>>
+rectangle "V1 Crash and lost-receipt\ntests" as V1 <<testCase>>
+rectangle "V2 Expiry, cancellation and\nloop tests" as V2 <<testCase>>
+rectangle "V3 Identity, untrusted content\nand cursor tests" as V3 <<testCase>>
+R2 ..> R1 : <<deriveReqt>>
+Store ..> R1 : <<satisfy>>
+Store ..> R2 : <<satisfy>>
+Exec ..> R3 : <<satisfy>>
+Inbox ..> R4 : <<satisfy>>
+Inbox ..> R5 : <<satisfy>>
+V1 ..> R1 : <<verify>>
+V1 ..> R2 : <<verify>>
+V2 ..> R3 : <<verify>>
+V3 ..> R4 : <<verify>>
+V3 ..> R5 : <<verify>>
+@enduml

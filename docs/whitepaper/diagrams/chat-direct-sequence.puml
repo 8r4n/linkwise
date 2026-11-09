@@ -1,0 +1,41 @@
+@startuml Linkwise_Chat_Direct
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam maxMessageSize 90
+skinparam sequenceMessageAlign center
+skinparam nodesep 22
+skinparam ranksep 28
+title UML sequence: direct agent chat and receipt boundaries (proposed)
+actor "Agent A" as A
+participant "Messaging A" as MA
+participant "Session A" as EA
+participant "Session B" as EB
+participant "Messaging B" as MB
+actor "Agent B" as B
+A -> MA : send(envelope, key)
+MA -> MA : commit outbox + event
+MA --> A : accepted(message_id)
+A -> MA : contact intent
+MA -> EA : prepare / grant / start
+EA <-> EB : link / fragments / ACKs
+EB -> MB : validate + commit inbox
+MB --> EB : committed receipt
+EB -> EA : final receipt(id, digest)
+EA -> MA : persist receipt
+A -> MA : status(message_id)
+MA --> A : remote_received
+B -> MB : poll local MCP inbox
+MB --> B : untrusted message
+B -> MB : processing acknowledgment
+B -> MB : queue correlated reply
+note over A,B
+Remote receipt means durable inbox acceptance.
+Replies are new messages, not an open RF session.
+Agent execution is supplied by its host.
+end note
+@enduml

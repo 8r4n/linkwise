@@ -1,0 +1,41 @@
+@startuml Linkwise_Chat_Components
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 28
+title UML component view: messaging above station execution (proposed)
+[ChatGPT Agent / Codex host] as Agent
+[Messaging MCP adapter] as MCP
+[Message application service] as Service
+[Address directory +\nroute evaluator] as Routes
+[Durable inbox / outbox /\nreceipt journal] as Store
+[Station policy] as Policy
+[Contact scheduler] as Scheduler
+[Station execution service] as Exec
+[Qualified modem adapter] as Modem
+[Optional supported\nWinlink client adapter] as Winlink
+Agent --> MCP : send / read / status / events
+MCP --> Service : typed commands
+Service -left-> Store : atomic acceptance /\ndeduplication
+Service -right-> Routes : eligible route evidence
+Service --> Scheduler : bounded delivery intent
+Scheduler -left-> Policy : eligibility / budgets
+Scheduler --> Exec : existing prepare / grant /\nstart contract
+Exec --> Modem : local link lifecycle
+Exec -right-> Winlink : distinct service route
+Modem --> Service : complete bytes / transport\nevidence
+Winlink --> Service : service-specific evidence
+note bottom of Service
+A contact scheduler executes installed policy, not a
+competing AI planner.
+A link ACK, relay custody and final inbox receipt
+are distinct evidence.
+All chat components are proposed; existing radio MCP
+is separate.
+end note
+@enduml

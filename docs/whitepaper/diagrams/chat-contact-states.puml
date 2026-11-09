@@ -1,0 +1,34 @@
+@startuml Linkwise_Chat_Contact_States
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 28
+title UML state machine: one local contact operation (proposed)
+[*] --> Prepared : lease + config
+Prepared --> Authorized : policy grant
+Prepared --> Abandoned : invalidated
+Authorized --> Abandoned : invalidated
+Abandoned --> [*]
+Authorized --> Establishing : valid start
+Establishing --> Exchanging : established
+Exchanging --> Closing : stop exchange
+Establishing --> Releasing : fault
+Exchanging --> Releasing : fault
+Closing --> Releasing : release
+Releasing --> [*] : released + recorded
+Releasing --> Faulted : unknown release
+Faulted --> [*] : reconciled
+note right of Prepared
+Operation starts from station idle.
+Completion returns ownership to idle.
+end note
+note right of Faulted
+No new contact before reconciliation.
+Contact success is not delivery.
+end note
+@enduml

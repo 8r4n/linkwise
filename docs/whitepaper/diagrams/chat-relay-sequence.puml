@@ -1,0 +1,38 @@
+@startuml Linkwise_Chat_Relay
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam maxMessageSize 130
+skinparam sequenceMessageAlign center
+skinparam nodesep 22
+skinparam ranksep 28
+title UML sequence: asynchronous store-and-forward custody (proposed)
+participant "Origin A" as A
+participant "Relay R" as R
+participant "Destination B" as B
+A -> R : message M, final recipient B,\nbounded hop metadata
+R -> R : validate relay policy,\ncapacity, expiry and loop\nhistory
+R -> R : commit relay copy + custody\nrecord
+R --> A : relay_custody receipt (not\nfinal receipt)
+... no continuous A-R-B path required ...
+R -> R : select later eligible\ncontact; revalidate authority
+R -> B : same end-to-end M + updated\nhop metadata
+B -> B : validate and commit final\ninbox + receipt
+B --> R : final remote-receipt Rb
+R -> R : retain Rb for return path;\napply custody retention\npolicy
+... later eligible return contact ...
+R --> A : forward authenticated Rb
+A -> A : validate issuer, message ID\nand digest; mark\nremote_received
+note over A,B
+Custody is a promise under an explicit
+retention/expiry contract.
+No deletion on a link ACK; no unlimited receipt or
+message forwarding.
+Relay failure can leave delivery uncertain; custody
+is not a global guarantee.
+end note
+@enduml

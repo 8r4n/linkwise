@@ -24,8 +24,9 @@ Architecture and software-design figures are authored only in
 [`diagrams/`](diagrams/). The paper distinguishes the proposed system views
 from as-built MCP views: the latter cover runtime components, Compose
 deployment, control read/write sequences, write validation, and current PTT
-behavior. Each diagram is placed on its own landscape page with a bounded
-image size and caption. Edit PlantUML sources rather than generated LaTeX or
+behavior. Each diagram is placed on its own page with a bounded image size and caption.
+Most views use landscape; tall chat interaction and interface views use portrait
+to preserve readable type. Edit PlantUML sources rather than generated LaTeX or
 PDFs. PlantUML's LaTeX output is an intermediate rendering format, not a
 diagram source of truth.
 
@@ -51,3 +52,13 @@ sources distinguish implemented components from proposed runtime integration;
 all are rebuilt by the same build script. The additional
 `agent-session-start.puml` view separates asynchronous execution from
 preparation and authorization.
+
+The proposed agent-to-agent messaging chapter is maintained in
+[`agent-chat-architecture.tex`](agent-chat-architecture.tex). Its twelve
+`chat-*.puml` figures cover SysML-style block, interface, and requirement views;
+UML components, global deployment, message data, direct/relay/recovery sequences,
+message/contact state machines, and contact selection. They describe proposed
+contracts, not implemented messaging or demonstrated global connectivity. The
+SysML views are lightweight architectural notation, not a formally validated
+SysML model. Requirements CHAT-01 through CHAT-08 and qualification gates Q1--Q4
+separate durable messaging, audio transport, two-station HF, and relay evidence.
