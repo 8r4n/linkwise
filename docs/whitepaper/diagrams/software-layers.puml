@@ -1,96 +1,35 @@
 @startuml Linkwise_Software_Layers
 !theme plain
-left to right direction
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
 skinparam defaultFontName "Latin Modern Roman"
-skinparam defaultFontSize 13
+skinparam defaultFontSize 10
 skinparam packageStyle rectangle
 skinparam ArrowColor #2A9D8F
-skinparam ArrowThickness 1.4
-
-actor "Operator" as OP
-cloud "AI host / model\n(untrusted planner)" as AI
+skinparam nodesep 20
+skinparam ranksep 25
+top to bottom direction
+actor "ChatGPT Agent / Codex\nexternal orchestrating agent" as AI
 package "Linkwise trusted application boundary" {
-  package "Inbound adapters" {
-    [MCP server\nidentity + schema validation] as MCP
-  }
-  package "Application services" {
-    [Autonomous use cases\nrefresh / rank / configure / session / recover] as APP
-    [Scheduled collection + analysis\nprovider runs / immutable snapshots] as COLLECT
-    [Station command actor\nserialized mutations + lease] as ACTOR
-  }
-  package "Domain core" {
-    [Eligibility + candidate ranker] as RANK
-    [Station policy + authorization] as POLICY
-    [Session aggregate + PTT arbiter] as SAFE
-    [Evidence + audit semantics] as DATA
-  }
-  package "Outbound ports" {
-    interface "RadioControlPort" as RADIOPORT
-    interface "PttControlPort" as PTT
-    interface "ModemSessionPort" as MODEM
-    interface "WinlinkClientPort" as WINLINK
-    interface "Evidence / directory ports" as EVIDENCE
-    interface "Repository / clock ports" as STORE
-  }
+ rectangle "MCP inbound adapter\nidentity / schema / results" as MCP
+ rectangle "Application services\nstation execution / queries\ncollection / operation records" as APP
+ rectangle "Domain core\npolicy / leases / session invariants\neligibility / ranking / evidence" as CORE
+ rectangle "Typed outbound ports\ncapabilities / observations\nbounded control requests" as PORTS
+ MCP -right-> APP
+ APP --> CORE : pure domain decisions
+ APP --> PORTS : typed use cases
 }
-package "Infrastructure adapters" {
-  [Hamlib / rigctld adapter] as HAM
-  [Qualified PTT driver] as PTTDRV
-  [VARA / modem adapter] as MODEMAD
-  [Supported Winlink client adapter] as CLIENT
-  [VOACAP + observations] as SOURCES
-  [Local event store] as DB
-  [Simulator adapters + virtual clock] as SIM
-}
-component "Transceiver + PTT hardware" as RADIOHW
-cloud "Modem, Winlink client,\nexternal evidence services" as EXT
-component "Human emergency stop\n(independent TX inhibit)" as ESTOP
-
-OP --> ESTOP : emergency stop only
-AI --> MCP : typed MCP requests
-ESTOP --> RADIOHW : hard transmit inhibit / PTT release
-MCP --> APP
-APP --> ACTOR : state-changing use cases
-APP --> RANK : immutable evidence snapshot
-COLLECT --> EVIDENCE : typed evidence + exact input IDs
-COLLECT --> STORE : collection / analysis records
-APP --> POLICY
-ACTOR --> POLICY
-ACTOR --> SAFE
-RANK --> EVIDENCE
-DATA --> STORE
-POLICY --> RADIOPORT
-SAFE --> PTT
-APP --> MODEM
-APP --> WINLINK
-RADIOPORT <|.. HAM
-PTT <|.. PTTDRV
-MODEM <|.. MODEMAD
-WINLINK <|.. CLIENT
-EVIDENCE <|.. SOURCES
-STORE <|.. DB
-RADIOPORT <|.. SIM
-PTT <|.. SIM
-MODEM <|.. SIM
-WINLINK <|.. SIM
-EVIDENCE <|.. SIM
-STORE <|.. SIM
-HAM --> RADIOHW : full capability-driven CAT
-PTTDRV --> RADIOHW : qualified PTT route
-MODEMAD --> EXT
-CLIENT --> EXT
-SOURCES --> EXT
-MODEMAD --> RADIOHW : audio / arbiter-routed PTT
-note bottom of AI
-  Full locally enabled CAT and PTT tool surface
-  is available through MCP. No direct device
-  socket or policy bypass; requests are audited.
-end note
-note bottom of SAFE
-  Grants are automatic within the installed
-  authority. Watchdog/release/abort is local
-  and independent of model/network latency.
+rectangle "Infrastructure adapters\nHamlib / qualified PTT / audio\nnative modem / VARA / Winlink\nevidence / persistence / simulation" as ADAPTERS
+rectangle "Radio hardware" as HW
+rectangle "External services\nand local repositories" as EXT
+rectangle "Independent emergency stop\nand watchdog release" as STOP
+AI --> MCP : typed mediated tools
+PORTS <|.. ADAPTERS
+ADAPTERS --> HW
+ADAPTERS --> EXT
+STOP --> HW : inhibit / release
+note bottom of CORE
+ The agent chooses strategy; local policy enforces authority.
+ Domain decisions do not depend on devices or model vendors.
 end note
 @enduml

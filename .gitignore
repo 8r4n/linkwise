@@ -83,3 +83,10 @@ reference/vara/installers/
 reference/vara/extracted-v4.9.0/
 vara.rep/
 vara.gpr
+
+# Downloaded reference-audio fixtures
+reference/vara/fixtures/
+
+# Local demo UI build dependencies
+rust/demo-ui/node_modules/
+rust/demo-ui/.sites-runtime/

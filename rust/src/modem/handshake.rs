@@ -51,6 +51,15 @@ pub enum Event {
     Abort,
 }
 
+/// The only burst eligible to advance the current protocol phase.
+pub enum Expected<'a> {
+    Request(&'a str),
+    Response(&'a str),
+    Setup,
+    ConnectedAck(&'a str),
+    Confirm(&'a str),
+}
+
 #[derive(Clone, Copy)]
 enum Wait {
     Response,
@@ -90,6 +99,22 @@ pub struct Handshake {
 }
 
 impl Handshake {
+    pub fn expected(&self) -> Option<Expected<'_>> {
+        match &self.state {
+            State::Idle if self.listen => Some(Expected::Request(&self.local.caller)),
+            State::Receiving(Wait::Response) => {
+                Some(Expected::Response(&self.session.as_ref()?.called))
+            }
+            State::Receiving(Wait::Setup) => Some(Expected::Setup),
+            State::Receiving(Wait::ConnectedAck) => Some(Expected::ConnectedAck(
+                self.session.as_ref()?.caller.as_deref()?,
+            )),
+            State::Receiving(Wait::Confirm) => {
+                Some(Expected::Confirm(&self.session.as_ref()?.called))
+            }
+            _ => None,
+        }
+    }
     /// The timeout is a local watchdog for each transmit or receive phase.
     /// It must cover the longest burst and turnaround on the selected bench.
     pub fn new(local: LinkSetup, listen: bool, timeout: Duration) -> Option<Self> {

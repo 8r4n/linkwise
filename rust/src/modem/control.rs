@@ -24,6 +24,7 @@ pub enum Message {
     ConnectResponse(Bandwidth),
     /// Observed caller recovery burst in a stock BW500 session.
     Bw500Recovery,
+    Bw500Confirm,
 }
 
 impl Message {
@@ -38,6 +39,7 @@ impl Message {
             Self::ConnectResponse(Hz2300) => (RESPONSE_PREAMBLE, 15, 289, 511, 29, 5, true),
             Self::ConnectResponse(Hz2750) => (RESPONSE_PREAMBLE, 15, 579, 91, 22, 6, true),
             Self::Bw500Recovery => (&[74][..], 31, 60, 1117, 50, 2, false),
+            Self::Bw500Confirm => (&[62][..], 15, 1551, 91, 50, 2, false),
         };
         let mut random = keyed_stream(called, seed_offset, preadvance)?;
         let mut tones = head.to_vec();
@@ -153,6 +155,44 @@ pub fn connected_ack_tones(bandwidth: Bandwidth, caller: &str) -> Option<[[u8; 2
 /// Renders the response to link setup at 48 kHz for offline bench work.
 pub fn synthesize_connected_ack(bandwidth: Bandwidth, caller: &str) -> Option<Vec<f32>> {
     Some(render(connected_ack_tones(bandwidth, caller)?))
+}
+
+/// Match the entire caller-keyed ACK, including both tones of every symbol.
+/// Energy or the shared four-symbol preamble alone is insufficient.
+pub fn find_connected_ack(
+    bandwidth: Bandwidth,
+    caller: &str,
+    audio: &[f32],
+    estimated_start: usize,
+) -> Option<usize> {
+    let pairs = connected_ack_tones(bandwidth, caller)?;
+    let tones: Vec<_> = pairs
+        .map(|pair| pair.map(|bin| Tone::new(usize::from(bin), SYMBOL_SAMPLES)))
+        .into();
+    let length = tones.len() * SYMBOL_SAMPLES;
+    let last = audio.len().checked_sub(length)?;
+    let first = estimated_start.saturating_sub(SYMBOL_SAMPLES);
+    let through = estimated_start.saturating_add(SYMBOL_SAMPLES).min(last);
+    let (start, score) = (first..=through)
+        .step_by(32)
+        .map(|start| {
+            let mut total = 0.0;
+            let mut weakest = 1.0_f64;
+            for (pair, column) in tones
+                .iter()
+                .zip(audio[start..start + length].as_chunks::<SYMBOL_SAMPLES>().0)
+            {
+                let scale = energy(column) * SYMBOL_SAMPLES as f64 / 2.0;
+                let powers = pair
+                    .each_ref()
+                    .map(|tone| tone.power(column) / scale.max(f64::EPSILON));
+                total += powers.iter().sum::<f64>();
+                weakest = weakest.min(powers[0]).min(powers[1]);
+            }
+            (start, (total, weakest))
+        })
+        .max_by(|a, b| a.1.0.total_cmp(&b.1.0))?;
+    (score.0 >= 0.8 * tones.len() as f64 && score.1 >= 0.15).then_some(start)
 }
 
 fn render<const N: usize>(symbols: impl IntoIterator<Item = [u8; N]>) -> Vec<f32> {

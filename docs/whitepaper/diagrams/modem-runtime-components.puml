@@ -1,0 +1,43 @@
+@startuml Linkwise_Modem_Runtime
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 10
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 25
+top to bottom direction
+rectangle "ChatGPT Agent / Codex\nstrategic orchestration" as AI
+rectangle "MCP inbound adapter\nidentity / schema / results" as MCP
+rectangle "Station execution service\nprepare / grant / lease / session" as Station
+AI -right-> MCP
+MCP -right-> Station
+rectangle "ModemSessionPort\nbackend lifecycle interface" as Port
+rectangle "PTT arbiter + watchdog\nsole software key-up path" as PTT
+Station --> Port : bounded lifecycle
+Station --> PTT : session authority
+package "Backend adapters -- proposed interchangeability" {
+ rectangle "Native Rust adapter\nintegration incomplete" as Native
+ rectangle "External VARA adapter\nrelease-qualified interface" as Vara
+ rectangle "Simulator adapter\nsame domain contract" as Sim
+}
+Port <|.. Native
+Port <|.. Vara
+Port <|.. Sim
+package "Native components -- implemented prototypes" {
+ rectangle "Capture + receive worker\nburst / acquisition / FEC / CRC" as RX
+ rectangle "AudioHandshake\nphase-specific audio exchange" as HS
+ rectangle "DATA codec + ARQ sender\nwire integration incomplete" as Link
+ RX -[hidden]right-> HS
+ HS -[hidden]right-> Link
+}
+Native ..> RX : assemble
+Native ..> HS : assemble
+Native ..> Link : assemble
+note bottom of Link
+ Runtime assembly and live keying remain proposed.
+ Codec components do not form an operational service.
+end note
+@enduml

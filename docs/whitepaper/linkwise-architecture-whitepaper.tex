@@ -26,13 +26,15 @@
 
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{5pt}
+% Allow modest extra interword space on difficult lines before overflowing.
+\setlength{\emergencystretch}{1em}
 \setlist[itemize]{leftmargin=1.35em,itemsep=2pt,topsep=3pt}
 \setlist[enumerate]{leftmargin=1.6em,itemsep=3pt,topsep=4pt}
 \setlength{\headwidth}{\textwidth}
 \pagestyle{fancy}
 \fancyhf{}
 \lhead{\small\color{ovgray}LINKWISE \textbullet{} SYSTEM ARCHITECTURE}
-\rhead{\small\color{ovgray}Whitepaper 0.1 \textbullet{} Proposed}
+\rhead{\small\color{ovgray}Whitepaper 0.2 \textbullet{} Proposed}
 \cfoot{\small\color{ovgray}\thepage\ of \pageref{LastPage}}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{ovblue}\leaders\hrule height \headrulewidth\hfill}}
@@ -50,7 +52,7 @@
   \begin{landscape}
     \thispagestyle{plain}
     \centering
-    \includegraphics[width=0.94\linewidth,height=0.72\textheight,keepaspectratio]{#1}\par
+    \includegraphics[width=0.94\linewidth,height=0.86\textheight,keepaspectratio]{#1}\par
     \vspace{0.10in}
     \captionsetup{width=0.94\linewidth}
     \captionof{figure}{#2}
@@ -61,6 +63,7 @@
 
 \begin{document}
 
+\hypersetup{pageanchor=false}
 \begin{titlepage}
   \pagecolor{ovpale}\color{ovnavy}
   \vspace*{0.6in}
@@ -74,12 +77,13 @@
   \vspace{0.65in}
   \vfill
   \textbf{Document:} LINKWISE-WP-001\par
-  \textbf{Version:} 0.1 --- Architecture proposal\par
+  \textbf{Version:} 0.2 --- Architecture proposal\par
   \textbf{Date:} November 2026\par
-  \textbf{Status:} Proposed system; limited radio-control MCP prototype implemented
+  \textbf{Status:} Proposed system; radio MCP and native modem prototypes; operational qualification pending\par
   \vspace{0.25in}
   {\small\color{ovgray}Prepared as an engineering whitepaper. All protocol, automation, and propagation capabilities remain subject to implementation and validation.}
 \end{titlepage}
+\hypersetup{pageanchor=true}
 \nopagecolor
 \color{black}
 
@@ -545,7 +549,8 @@ supplies defensible values.
 \clearpage
 \begin{landscape}
 \thispagestyle{plain}
-\begin{longtable}{@{}p{0.95in}p{0.55in}p{4.95in}p{0.7in}@{}}
+\small
+\begin{longtable}{@{}p{0.95in}p{0.55in}p{4.65in}p{1.0in}@{}}
 \caption{Representative system requirements and proposed verification methods.}\label{tab:requirements}\\
 \toprule
 \textbf{ID} & \textbf{Prio.} & \textbf{Proposed requirement} & \textbf{Method}\\
@@ -661,7 +666,7 @@ mapping.
 
 \subsection{Context and components}
 All architecture diagrams in this paper are authored as PlantUML source in
-\texttt{docs/whitepaper/diagrams/} and rendered locally during the build. The
+\path{docs/whitepaper/diagrams/} and rendered locally during the build. The
 generated standalone LaTeX is an intermediate used to create vector PDF
 figures; it is not maintained as diagram source [17].
 \landscapeplantuml{build/diagrams/Linkwise_System_Context}{System context and component boundaries for the proposed Linkwise Link Manager.}{fig:system-context}
@@ -683,6 +688,12 @@ a Winlink service, reserves spectrum, or authorizes transmission.
 The current Rust radio-control MCP prototype is a limited implementation slice; its verified scope and remaining gaps are recorded in the lab-notes chronicle. It does not implement the complete autonomous link manager described here.
 
 \subsection{Layered software design}
+ChatGPT Agent or Codex supplies the external decision-making orchestration.
+The local link coordinator executes bounded requests, owns authoritative
+station state, and enforces timing and policy; it is not a competing strategic
+planner. The detailed modem and DSP views in Sections~\ref{sec:modem-software}
+and~\ref{sec:modem-dsp} refine this allocation.
+
 The proposed software is organized as a ports-and-adapters system with a
 deliberately controlled—not merely read-only—actuation boundary. The AI host
 can discover typed operations and invoke the full locally enabled CAT and PTT
@@ -761,7 +772,8 @@ binding, one-use permit, airtime limits, and watchdog state. Abort, timeout,
 fault, lease loss, and permit expiry prioritize release. The sequence and
 state views make these independent checks explicit.
 
-\landscapeplantuml{build/diagrams/Linkwise_Session_Sequence}{Proposed serialized candidate preparation and separately authorized session startup, with PTT arbitration.}{fig:session-sequence}
+\landscapeplantuml{build/diagrams/Linkwise_Session_Sequence}{Agent-orchestrated preparation and local deterministic authorization. Prepared handles bind verified configuration and expiry; the grant is a separate bounded policy result.}{fig:session-sequence}
+\landscapeplantuml{build/diagrams/Linkwise_Agent_Session_Start}{Asynchronous session start and observation. Accepted work runs locally outside an individual MCP request, while the agent follows authoritative state through durable operation IDs.}{fig:agent-session-start}
 
 \landscapeplantuml{build/diagrams/Linkwise_Session_State}{Proposed session lifecycle and fault transitions; release and abort remain available independently of normal progress.}{fig:session-state}
 
@@ -1049,8 +1061,9 @@ profile while PTT is released and no session is active; it returns the
 effective route and readback/stream validation. Arbitrary device names,
 filesystem paths, gain values, and routing graphs are not MCP inputs. The
 modem adapter consumes the route's readiness and health signals, while the
-link coordinator owns when a route change is permitted. The current Rust
-prototype has no native audio-device adapter or audio MCP tools.
+link coordinator owns when a route change is permitted. The current Rust prototype has optional CPAL input capture and bounded
+receive workers, but no qualified playback/routing service or audio MCP tools.
+Section~\ref{sec:modem-dsp} details the implemented input and DSP paths.
 
 \subsection{RF-environment observation adapter}
 This read-only adapter ingests compact results from a configured
@@ -1223,6 +1236,8 @@ These interfaces cross trust boundaries: the model can ask, external sources
 can inform, but only local policy can authorize side effects. The safety and
 security design makes that distinction enforceable.
 
+\input{modem-software-architecture}
+
 \section{Deployment profiles}
 
 \begin{description}[leftmargin=1.45in,style=nextline]
@@ -1377,7 +1392,7 @@ explicit so they are not mistaken for implementation facts.
   \item Winlink, “Live System Information / RMS Channels,” \url{https://winlink.org/RMSChannels}.
   \item Global Ionospheric Radio Observatory, “Ionogram Data Information,” \url{https://giro.uml.edu/ionogram-data.html}.
   \item Model Context Protocol, “Server Tools,” \url{https://modelcontextprotocol.io/specification/2025-06-18/server/tools}.
-  \item Linkwise project, “HF Propagation Toolbox,” local project document: \texttt{reference/propagation-toolbox.md}.
+  \item Linkwise project, “HF Propagation Toolbox,” local project document: \path{reference/propagation-toolbox.md}.
   \item 8r4n, \emph{acq-latex-templates}, repository commit \texttt{fef160e}, \url{https://github.com/8r4n/acq-latex-templates}.
   \item Winlink, “FAQ, March 11, 2023,” channel-list maintenance guidance and Winlink Express update workflow, \url{https://winlink.org/content/winlink_faq_march_11_2023}.
   \item Winlink, “Winlink Express Quick Setup Guide,” locator and service-code configuration and channel-selector workflow, \url{https://winlink.org/sites/default/files/RMSE_FORMS/quick_setup_guide_for_winlink_sound_card_packet_for_vhf-uhf_on_windows_v1.3.pdf}.
@@ -1399,7 +1414,7 @@ explicit so they are not mistaken for implementation facts.
   \item RustAudio, “CPAL: Cross-Platform Audio Library,” \url{https://docs.rs/cpal/latest/cpal/}.
   \item Winlink, “Alternate Information,” client/modem configuration information including VARA interface ports, \url{https://winlink.org/content/alternate_information}.
   \item NOAA Space Weather Prediction Center, “Products,” machine-readable solar, geomagnetic, forecast, and warning products, \url{https://services.swpc.noaa.gov/products/}.
-  \item NASA Community Coordinated Modeling Center, “DONKI,” event database, API, and research/prototyping limitations, \url{https://ccmc.gsfc.nasa.gov/tools/DONKI/}.
+  \item NASA Community Coordinated Modeling Center, “DONKI,” event database, API, and research and prototyping limitations, \url{https://ccmc.gsfc.nasa.gov/tools/DONKI/}.
   \item NASA Earthdata CDDIS, “GNSS IGS Analysis Center Ionosphere Vertical Total Electron Content and GUARDIAN Near Real-Time TEC collections,” \url{https://cmr.earthdata.nasa.gov/search/site/collections/directory/CDDIS/gov.nasa.eosdis}.
   \item NOAA Space Weather Prediction Center, “SWPC Text Products,” including D-RAP and current geomagnetic forecast products, \url{https://services.swpc.noaa.gov/text/}.
   \item Budden, K. G., \emph{The Propagation of Radio Waves: The Theory of Radio Waves of Low Power in the Ionosphere and Magnetosphere}, Cambridge University Press, 1985, \url{https://doi.org/10.1017/CBO9780511564321}.
@@ -1422,6 +1437,8 @@ explicit so they are not mistaken for implementation facts.
   \item Barrett Communications, “ALE 2G and 3G User Guide,” LQA exchange, averaging, decay, and threshold configuration, \url{https://www.barrettcommunications.com.au/Manuals/Barrett_ALE_User_Guide.pdf}.
   \item SoapySDR, “Device Class Reference,” device configuration and streaming API, \url{https://pothosware.github.io/SoapySDR/doxygen/latest/classSoapySDR_1_1Device.html}.
   \item GNU Radio, “Soapy,” source-block integration documentation, \url{https://wiki.gnuradio.org/index.php/Soapy}.
+  \item\label{ref:modem-protocol} Saul St John (W9SSJ), \emph{hfmodem}, published VARA protocol notes, reference audio and measured waveform constants; revision \path{952f79245240132f4af209afbad1f4b2ba256613}, \url{https://github.com/sstjohn/hfmodem}. Protocol documentation and downloaded measurement sources retain their separate attribution/license metadata.
+  \item Linkwise project, native modem implementation inventory and validation limits, \path{rust/docs/modem.md}; dated execution evidence in \path{lab-notes/lab-notes.tex}. The named Rust modules in Section~\ref{sec:modem-dsp} define the implementation facts described here.
 \end{enumerate}
 
 \end{document}

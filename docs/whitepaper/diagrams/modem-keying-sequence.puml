@@ -1,0 +1,35 @@
+@startuml Linkwise_Modem_Keying
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 10
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #2A9D8F
+hide footbox
+participant "Session owner" as Session
+participant "DSP / playback" as DSP
+participant "PTT arbiter" as PTT
+participant "Watchdog" as WD
+participant "Device driver" as HW
+Session -> DSP: encode burst
+DSP --> Session: samples / route / duration
+Session -> PTT: key-up(session, lease, config, budget)
+PTT -> PTT: validate policy and interlocks
+PTT -> WD: arm expiry and airtime limit
+PTT -> HW: qualified assertion / observation
+PTT --> Session: permitted route / denial
+Session -> DSP: play owned sample buffer
+DSP -> HW: scheduled audio
+HW --> DSP: presentation complete / error
+DSP --> Session: actual completion
+Session -> PTT: release
+PTT -> HW: release and readback
+PTT --> Session: observed release / unknown
+Session -> Session: advance TX token; arm RX deadline
+note over Session,HW
+ Proposed integration: denial or playback failure aborts the normal path.
+ The watchdog releases independently on controller loss or expiry.
+ No model response or MCP call times this sequence.
+end note
+@enduml

@@ -1,0 +1,25 @@
+@startuml Linkwise_DSP_FEC
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 10
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 25
+top to bottom direction
+rectangle "Frame bits + whitener\nMSB-first / mode padding\nPN seed 29318" as White
+rectangle "RSC encoder 1\n8 states / natural order" as C1
+rectangle "Turbo permutation\nmode-specific pi2" as Perm
+rectangle "RSC encoder 2\n8 states / permuted order" as C2
+rectangle "Multiplex / puncture\nsystematic + parity\n12 dual-tail bits" as Mux
+rectangle "Channel permutation\nmode-specific pi1\nwaveform bit order" as Chan
+White --> C1
+White --> Perm
+Perm --> C2
+C1 --> Mux : parity 1
+C2 --> Mux : parity 2
+White --> Mux : systematic
+Mux --> Chan
+@enduml

@@ -3,7 +3,11 @@
 use std::{error::Error, ops::Range, path::Path};
 
 use hound::{SampleFormat, WavReader};
-use linkwise::modem::{bw500, waveform::BurstDetector};
+use linkwise::modem::{
+    bw500,
+    receiver::{Receiver, Reception},
+    waveform::BurstDetector,
+};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -18,7 +22,7 @@ pub(crate) struct Report {
 #[derive(Serialize)]
 struct FrameReport {
     level: u8,
-    samples: Range<usize>,
+    samples: Range<u64>,
     payload_hex: String,
     control: u8,
 }
@@ -52,19 +56,24 @@ pub(crate) fn analyze(path: &Path, decode: bool) -> Result<Report, Box<dyn Error
 
     let mut block = [0.0; 1024];
     let mut filled = 0;
-    let mut audio = Vec::new();
+    let mut receiver = if decode {
+        Some(configured_receiver()?)
+    } else {
+        None
+    };
+    let mut receptions = Vec::new();
     for sample in samples {
         let sample = sample?;
         if !sample.is_finite() {
             return Err("WAV contains a non-finite sample".into());
         }
-        if decode {
-            audio.push(sample);
-        }
         block[filled] = sample;
         filled += 1;
         if filled == block.len() {
             detector.push(&block, |burst| report.burst_candidates.push(burst));
+            if let Some(receiver) = &mut receiver {
+                receiver.push(&block, |event| receptions.push(event))?;
+            }
             filled = 0;
         }
     }
@@ -72,16 +81,18 @@ pub(crate) fn analyze(path: &Path, decode: bool) -> Result<Report, Box<dyn Error
         report.burst_candidates.push(burst)
     });
     detector.finish(|burst| report.burst_candidates.push(burst));
-    if decode {
+    if let Some(mut receiver) = receiver {
+        receiver.push(&block[..filled], |event| receptions.push(event))?;
+        receiver.finish(|event| receptions.push(event));
+        if receptions.iter().any(|event| event.truncated) {
+            return Err("BW500 candidate exceeds the 30-second receive buffer".into());
+        }
         report.bw500_data_frames = Some(
-            report
-                .burst_candidates
-                .iter()
-                .flat_map(|range| {
-                    bw500::decode_burst(&audio, range.start as usize..range.end as usize)
-                })
+            receptions
+                .into_iter()
+                .flat_map(|event: Reception| event.frames)
                 .map(|decoded| FrameReport {
-                    level: decoded.level.number(),
+                    level: decoded.level,
                     samples: decoded.samples,
                     payload_hex: decoded
                         .frame
@@ -95,4 +106,16 @@ pub(crate) fn analyze(path: &Path, decode: bool) -> Result<Report, Box<dyn Error
         );
     }
     Ok(report)
+}
+
+pub(crate) fn configured_receiver() -> Result<Receiver, Box<dyn Error>> {
+    match std::env::var_os("LINKWISE_BW500_PROFILE") {
+        None => Ok(Receiver::new()),
+        Some(path) => {
+            let json = std::fs::read_to_string(path)?;
+            let waveform = linkwise::modem::bw500_waveform::Waveform::from_json(&json)
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+            Ok(Receiver::with_level4(waveform))
+        }
+    }
 }

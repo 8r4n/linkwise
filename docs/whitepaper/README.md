@@ -41,3 +41,13 @@ software design is in
 [`../architecture/software-design.md`](../architecture/software-design.md);
 supporting architecture, requirements, and safety documents are in
 [`../architecture/`](../architecture/).
+
+The detailed modem chapter is maintained in
+[`modem-software-architecture.tex`](modem-software-architecture.tex). It covers
+ChatGPT Agent/Codex orchestration, station execution and modem ports, native
+module ownership, index and level-4 receive/transmit pipelines, FEC, framing,
+ARQ, keying, and qualification gates. The six `modem-*` / `modem-dsp-*` diagram
+sources distinguish implemented components from proposed runtime integration;
+all are rebuilt by the same build script. The additional
+`agent-session-start.puml` view separates asynchronous execution from
+preparation and authorization.

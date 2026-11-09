@@ -1,0 +1,654 @@
+% Detailed modem view. Included from the main whitepaper; not a standalone paper.
+\section{Agent orchestration and modem software architecture}
+\label{sec:modem-software}
+
+This section connects the proposed ports-and-adapters architecture to the
+native Rust modem components present on 9 November 2026. It describes the
+implemented DSP algorithms in enough detail to identify their data contracts,
+geometry, processing order, and verification limits. Statements marked
+\emph{proposed integration} describe work still required for an operational
+station. Passing a codec round trip is not evidence of a complete modem,
+reference-peer acceptance, or a transferred Winlink message.
+
+\subsection{ChatGPT Agent and Codex as the orchestrating agents}
+ChatGPT Agent or Codex is the decision-making orchestrator: it observes station
+readiness, compares eligible RMS channels and evidence, chooses the next
+attempt, invokes MCP tools, and adapts its plan to recorded outcomes. These
+are alternative AI-host clients of the same typed application contract;
+client transport and reconnect behavior must be qualified for each deployed
+host. Neither client is a modem timing source, a radio driver, or an authority
+issuer. The agent's context and conversation history are not station state.
+
+The local link coordinator is the \emph{station execution service}. It performs
+bounded use cases under deterministic policy rather than operating a second,
+competing strategic planner. The agent may choose a candidate; the domain
+ranker supplies reproducible scores and exclusions; local policy decides
+eligibility and authorization; the execution service serializes preparation
+and supervises the accepted session. Handshake, ACK/NAK, retransmission,
+audio-buffer, and PTT deadlines stay local even while the agent is thinking,
+disconnected, or recovering context.
+
+The preparation contract remains the one in the interface section:
+\path{link_prepare_candidate} returns a short-lived handle bound to candidate,
+lease, verified configuration revision, route profile, and expiry;
+\path{link_request_session_authorization} asks deterministic policy for a
+separate bounded grant; \path{link_start_session} consumes both after a fresh
+validation. Authorization is automatic within installed station authority,
+not a runtime human approval step. Every mutation carries principal,
+request/correlation IDs, policy revision, deadline, and an idempotency key.
+Repeating an accepted start request must return the same operation rather than
+create another RF attempt.
+
+An accepted start returns a durable operation ID and session identity promptly.
+The agent follows bounded session snapshots and ordered cursor-based events;
+it does not hold one MCP request open for an entire contact. Durable operation
+records, terminal reasons, and explicit unknown/stale fields let a reconnecting
+agent reconstruct what happened. MCP disconnect and application restart are
+different events: local policy determines whether an already accepted session
+finishes or aborts after client loss, while process restart invalidates
+in-memory grants/leases and requires reconciliation. Neither event extends a
+transmit permit or authorizes automatic replay of unresolved bytes.
+
+\subsection{Ports, ownership, and backend interchangeability}
+The inbound MCP adapter validates identity and request shape and translates
+results. Application services own preparation, deadlines, operation records,
+and lifecycle orchestration. Domain services own policy, leases, session
+invariants, and authorization. Concrete adapters own device/protocol details.
+The proposed modem backend contract is \path{ModemSessionPort}; the existing
+\path{host::ModemPort} is an inbound host-command/data boundary and must not be
+mistaken for this outbound driver interface.
+
+\begin{longtable}{@{}p{0.25\textwidth}p{0.69\textwidth}@{}}
+\caption{Ownership at the agent, station, and modem boundaries.}\label{tab:modem-ownership}\\
+\toprule
+\textbf{Owner} & \textbf{Responsibility and boundary}\\
+\midrule
+\endhead
+AI host & Select objectives and subsequent attempts from observed evidence;
+request typed actions without minting grants, changing installed limits, or
+addressing hardware sockets.\\
+Station execution service & Own attempt/session identity, prepared handles,
+lease adoption, client/modem association, cancellation, reconciliation, and
+terminal operation results.\\
+Modem backend adapter & Report capabilities and readiness; accept internal
+bounded lifecycle requests; expose authoritative protocol events and a
+backpressured data endpoint. Implementations may be native Rust, qualified
+external VARA, or simulation.\\
+Native session owner & Own one protocol state machine, receive/transmit epoch,
+current peer, timers, outstanding bytes, and the ordering of DSP and playback
+work. Its integration remains proposed.\\
+Audio adapter & Own configured input/output routes, formats, buffers, sample
+continuity, and presentation-completion evidence. The current CPAL code
+implements input capture only.\\
+PTT arbiter & Own the only software key-up path, one-use permits, route checks,
+key-up and session budgets, watchdog release, and requested/observed state.\\
+Winlink client adapter & Own its supported queue, message-service session,
+transfer semantics, and confirmation evidence. It does not delegate message
+framing or body bytes to the language model.\\
+\bottomrule
+\end{longtable}
+
+\landscapeplantuml{build/diagrams/Linkwise_Modem_Runtime}{Proposed agent-to-modem ownership and backend choices, over the native components currently implemented. Dotted integration edges remain incomplete; this is not an as-built operational runtime.}{fig:modem-runtime}
+
+The backend port should provide versioned capabilities, an observed state
+snapshot, internal begin/stop operations, a session/event cursor, and a bounded
+data-stream attachment. The native adapter and external VARA adapter must
+produce the same domain event classes while preserving native event codes,
+backend versions, units, timestamps, unsupported fields, and qualification
+provenance. A simulator implements that same port without exposing hidden RF
+truth through MCP. Backend replacement cannot silently increase station
+privileges or normalize an unverified signal into a connection.
+
+\subsection{MCP observations and the modem data plane}
+The modem's MCP surface is observational:
+\path{modem_get_capabilities}, \path{modem_get_state},
+\path{modem_get_session}, and \path{modem_get_events}, plus the cached
+\path{linkwise://modem/state} resource. Session start/abort is routed through
+the coordinator, and explicit CAT/PTT tools remain available through their
+policy-mediated contracts. Audio-route selection uses qualified profile IDs,
+never arbitrary device names, filesystem paths, gain scripts, or routing
+expressions supplied by the agent.
+
+Capability results must distinguish implementation from qualification: for
+example, level-4 single-frame synthesis exists, but stock-peer acceptance and
+multi-frame operation are unqualified. An advertised capability needs a
+backend/version, mode, direction, supported parameters, availability, and a
+qualification scope. State should distinguish device present, stream open,
+audio observed, synchronized candidate, CRC-valid frame, handshake complete,
+and active data exchange. Observations include sample ranges where useful and
+source/freshness metadata; missing BER, SNR, throughput, or retry measurements
+remain unsupported, not zero.
+
+Protocol bytes travel between the Winlink client and modem on a bounded
+stream or spool. MCP carries aggregate queue counts, message references where
+supported, progress, and outcome summaries; raw audio, continuous IQ, and
+message bodies are excluded by default. The agent-facing operation ID, station
+attempt ID, modem-session ID, and Winlink-session ID remain distinct and are
+correlated in the event store. UTC timestamps support audit correlation;
+monotonic instants enforce deadlines; absolute sample counters locate signal
+evidence. One must not substitute for another.
+
+\subsection{Native implementation map and current limits}
+The Rust package contains executable components rather than a complete service:
+\path{audio::device} captures input; \path{modem::receiver} bounds and dispatches
+receive candidates; \path{modem::waveform} supplies energy detection and tone
+correlation; \path{modem::bw500} implements index-modulated levels 1--3;
+\path{modem::bw500_level4} handles level-4 channel coding;
+\path{modem::bw500_waveform} adds measured-reference two-band synthesis and
+reception; \path{modem::coding} implements whitening, CRC, interleavers, and
+FEC. \path{modem::control}, \path{modem::setup}, \path{modem::handshake}, and
+\path{modem::audio_handshake} cover keyed control, caller setup, and
+establishment. \path{modem::data} and \path{modem::arq} are frame/container
+and sender components. \path{api::CommandDecoder} and \path{host} implement
+host stream boundaries.
+
+A proposed native runtime must assemble these behind one session owner,
+connect actual playback and PTT completion, qualify wire answer/query
+recognizers, implement rate/turn/keepalive/disconnect behavior, and bind the
+host streams to the operational session. Module existence does not establish
+those connections. The external VARA adapter likewise needs an explicitly
+qualified release-specific command/status interface rather than assumptions
+about GUI behavior or port responses.
+
+\section{DSP implementation pipeline}
+\label{sec:modem-dsp}
+
+\subsection{Audio ingress, continuity, and candidate detection}
+The optional CPAL input backend requires native 48,000 samples/s and a selected
+zero-based channel; it accepts float32, signed 16-bit, or unsigned 16-bit
+formats and converts to normalized mono float samples. It selects one channel
+rather than averaging potentially phase-opposed channels. No implicit
+resampling is implemented. The callback accumulates 1,024-sample blocks and
+uses a nonblocking bounded queue of 64 blocks. This represents approximately
+1.365 s of mono input; it is a queue capacity, not a permitted DSP or keying
+latency. Queue overflow, a malformed interleaved input block, or device failure
+latches a terminal capture fault. The receiver must restart on a new continuous
+stream instead of concealing dropped samples.
+
+DSP runs outside the capture callback. The streaming receive worker validates
+finite samples before advancing state, bounds processing steps to 480 samples,
+and retains at most 30 s of mono history (1,440,000 float samples, about
+5.76 MB of sample payload). Demodulation allocates additional bounded working
+arrays, so the retained-history limit is not a whole-process memory limit.
+Absolute half-open sample ranges survive chunk boundaries and ring-buffer
+wrap. If a candidate began before retained history, it is marked truncated and
+emits no partial frame. WAV decoding treats that condition as an error.
+
+The energy detector accumulates 10 ms windows. A window is active when
+\[
+ \frac{1}{W}\sum_{n=0}^{W-1}x[n]^2 \geq 10^{-4},\qquad W=480.
+\]
+A quiet window closes a candidate; end-of-stream flushes a partial window and
+any open candidate. This fixed 1\% full-scale RMS gate is a controlled-bench
+heuristic, not a noise estimator, AGC, RF squelch, or protocol detector.
+Impulsive noise and unrelated tones can produce candidates. Every later stage
+must establish its own synchronization and integrity evidence. The current
+receiver tries levels 1--3 first, returning the first family with CRC-valid
+frames; it attempts level 4 only if an external profile is configured and the
+index paths yield no frames.
+
+\subsection{BW500 levels 1--3: tone-index geometry}
+These levels encode data by selecting a frequency bin for each symbol. They
+are not the level-4 differential-BPSK waveform played more slowly. The
+implementation performs direct sine/cosine dot products at selected DFT bins;
+it does not compute a full FFT for each symbol.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+Level & $H$ & Bins & Columns & Refs. & $N$ & Coded & Payload\\
+\midrule
+1 & 2048 & 54--74 & 124 & 24 & 96 & 300 & 9 B\\
+2 & 1024 & 27--37 & 228 & 24 & 200 & 612 & 22 B\\
+3 & 1024 & 27--37 & 226 & 24 & 297 & 606 & 34 B\\
+\bottomrule
+\end{tabular}
+\caption{Implemented index-mode geometry at 48 kHz. Columns exclude the initial lead; $N$ includes mode padding before whitening. Payload excludes the control byte and two-byte CRC.}
+\label{tab:dsp-index-geometry}
+\end{table}
+
+The symbol rates are $48000/H$: 23.4375 symbols/s at level 1 and 46.875 at
+levels 2/3. The synthetic transmitter adds two lead symbols at level 1 and four
+at levels 2/3, all totaling 4,096 samples. Those bench leads use fixed in-band
+tones; they do not implement the stock session's randomized lead stream.
+There are three coded bits per data column. Subtracting the 24 reference
+columns gives $100\times3=300$, $204\times3=612$, and $202\times3=606$
+channel bits respectively.
+
+Mode construction uses seeds 12,600,710; 7,910,701; and 14,955,604. One generator
+stream produces the channel permutation, then the turbo permutation, followed
+by bin/pilot draws. Level 1 replaces its generated base bins with the explicit
+measured 124-entry array in the source. Levels 2/3 currently use generated
+base allocations. All three therefore need qualification appropriate to their
+actual construction, not a blanket claim that every allocation is independently
+measured.
+
+For each data column, the eight labels $(0,1,3,2,7,6,4,5)$ select offsets from
+the column's base bin. Level 1 applies stride 2 modulo a span of 21; levels
+2/3 apply stride 1 modulo 11. Fixed reference columns and their known bin
+values allow synchronization without comparing decoded payload to an expected
+message. The level-3 information block contains 37 complete bytes plus one
+padding bit: 34 payload bytes, one control byte, two CRC bytes, and a zero
+padding bit before whitening.
+
+\landscapeplantuml{build/diagrams/Linkwise_DSP_Index}{Implemented BW500 level 1--3 receive pipeline. Energy candidates, timing lock, soft metrics, and CRC-valid frames are separate evidence stages; none independently establishes a modem session.}{fig:dsp-index}
+
+\subsection{Index-mode acquisition and soft demodulation}
+For a candidate beginning at sample $b$, the initial frame epoch estimate is
+$b+LH$, where $L$ is the mode's lead-symbol count. The receiver searches one
+symbol on either side of that estimate in 128-sample steps, then refines within
+128 samples of the best point in 16-sample steps. At each epoch, it evaluates
+the 24 known reference columns. A full-frame score below 0.65 is rejected.
+The threshold is an implementation heuristic, not a measured false-alarm rate.
+
+For a symbol of length $H$ and bin $k$, the unnormalized tone energy is
+\[
+ E_k=\left|\sum_{n=0}^{H-1}x[n]\exp(-j2\pi kn/H)\right|^2.
+\]
+The implementation divides by $(H/2)\sum x[n]^2$, with an epsilon floor, and
+averages the known-bin score over reference columns. For data, it measures the
+eight mapped bin hypotheses. For each of the three bit positions, the soft
+metric is the largest normalized power among labels with bit 1 minus the
+largest among labels with bit 0. This max-based difference is a decoder input;
+it is not a calibrated log likelihood, SNR, or BER estimate.
+
+Metrics are scattered through the inverse channel permutation into FEC order.
+Only a CRC-valid result is returned. For a locked index family, the receiver
+can decode adjacent fixed-size frames inside the candidate, with one detector
+window of end tolerance. This is distinct from level 4, whose current
+waveform decoder handles a single frame per candidate. Neither path implements
+continuous carrier-frequency-offset or sample-frequency-offset tracking.
+
+\subsection{Index-mode transmit synthesis}
+The level-1/2/3 transmitter accepts a nonempty list of frames with exactly
+9, 22, or 34 payload bytes per frame. It appends the control byte and byte CRC,
+serializes MSB-first, pads to the mode's $N$, whitens, and turbo-encodes. For
+each data column it gathers three channel-ordered coded bits into an integer
+0--7 and selects the corresponding mapped tone. Reference columns emit their
+fixed expected bins without consuming coded bits. A burst has one lead at its
+start, followed by consecutive frame-column blocks; the lead is not repeated
+between frames.
+
+Each selected bin $k$ is rendered as $0.5\sin(2\pi kn/H)$ for $n=0,\ldots,H-1$.
+The phase argument restarts for each symbol; integer-bin tones complete an
+integer number of cycles over $H$ samples. The implementation concatenates
+those symbol buffers directly. It does not add DATA-symbol pulse shaping,
+resampling, a stock randomized acquisition stream, or a qualified transmitter
+spectral mask. The fixed half-scale amplitude is a bench sample convention.
+Reference-peer acceptance, occupied bandwidth, audio-route gain, and actual
+RF power must be measured separately before treating this synthesizer as an
+operational transmitter.
+
+\subsection{Shared CRC, whitening, and interleaver generation}
+Frame integrity uses CRC-16/GENIBUS: polynomial \texttt{0x1021}, initial register
+\texttt{0xffff}, final complement, no reflection, and a big-endian two-byte
+trailer. The check vector is \texttt{123456789} $\mapsto$ \texttt{0xd64e}.
+The CRC covers the actual frame body, including its control field; mode padding
+bits are outside the byte CRC. CRC checks establish frame integrity under this
+code, not authenticated sender identity or recipient delivery.
+
+Bits are serialized most-significant first, padded to the mode's information
+size, and XORed with a freshly seeded whitening sequence. The 24-bit generator
+obeys
+\[
+ s_{i+1}=(\texttt{0x43fd43fd}\,s_i+\texttt{0xc39ec3})\bmod 2^{24}.
+\]
+Whitening starts at $s_0=29318$ and takes the next state's high bit. Applying
+the same XOR after decoding restores the original bits. Permutations use
+rejection sampling: draw an index, append only its first occurrence, and
+continue until every index is present. The draw multiplies the normalized
+state by the requested size with single-precision rounding, matching the
+implementation's wire-oriented generator semantics. Changing numeric precision
+or substituting a library shuffle can change the permutation.
+
+The channel permutation and turbo permutation are different objects. If
+$\pi_1$ maps transmitted position $j$ to a coded-bit position, TX gathers
+$q_j=c_{\pi_1(j)}$ and RX scatters the corresponding soft metric back into
+$c_{\pi_1(j)}$. The inner permutation $\pi_2$ changes the input order of the
+second constituent encoder and must be inverted consistently when exchanging
+extrinsic information. Interleavers belong to the mode/profile, not to the
+agent's request parameters.
+
+\subsection{Turbo encoder and iterative receive decoder}
+The codec has two eight-state recursive systematic convolutional constituents.
+Writing the three state bits as $(r_0,r_1,r_2)$ and the next information bit as
+$u$, the implementation uses
+\[
+ a=u\oplus r_1\oplus r_2,\quad
+ p=a\oplus r_0\oplus r_2,\quad
+ (r_0',r_1',r_2')=(a,r_0,r_1).
+\]
+Both encoders start at zero. The first consumes natural-order bits and the
+second consumes turbo-permuted bits. Levels 1/2 transmit systematic and both
+parity streams (rate 1/3); levels 3/4 transmit systematic bits and alternate
+which constituent parity is retained (rate 1/2). Each constituent is terminated
+with three steps using $u=r_1\oplus r_2$. The wire tail is twelve bits,
+interleaving the two systematic/parity tail pairs at each of three steps.
+Thus the implemented coded sizes are $3N+12$ or $2N+12$.
+
+The receiver first makes hard decisions on systematic metrics and checks the
+frame CRC. If that fails, it constructs the two terminated trellises, treating
+punctured parity as a zero-information metric. A forward/backward
+\emph{max-log-MAP} pass computes extrinsic information for each constituent.
+The implementation uses maxima rather than log-sum-exp correction; it must
+not be described as an exact log-MAP decoder. Positive input metrics favor
+bit 1. The two constituents exchange interleaved/de-interleaved extrinsic
+information for at most eight iterations, checking de-whitened frame integrity
+after each iteration and stopping on a valid CRC.
+
+\landscapeplantuml{build/diagrams/Linkwise_DSP_FEC}{Implemented shared whitening, constituent coding, tail and permutation structure. Receive decoding uses a hard-decision CRC fast path followed by at most eight max-log-MAP iterations.}{fig:dsp-fec}
+
+This implementation does not maintain cross-retransmission soft combining.
+Its metrics have heuristic scales and its tests do not establish coding gain,
+waterfall curves, or residual undetected-error probability under HF fading.
+Those require independently generated vectors and controlled channel sweeps,
+including offset, burst noise, clipping, and long erasures.
+
+\subsection{Level-4 frame geometry and external measurement profile}
+The level-4 byte container is 46 bytes: 43 payload bytes, one control byte,
+and two CRC bytes. Its $N=368$ information bits produce 748 coded bits. The
+channel and turbo permutations start from seed 6,437,280. Pilot generation
+continues that stream after the two permutations, choosing 18 distinct columns
+per band with $5+\lfloor R\,386\rfloor$.
+
+The implemented waveform stores 393 columns per band: one reference followed
+by 392 body columns. Removing 18 pilot positions in each band yields
+$2(392-18)=748$ differential data cells. This is the retained single-frame
+implementation geometry, not a claim that every stock burst has exactly that
+many emission slots. Its reference centers start after nine 512-sample slots.
+Band centers are 1,350 and 1,650 Hz, the symbol hop is $H=512$ samples
+(93.75 symbols/s), and the upper band is staggered by 256 samples. Unlike the
+index ladder, these carriers are not selected integer bins of a symbol FFT.
+
+The phase reference consists of 786 measured points on a 128-phase lattice,
+393 per band. Each point is $G_{b,t}=\exp(j2\pi k_{b,t}/128)$. A shared measured
+513-sample real pulse covers offsets $-256$ through $+256$. The profile loader
+requires all reference positions, rejects duplicates and out-of-range phases,
+checks pulse length and finite/bounded taps, and limits JSON size to 128 KiB.
+Those structural checks do not prove that an arbitrary supplied profile matches
+a real modem. Reproducible tests use SHA-256-pinned upstream measurements,
+extracted without executing downloaded source. Cached measurement sources
+retain their own attribution/license metadata and are not embedded in Rust.
+
+\subsection{Level-4 transmit synthesis}
+After whitening, turbo encoding, and channel gather, coded bits fill band 0's
+data positions in time order, then band 1's. With initial polarity
+$v_{b,0}=+1$, a coded 1 negates polarity, a coded 0 preserves it, and a pilot
+repeats the preceding polarity. Each complex emitted cell is
+$c_{b,t}=v_{b,t}\overline{G_{b,t}}$. The real audio is a sum of pulse-shaped
+carriers:
+\[
+ x[n]=\frac14\sum_{b=0}^{1}\sum_t p[n-n_{b,t}]
+       \Re\{c_{b,t}\exp(j2\pi f_b n/48000)\},
+\]
+where $n_{b,t}=9H+tH+bH/2$, $f_b\in\{1350,1650\}$, and $p$ has 513 taps.
+The factor $1/4$ is the current bench amplitude scale, not a calibrated radio
+power command. A waveform's audio amplitude does not replace CAT power limits,
+route qualification, or PTT authority.
+
+The synthetic buffer contains $9H+393H+1=205825$ samples, approximately
+4.288 s at 48 kHz. The initial slots do not contain a generated randomized
+acquisition lead. This output length is a local implementation fact and must
+not be substituted for a measured reference modem's PTT interval, framing
+duration, or turnaround requirement. Actual device playback and RF keying are
+not performed by the file-only synthesis tool.
+
+\subsection{Level-4 timing lock, demodulation, and validation}
+The receiver mixes the real input down at each nominal carrier using
+$x[n]\exp(-j2\pi f_b n/48000)$. At a trial symbol center it multiplies the
+513 surrounding complex samples by the measured real pulse and sums them.
+It then multiplies by $G_{b,t}$ to remove the known phase reference. If the
+result is $z_{b,t}$, the differential statistic is
+\[
+ d_{b,t}=\Re\{z_{b,t}\overline{z_{b,t-1}}\}.
+\]
+A correct pilot transition should preserve polarity. Timing search maximizes
+the average normalized differential dot product over 36 pilot positions,
+first in 32-sample steps and then in two-sample steps around the best epoch.
+A score below 0.65 is rejected. The search is bounded by the candidate, frame
+geometry, available samples, and one-hop end tolerance; it does not scan an
+unbounded recording for a matching payload.
+
+Data positions produce $-d_{b,t}$ so positive metrics favor a transmitted 1.
+The 748 values are scaled by six divided by their mean absolute magnitude,
+then passed through channel scatter and the shared turbo/de-whitening/CRC
+chain. This normalization is not an estimate of a physical noise variance.
+No valid CRC means no frame. A valid frame is interpreted in protocol context:
+a setup frame can identify a caller; a DATA container can carry payload and
+control; neither is an unconditional link-up event.
+
+The level-4 decoder currently allocates complex mixed buffers and performs
+repeated direct matched-pulse sums. It is a bench implementation, not a
+profiled real-time DSP scheduler. An optimized runtime may cache oscillators,
+reference terms, pulse weights, and mode tables, and bound search work per
+candidate, but must preserve sample epochs, metric sign, permutation order,
+and CRC outcomes against golden fixtures before replacing these kernels.
+
+\landscapeplantuml{build/diagrams/Linkwise_DSP_Level4}{Implemented level-4 transmit and receive transforms. Measured reference phases and pulse taps are external profile inputs; the single-frame synthetic round trip does not qualify reference interoperability.}{fig:dsp-level4}
+
+\subsection{Proposed production DSP extensions and work budgets}
+The following is a proposed engineering path, not behavior implemented by the
+current decoder. A production receiver needs explicit acquisition/tracking
+states, measured latency budgets, and loss-of-lock rules rather than extending
+the bench thresholds by assumption. Mode tables, pulse taps, and reference
+terms should be validated and cached before a session; source loading,
+allocation-heavy analysis, persistence, and model calls stay outside the
+capture and playback deadlines.
+
+\begin{enumerate}[leftmargin=1.6em]
+  \item \textbf{Front-end conditioning and health.} Measure route noise,
+        clipping, DC offset, stream discontinuities, and usable passband.
+        Select channel filters and gain normalization from qualified profiles.
+        An adaptive candidate detector needs a recorded noise estimator,
+        hysteresis, duration limits, and a false-alarm/miss test population.
+        Gain changes must not erase sample epochs or turn audio energy into
+        protocol evidence.
+  \item \textbf{Coarse acquisition.} Search a bounded frequency/timing bank
+        against references before attempting expensive FEC. Record competing
+        mode scores and ambiguity rather than treating the first energetic
+        interval as a known modem. Reuse selected-bin correlations or an FFT
+        bank only after latency measurements establish the benefit and fixture
+        tests preserve the selected bins and normalized scores.
+  \item \textbf{Carrier tracking.} After correct reference de-rotation and
+        under a locally constant channel, repeated pilot transitions provide
+        a candidate residual-offset estimator:
+        \[
+          \widehat{\Delta f}=\frac{48000}{2\pi H}
+          \arg\!\left(\sum_{(b,t)\in\mathcal P}
+          w_{b,t}z_{b,t}\overline{z_{b,t-1}}\right).
+        \]
+        This is a proposed pilot estimator, not a performance result. At
+        $H=512$ its phase observation repeats every 93.75 Hz, requiring coarse
+        branch selection and outlier/low-energy rejection. Fading and channel
+        variation must be included in qualification before closing a loop.
+  \item \textbf{Sample-clock and channel tracking.} Track fractional symbol
+        epochs and their drift over long bursts; qualify interpolation or
+        resampling with known offsets rather than slipping whole samples
+        silently. Assess pulse distortion and multipath-induced intersymbol
+        or interband interference. Any adaptive equalizer needs training,
+        convergence, divergence, and reset criteria against recorded HF
+        channel cases. A capture gap invalidates continuity and tracking state.
+  \item \textbf{Metric and deadline qualification.} Compare heuristic
+        power/differential metrics with noise-aware likelihood models; validate
+        sign, clipping, erasures, and decoder response before changing scales.
+        Bound candidate search, queue occupancy, FEC iteration count, and
+        cancellation latency. Measure worst-case and high-percentile service
+        times on each target under simultaneous capture, decode, client I/O,
+        and audit load. Drop optional diagnostics before compromising sample
+        continuity; if continuity or a safety deadline cannot be maintained,
+        terminate the affected stream/session explicitly.
+\end{enumerate}
+
+The current turbo decoder performs forward/backward passes on two eight-state
+trellises, so work scales linearly with information size and iteration count;
+forward metric storage is also linear in block size. This algorithmic bound
+does not establish a real-time scheduling bound. Index acquisition repeatedly
+correlates reference windows, and level-4 trial epochs repeatedly evaluate
+matched pulses; both can dominate a failed candidate. Kernel benchmarks must
+therefore include failed acquisition and failed CRC/FEC paths, not only the
+fast hard-decision success case.
+
+A DSP qualification record should identify source audio/hash, route and sample
+format, mode/profile hash, impairment model and seed, expected frame/payload,
+acquisition epoch, frequency/clock estimates, decoder iterations, terminal
+CRC result, queue high-water marks, and elapsed work. BER requires known
+reference bits; a CRC failure alone does not measure BER. Fixture-defined
+frame-error rates, energy-candidate rejection rates, and link/session outcomes
+need separate denominators. Actual output presentation latency and audio/PTT
+lead/tail behavior require device-loopback measurements in addition to these
+software records.
+
+\subsection{Control bursts, caller setup, and handshake evidence}
+Control bursts use a separate 2,048-sample tone grid at 48 kHz. Request and
+response tones are deterministic functions of the known called station;
+their payload uses the BW500 even-bin alphabet 50--76 while fixed preambles
+may use other bins. The request contains ten preamble plus 31 payload symbols;
+the response contains eight plus 15; the level-4 confirm contains one plus 15.
+Connected ACKs contain eleven two-tone symbols, with a fixed four-symbol
+preamble and a caller-keyed tail. The control renderer uses a 32-sample overlap
+and cosine edge shaping. These control bursts do not pass through the DATA
+turbo/interleaver chain.
+
+Recognizers compare the complete expected keyed sequence near the estimated
+burst start. Single-tone matching requires an average normalized tone score
+of at least 0.8 and a weakest-symbol score of at least 0.30; connected-ACK
+matching requires total pair score of at least 0.8 per symbol and at least
+0.15 for each individual expected tone. These are bench thresholds, not
+field-qualified receiver sensitivities. The complete ACK tail is checked;
+shared preamble energy alone cannot establish acceptance. Request/response
+matching cannot discover an unknown caller because those bursts are keyed to
+the called station. Caller identity arrives in the CRC-protected setup frame.
+
+The setup codec packs up to six base callsign characters into six-bit symbols,
+retains an SSID in byte 5, records capability/request fields, includes the high
+byte of the full-callsign CRC, and finishes with a frame CRC. Current native
+audio establishment is restricted to level 4. Its state machine expects request,
+response, setup, connected ACK, then confirm; wrong-phase or wrong-peer bursts
+cannot advance it. Unique local transmit tokens reject stale completion
+callbacks. Establishment is emitted only after the relevant confirm is
+received or actually transmitted, rather than when a waveform is merely queued.
+
+The current two-role integration test supplies transmit completion after the
+synthetic audio has been exchanged. A production device owner must provide
+that event only after actual presentation and PTT release. Software buffer
+consumption is not proof that the final sample reached the output device.
+Clocked playback, transmit/receive turnaround, and qualified PTT readback
+remain required integration work.
+
+\subsection{DATA framing, ARQ ownership, and ambiguous answers}
+The DATA container codec is separate from waveform decoding. At level 4 the
+body has 44 bytes, at level 3 it has 35, and the final body byte is a control
+field. A full frame uses the preceding bytes for payload. The supported short
+form places payload, a \texttt{0x14} marker, the caller CRC high byte, zero
+fill, a next-receive-level byte, and \texttt{0x82} before the CRC. Unsupported
+or ambiguous forms are rejected. The implemented short builder reserves four
+body bytes for this trailer; additional published short/compressed forms are
+not silently treated as supported.
+
+Tests reconstruct the documented 200-byte delivery from four level-4 payloads
+of 43 bytes and one closing level-3 payload of 28 bytes, using the documented
+full fields \texttt{95}, \texttt{91}, \texttt{8d}, and \texttt{81}. This verifies
+the container interpretation for that example, not a general sender sequencing
+law. The full-frame field remains a supplied parameter because its evolving
+wire semantics need independent qualification. Compression TEXT/FILES,
+delivery-level repacketization, and negotiated rate changes are not completed
+by the container codec.
+
+The event-level ARQ sender owns bounded queued blocks and exactly one
+outstanding block. DATA transmit completion opens a receive deadline. A
+validated delivered reply retires that block once; a validated not-delivered
+reply permits a retry within budget. A missing reply is ambiguous: the peer
+may have accepted DATA while its answer was lost. The timeout therefore emits
+a state-query action rather than blindly repeating DATA. Query transmission
+has its own completion token and watchdog. Query/retry exhaustion, transmit
+failure, or missing/late playback completion faults the sender and preserves
+unresolved bytes. Explicit abort discards the queue.
+
+These local tokens bind callbacks to an outstanding transmission/window; they
+are not transmitted sequence numbers or a solution to on-air duplicate
+suppression. The station/native session owner must connect qualified reply
+recognition, query encoding, turn ownership, negotiated rate, and byte
+accounting. The sender's queue currently holds supplied blocks; its byte count
+must not be exposed as Winlink delivery progress or raw-host \texttt{BUFFER}
+semantics without that integration.
+
+\landscapeplantuml{build/diagrams/Linkwise_Modem_Recovery}{Implemented event-level ARQ sender behavior and remaining wire integration. Missing answers request state; only a validated negative reply permits DATA retransmission.}{fig:modem-recovery}
+
+\subsection{Execution isolation, keying, and failure containment}
+The proposed runtime separates four execution responsibilities. The input
+callback only converts and queues audio; DSP workers detect, synchronize,
+decode, and synthesize outside that callback; one native session actor owns
+protocol transitions, outstanding bytes, and monotonic deadlines; the station
+execution service owns the radio lease and client/modem operation. The PTT
+arbiter and watchdog retain independent release authority. MCP queries read
+snapshots and append commands to bounded application queues; slow model
+responses, JSON serialization, audit storage, and provider fetches never run
+inside an audio callback or protocol deadline.
+
+A burst request must identify the session, active lease, configuration
+revision, permitted route, and bounded duration. The arbiter validates those
+against policy and interlocks before key-up, arms release limits, and uses a
+qualified driver. Playback completion and release observation are separate
+facts. Timeout, device loss, capture discontinuity, lease loss, abort, or an
+unconfirmable release cannot be converted to a successful session. A release
+request still proceeds when audit persistence fails; the fault is latched and
+reported separately. The physical emergency stop remains independent of
+software execution and of either AI host.
+
+\landscapeplantuml{build/diagrams/Linkwise_Modem_Keying}{Proposed local playback, keying, completion, and watchdog sequence below an asynchronous agent request. This integration is not yet implemented; no MCP round trip is allowed inside a symbol or ACK deadline.}{fig:modem-keying}
+
+\subsection{Verification matrix and implementation exit gates}
+The 9 November run of \path{tools/test-modem.py --audio-device} passed 41 tests:
+37 library tests, one replay integration test covering five independently
+published level-1/2 excerpts, and three synthetic level-4/audio integration
+tests. The reference clips include a two-frame burst and retain upstream
+provenance and SHA-256 checks. The level-4 tests cover setup and DATA round
+trips, local two-role establishment, chunked streaming, and corruption
+rejection. Formatting and Clippy checks also passed. These are dated evidence,
+not a promise that subsequent source changes have identical results.
+
+The protocol notes and reference measurements are pinned to upstream revision
+\path{952f79245240132f4af209afbad1f4b2ba256613}; implementation details should
+be checked against the named Rust modules and \path{rust/docs/modem.md}.
+The notes, fixtures, and measured sources have distinct attribution/license
+metadata; the cached measurement inputs are not proprietary vendor assets
+embedded in this repository. The public protocol/reference source is listed
+in Reference~\ref{ref:modem-protocol}. Source-level traceability does not
+replace empirical qualification.
+
+\begin{longtable}{@{}p{0.24\textwidth}p{0.70\textwidth}@{}}
+\caption{Modem evidence gates and claims still excluded.}\label{tab:modem-evidence-gates}\\
+\toprule
+\textbf{Gate} & \textbf{Evidence required beyond the current prototype}\\
+\midrule
+\endhead
+Codec correctness & Independent vectors for whitening, permutations, FEC tails,
+metric sign, frame fields and mode geometry; expand beyond self-generated
+round trips and the level-1/2 corpus.\\
+Receiver robustness & Record offset, fading, interference, clipping, sample
+clock error, false alarms, missed frames, CRC failures and processing latency
+with reproducible seeds and source audio.\\
+Reference acceptance & Show an unmodified release accepts native requests,
+setup and DATA and that native RX accepts its replies; preserve both audio
+directions, command bytes, readbacks, timing and payload comparisons.\\
+Session reliability & Deliberately lose DATA and answers, duplicate replies,
+interrupt playback, restart the owner, exhaust budgets and change rates;
+prove byte preservation and distinguish unresolved from acknowledged bytes.\\
+Station safety & Qualify actual device presentation, turnaround, exclusive
+lease, permit expiry, duty limits, watchdog release and independent stop on
+an inhibited or conducted setup before operational RF use.\\
+Host and Winlink & Bind one command/data owner to the session engine; test
+backpressure, disconnect/reconnect and supported client outcomes; keep modem
+connection, client completion and CMS/recipient evidence distinct.\\
+\bottomrule
+\end{longtable}
+
+The attempted i386 Debian/Wine reference bench on the ARM64 Mac initialized
+Wine but failed during COM registration with an illegal-instruction exception
+and WineDbg attach error. It supplied no usable stock-VARA endpoint and was
+stopped. That is a failed environment gate, not acceptance/rejection evidence
+for native DSP. Until a functioning reference peer, operational runtime, and
+native device qualification exist, Linkwise must report these components as
+implemented prototypes with bounded local evidence rather than a complete
+VARA-compatible modem.

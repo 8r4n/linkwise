@@ -1,0 +1,39 @@
+@startuml Linkwise_DSP_Level4
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 10
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 25
+top to bottom direction
+package "Transmit -- implemented single-frame bench path" {
+ rectangle "46-byte frame\n43 data + field + CRC" as F
+ rectangle "Whiten / turbo / gather\n368 bits -> 748 bits" as Code
+ rectangle "Differential cells\n2 x 393 columns\n18 pilots per band" as Cells
+ rectangle "Conjugate phase grid\n513-tap real pulse" as Shape
+ rectangle "1350 / 1650 Hz\n256-sample stagger" as Mix
+ rectangle "48 kHz mono\n205,825 samples" as WAV
+ F -right-> Code
+ Code -right-> Cells
+ Cells -down-> Shape
+ Shape -left-> Mix
+ Mix -left-> WAV
+}
+package "Receive -- implemented nominal-rate bench path" {
+ rectangle "Audio candidate\ncontinuous sample ranges" as ADC
+ rectangle "Complex mixing\nmatched pulse sum" as Down
+ rectangle "Pilot timing lock\nreference de-rotation" as Sync
+ rectangle "Differential dot products\n748 scaled soft metrics" as Soft
+ rectangle "Scatter / turbo\nde-whiten / CRC" as Inv
+ rectangle "46-byte frame\ninterpret in session context" as Out
+ ADC -right-> Down
+ Down -right-> Sync
+ Sync -down-> Soft
+ Soft -left-> Inv
+ Inv -left-> Out
+}
+WAV -[hidden]down-> ADC
+@enduml
