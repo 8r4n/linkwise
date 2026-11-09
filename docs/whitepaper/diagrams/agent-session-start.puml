@@ -1,0 +1,28 @@
+@startuml Linkwise_Agent_Session_Start
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 10
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #2A9D8F
+hide footbox
+participant "ChatGPT Agent / Codex" as AI
+participant "MCP adapter" as MCP
+participant "Station execution" as APP
+AI -> MCP: link_start_session(handle, grant, key)
+MCP -> APP: revalidate; consume handles
+APP -> APP: persist operation; adopt lease
+APP --> MCP: operation_id / session_id
+MCP --> AI: accepted, not connected
+note over AI,APP: Accepted work outlives this individual MCP request
+APP -> APP: local client / modem / PTT supervision
+AI -> MCP: session / bounded events(cursor)
+MCP -> APP: query authoritative state
+APP --> MCP: progress / terminal reason / freshness
+MCP --> AI: outcome and evidence level
+note over APP
+ Reconnect reads the same operation.
+ Duplicate start key cannot create a second attempt.
+end note
+@enduml

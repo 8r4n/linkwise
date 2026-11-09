@@ -31,8 +31,10 @@ private TCP connection to Hamlib rigctld
   maintains a process-local revision counter.
 - `SimulatedRadio` stores a small in-memory state. It is not a fake Hamlib
   catalog and does not model hardware timing or external controllers.
-- `api`, `audio`, `modem`, and `platform` are planned boundaries; modem/audio
-  operation is not implemented by this radio-control slice.
+- `modem` implements BW500 receive/synthesis primitives and the handshake
+  controller; `audio::device` optionally captures native 48 kHz audio through
+  CPAL. These are separate from the radio MCP service. See [modem status](modem.md).
+- `api` and `platform` remain planned boundaries.
 
 Relevant source: [`lib.rs`](../src/lib.rs), [`mcp.rs`](../src/mcp.rs), and
 [`radio.rs`](../src/radio.rs).

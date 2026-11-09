@@ -1,0 +1,25 @@
+@startuml Linkwise_DSP_Index
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 10
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 25
+top to bottom direction
+rectangle "48 kHz mono\ncontinuous samples" as Audio
+rectangle "Energy gate\n480-sample windows" as Gate
+rectangle "24-reference lock\ncoarse / fine search" as Lock
+rectangle "Tone correlations\n8 hypotheses / 3 bits" as Metrics
+rectangle "Channel inverse\nscatter soft metrics" as Interleave
+rectangle "Turbo + de-whiten\nCRC checked each iteration" as Decode
+rectangle "Validated frame\nlevel / range / field" as Frame
+Audio -right-> Gate
+Gate -right-> Lock
+Lock -right-> Metrics
+Metrics -down-> Interleave
+Interleave -left-> Decode
+Decode -left-> Frame
+@enduml

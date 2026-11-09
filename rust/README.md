@@ -2,8 +2,12 @@
 
 This crate contains the initial Linkwise MCP radio-control service and remains
 the starting point for the independently implemented cross-platform modem.
-The command protocol, on-air framing, modulation, and adaptive link behavior
-are not implemented or specified yet.
+The native modem currently implements BW500 level 1–4 DATA synthesis and
+CRC-checked reception, setup/control primitives, an audio-driven handshake,
+DATA containers, a bounded ARQ sender, and host-command/data stream transports. Level 4 requires
+an external measurement profile. A bounded streaming receiver and optional CPAL input
+backend expose the receive path. It is not a complete interoperable modem;
+see [modem status and validation](docs/modem.md) for tested behavior and gaps.
 
 The source modules mark the intended boundaries:
 
@@ -37,7 +41,8 @@ enabled with configured station limits. Additional VFO, passband, split,
 antenna, memory-channel, level, and function writes also require explicit
 `LINKWISE_ENABLED_HAMLIB_CONTROLS` entries. The Hamlib catalog is discovered
 from the selected backend; unsupported controls are reported rather than
-emulated. Modem operation is not implemented.
+emulated. Native modem reception is separate from the MCP server; no modem
+transmission or session control is exposed through MCP.
 
 Launch the MCP server through the containerized development profile from the
 repository root with `docker compose --profile dev run --build --rm -i linkwise`.

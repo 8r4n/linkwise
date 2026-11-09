@@ -53,7 +53,7 @@
 \title{Linkwise: Radio, Modem, and Link Management Research\\[0.4em]
 \large Lab notes and evidence ledger}
 \author{Engineering research log}
-\date{7 November 2026}
+\date{9 November 2026}
 
 \begin{document}
 \maketitle
@@ -62,9 +62,10 @@
 This log records the initial setup and reconnaissance for an independently
 implemented Rust modem intended to interoperate with VARA HF and be installable
 on macOS, Windows, and Linux. It distinguishes direct observations from
-hypotheses. No modem protocol, on-air framing, modulation, or DSP behavior has
-yet been implemented or established. The current Rust crate is a scaffold, not
-a functioning modem.
+hypotheses and local tests from reference-peer qualification. Native BW500
+codec, streaming receive, audio-handshake, DATA/ARQ, and host-stream components
+now exist; they do not yet form a qualified operational modem. The dated
+9 November entry records their implementation, validation, and remaining gates.
 \end{abstract}
 
 \tableofcontents
@@ -1237,7 +1238,10 @@ admitted to the corpus with provenance, permission status, metadata, hashes,
 and analysis report. This unlocks evidence-led waveform analysis; it does not
 by itself establish full modem compatibility or complete Phase 0 coverage.
 
-\section{Current readiness}
+\section{Readiness snapshot: 2026-11-07 (historical)}
+
+This dated snapshot is retained as history. Section~\ref{sec:modem-nov09}
+records the later modem implementation and supersedes these readiness claims.
 
 \begin{longtable}{p{0.45\linewidth}p{0.45\linewidth}}
 \toprule
@@ -1267,6 +1271,170 @@ Rust modem features. The Windows ISO is present in Downloads. \\
 \bottomrule
 \end{longtable}
 
+\begingroup
+\setlength{\emergencystretch}{2em}
+\section{2026-11-09: Native modem implementation and verification}
+\label{sec:modem-nov09}
+
+This entry supersedes the 7 November readiness snapshot for modem work.
+The user requested completion of the remaining implementation stages and later
+confirmed that no usable VARA reference instance was configured. Native
+components and test tooling were implemented, but the stages below are not all
+complete. Local round trips and two-instance tests are not reference-peer
+interoperability evidence.
+
+\subsection{Implementation changes}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Recorded-audio validation.} Added
+        \pathtext{tools/test-modem.py}. It downloads five published BW500
+        level-1/2 WAV excerpts and their provenance at a pinned upstream
+        revision, checks SHA-256 values before use, and runs the otherwise
+        ignored reference-replay test with the Rust suite. The excerpts include
+        two frames in one burst. They are cached under the ignored
+        \pathtext{reference/vara/fixtures/} tree, not redistributed in source.
+  \item \textbf{Streaming receiver and audio input.} Added
+        \pathtext{rust/src/modem/receiver.rs} with absolute sample positions,
+        chunk-independent processing, non-finite input rejection, and at most
+        30 seconds of retained audio. Truncated candidates emit no partial
+        payload. WAV replay uses this worker instead of retaining the entire
+        recording. The optional \texttt{audio-device} feature adds CPAL capture
+        at native 48 kHz, explicit device/channel selection, sample conversion,
+        and a bounded queue. Capture fails on overflow or device error rather
+        than joining discontinuous samples. Device enumeration worked on the
+        ARM64 Mac; live device decoding was not qualified.
+  \item \textbf{Level-4 waveform.} Added
+        \pathtext{rust/src/modem/bw500_waveform.rs}: two-band differential BPSK
+        synthesis, fixed-pilot timing acquisition, matched-pulse demodulation,
+        soft decisions, and CRC-checked decoding through the existing level-4
+        turbo codec. Single-frame nominal-rate audio is covered. Randomized
+        acquisition leads, multi-frame behavior, carrier tracking, and
+        sample-clock tracking remain open.
+  \item \textbf{External measurements.} Added
+        \pathtext{tools/fetch-modem-profile.py} to fetch checksum-pinned
+        published phase/pulse measurements and extract numeric literals with
+        Python AST parsing, without executing downloaded code. The generated
+        level-4 profile and attributed upstream sources remain in the ignored
+        cache. The source identifies the measurement data as AGPL-3.0-only;
+        no measurement tables are embedded in the Rust source.
+  \item \textbf{Audio-driven handshake.} Added
+        \pathtext{rust/src/modem/audio_handshake.rs}, phase-specific expected
+        bursts, the BW500 confirm generator, and complete caller-keyed
+        connected-ACK matching. Two local instances establish only after
+        audio confirmation and explicit transmit completion. Returning audio
+        does not imply playback, PTT release, or reference acceptance.
+  \item \textbf{DATA and ARQ components.} Added
+        \pathtext{rust/src/modem/data.rs} for uncompressed full/short
+        containers, caller-keyed trailers, and CRC validation. The documented
+        200-byte delivery layout reconstructs without padding. The changing
+        full-frame field is caller-supplied because its wire sequencing is
+        not yet qualified. Added \pathtext{rust/src/modem/arq.rs}: a bounded
+        stop-and-wait sender, missing-answer queries, explicit negative-answer
+        retries, query/retry budgets, transmit watchdogs, and retention of
+        unresolved bytes on failure. These are event-level components, not an
+        operational wire ARQ/session implementation.
+  \item \textbf{Host boundary and bench CLI.} Implemented bounded,
+        CR-delimited BW500/OFF command parsing in \pathtext{rust/src/api.rs}
+        and command/notification plus raw binary DATA stream transports in
+        \pathtext{rust/src/host.rs}. Tests cover fragmentation, coalescing,
+        invalid-command recovery, binary preservation, and EOF cleanup.
+        An operational modem backend and command/data socket ownership remain
+        to be integrated. Added \texttt{render-wav} for file-only handshake
+        stimuli and \texttt{receive-audio} for bounded device-input runs.
+        Updated the implementation guide and modem status document.
+\end{itemize}
+
+\subsection{Evidence provenance and reproducible checks}
+The external technical basis is Saul St John's published \emph{hfmodem}
+VARA protocol notes, reference excerpts, and measured phase/pulse data, pinned
+at revision
+\hashtext{952f792452}{40132f4af2}{09afbad1f4}{b2ba256613}.
+The protocol documentation is published as CC-BY-4.0; the downloaded measurement
+sources identify their separate AGPL-3.0-only license. Original vendor binaries
+and private captures were not copied into the tracked source tree. The five
+WAV files retain upstream provenance, including source hashes and expected
+payloads. This session replayed published captures; it did not collect a new
+successful stock-VARA session.
+
+From the repository root:
+\begin{lstlisting}
+python3 tools/test-modem.py --audio-device
+\end{lstlisting}
+From \pathtext{rust/}:
+\begin{lstlisting}
+cargo fmt --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+\end{lstlisting}
+
+\statusverified{}: the final recorded run passed \textbf{41 tests}: 37 library
+unit tests, one integration test covering all five reference recordings, and
+three level-4/audio integration tests. No tests were skipped in that runner.
+Formatting, Clippy with warnings denied, and the whitespace diff check passed.
+The ordinary offline \texttt{cargo test} still reports external-data tests as
+ignored unless their prerequisites are provided.
+
+The level-4 integration tests cover a setup-frame audio round trip, a complete
+local two-role audio handshake, streaming DATA reception, and rejection of
+heavily corrupted audio. A CLI smoke check also rendered a W9SSJ setup stimulus
+as 205,825 samples of 48 kHz mono float WAV and decoded one CRC-valid level-4
+frame with control byte \texttt{0x82}. These level-4 tests are synthetic and
+use the external measured profile. The independently recorded peer audio
+coverage remains levels 1 and 2; level 3 has synthetic round-trip coverage.
+
+\subsection{Attempted reference runtime: failed environment gate}
+Docker Desktop was started and a temporary isolated 32-bit bench built on the
+ARM64 Mac using i386 Debian bookworm, Wine 8, Xvfb, and PulseAudio. The existing
+VARA 4.9.0 extraction was mounted read-only and copied into the bench's writable
+working directory. The Microsoft VB6 SP6 runtime was obtained through the
+archive URL used by Winetricks 20250102 and checked against SHA-256:
+\begin{center}
+\hashtext{467b5a10c369865f}{2021d379fc0933cb}{382146b702bbca4b}{cb703fc86f4322bb}.
+\end{center}
+
+Wine initialized, but repeated COM registration attempts under qemu-i386
+failed with \texttt{Unhandled illegal instruction at address 7BC57F86}; WineDbg
+then reported error 5 while attaching. The program-error dialog was visually
+verified. No functioning VARA control endpoint or reference audio loopback
+resulted. The experimental container was stopped after diagnosis. This is an
+\emph{environment failure}; it supplies no acceptance or rejection result for
+the native modem's transmitted frames.
+
+\subsection{Stage status and unresolved gates}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Waveform: partial.} Native single-frame level-4 synthesis and
+        reception pass local tests. Independent stock recordings, acquisition
+        leads, multi-frame operation, and impairment tolerance remain open.
+  \item \textbf{Handshake: partial.} Two local instances establish through
+        decoded audio. Device playback, turnaround, PTT ownership/release, and
+        live reference acceptance remain open.
+  \item \textbf{DATA/ARQ: partial.} Container codecs and the bounded sender
+        exist. Wire field sequencing, reply/query codecs, duplicate handling,
+        rate changes, turns, keepalive, and disconnect still need integration
+        and qualification. A missing answer must not authorize blind DATA
+        retransmission.
+  \item \textbf{Host interface: partial.} Command and DATA stream components
+        pass tests. They are not connected to a complete operational modem
+        service, nor to Winlink message handling.
+  \item \textbf{Qualification: exit gate unmet.} No bidirectional transfer
+        with an unmodified VARA peer, live audio/PTT qualification, or native
+        cross-platform device qualification was completed.
+\end{itemize}
+
+The maintained implementation inventory is
+\pathtext{rust/docs/modem.md}. Its stage table must remain explicit about these
+limits; 41 passing tests do not establish a complete interoperable modem.
+
+\subsection{Whitepaper build and overflow fixes}
+Rebuilt the architecture whitepaper and all PlantUML vector figures with
+\pathtext{tools/build-whitepaper.sh}. The initial build succeeded with
+horizontal overflow warnings. Widened the requirements table's method column,
+made file paths breakable, allowed modest emergency line stretch, reworded one
+unbreakable reference phrase, and reduced the requirements table font so its
+final row no longer occupied a separate landscape page. The rebuilt paper had
+no overfull-box warnings; affected pages were rendered and visually inspected.
+This layout/build result is separate from modem implementation evidence.
+
+\endgroup
+
 \section{Chronicle maintenance}
 
 Update this log during the work, not only when milestones are complete. Add
@@ -1280,30 +1448,28 @@ so the presentation and notes do not diverge.
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]
-  \item Close the radio MCP prototype's safety and test gaps before enabling
-        physical CAT writes: implement the session/one-use transmit-permit
-        arbiter and watchdog; define revision behavior for external radio
-        changes; and add rigctld contract tests for write denial, readback,
-        audit failures, timeouts, and unsupported controls. Keep writes disabled
-        until these gates pass.
-  \item The user reports written authorization covering the VARA research
-        scope; preserve its boundaries and do not redistribute the software.
-        The user reports v4.9.0 is installed in the Windows 11 ARM64 VM, but
-        that guest is currently stopped and has not provided runtime access.
-  \item Continue read-only Ghidra work: follow the candidate command/status
-        string references using assembly and xrefs. Treat each function
-        mapping as a lead until decompilation or independent observations
-        confirm behavior.
-  \item Keep protocol and DSP implementation deferred until command framing,
-        direction, and on-air behavior have supporting evidence. Define
-        acceptance criteria and deterministic fixtures from confirmed facts.
-  \item When a runtime environment becomes available, first capture idle,
-        non-transmitting behavior and a read-only command such as VERSION;
-        record exact bytes, socket identity, timing, and state transitions.
-  \item Revisit the separate Fedora/Wine fallback only after resolving why
-        the previous Kickstart run exited without installing a system.
-        Treat any Wine results as compatibility-specific until reproduced on
-        Windows.
+  \item Establish a working unmodified VARA reference runtime. The user now
+        reports no configured reference instance; the isolated Wine attempt
+        failed its environment gate. Capture exact command/status bytes and
+        both audio directions with provenance before making interop claims.
+  \item Qualify level-4 setup/DATA audio, acquisition leads, multi-frame
+        behavior, and timing against independent recordings and the reference
+        peer. Extend impairment and native device tests without promoting
+        synthetic results to interoperability evidence.
+  \item Resolve and document wire DATA-field sequencing and recovery replies;
+        integrate the container codec and bounded sender with rate, turn,
+        keepalive, duplicate, and disconnect behavior. Preserve unresolved
+        bytes and query after a missing answer rather than blindly repeat DATA.
+  \item Connect the host command/data transports to one operational session
+        owner with explicit socket pairing, buffering, backpressure, and
+        channel-loss cleanup. Parsing a command is not session acceptance.
+  \item Integrate device playback and measured turnaround with exclusive
+        radio/audio ownership, one-use transmit permits, watchdog release,
+        readback, audit, and the independent emergency stop. Keep physical
+        writes disabled until the safety and qualification gates pass.
+  \item Complete controlled bidirectional reference transfers, impaired-link
+        regressions, and native platform/audio qualification before claiming
+        an operational cross-platform modem or Winlink compatibility.
 \end{enumerate}
 
 \section{References}
@@ -1326,6 +1492,12 @@ so the presentation and notes do not diverge.
         \url{https://doi.org/10.1038/s43247-025-03154-8}.
   \item Linkwise project, “HF propagation toolbox,” research summary and
         experiment implications: \pathtext{reference/propagation-toolbox.md}.
+  \item Saul St John (W9SSJ), \emph{hfmodem}, published VARA protocol
+        notes, reference recordings, and measured waveform constants,
+        revision identified in Section~\ref{sec:modem-nov09}:
+        \url{https://github.com/sstjohn/hfmodem}.
+  \item Winetricks 20250102, VB6 runtime download recipe and verification hash:
+        \url{https://github.com/Winetricks/winetricks/blob/20250102/src/winetricks}.
 \end{enumerate}
 
 \end{document}

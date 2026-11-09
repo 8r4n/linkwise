@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Linkwise · Modem lab</title><link rel="icon" href="data:,">
+<script>
+try {
+  const saved = localStorage.getItem("linkwise-theme");
+  document.documentElement.dataset.theme = saved === "dark" || saved === "light"
+    ? saved : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+} catch { document.documentElement.dataset.theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; }
+</script>
+<link rel="stylesheet" href="/style.css">
+<script defer src="/vendor/sigplot.js"></script><script defer src="/app.js"></script>
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/" aria-label="Linkwise modem lab"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><strong>LINKWISE</strong><span class="brand-divider"></span><span>Modem lab</span></a><div class="runtime"><span class="live-dot"></span> RUST DSP <span class="runtime-divider">/</span> <a href="https://sigplot.lgsinnovations.com/" target="_blank" rel="noreferrer">SIGPLOT <span id="sigplot-version">3.1.7</span> ↗</a><button type="button" id="theme-toggle" class="theme-toggle" aria-label="Dark mode" aria-pressed="false">Dark mode</button></div></header>
+<main>
+<section class="intro"><div><p class="eyebrow">SIGNAL IN. PAYLOAD OUT.</p><h1>Watch the modem work.</h1><p>Follow a BW500 payload through audio and back into bytes.</p></div><span class="bench-badge"><span></span> LOCAL DSP BENCH</span></section>
+<div class="app-shell">
+<aside class="controls">
+<div class="section-heading"><h2>Configure a run</h2><span class="small-number">01</span></div>
+<div class="segmented" role="group" aria-label="Signal source"><button id="source-native" class="selected" type="button" aria-pressed="true">Native loopback</button><button id="source-reference" type="button" aria-pressed="false">Stock recording</button></div>
+<form id="run-form">
+<label class="stream-option"><input type="checkbox" id="streaming" checked> Stream at audio speed</label>
+<p class="field-help">Watch incoming samples and CRC-valid frames. A finite local audio stream, paced at 48 kHz.</p>
+<div id="native-fields"><label class="field-label">BW500 data level</label><div class="level-options" role="group" aria-label="BW500 data level"><button type="button" data-level="1">L1</button><button type="button" data-level="2">L2</button><button type="button" data-level="3" class="selected" aria-pressed="true">L3</button><button type="button" data-level="4">L4</button></div><p class="field-help" id="level-help">34 bytes per frame · up to 3 frames</p>
+<label class="field-label" for="message">Message to encode <span id="byte-count">0 / 102 B</span></label><textarea id="message" rows="3" spellcheck="false">HELLO FROM LINKWISE</textarea><p class="field-help">UTF-8 bytes are padded into modem frames.</p></div>
+<div id="reference-fields" hidden><label class="field-label" for="fixture">Reference recording</label><select id="fixture"></select><p id="reference-help" class="field-help">Published stock VARA HF audio. The Rust receiver verifies its known payload.</p></div>
+<div class="control-divider"></div>
+<label class="toggle-row" for="noise"><span>Add channel noise</span><input type="checkbox" id="noise" role="switch"><span class="toggle" aria-hidden="true"></span></label>
+<div class="snr-control"><div class="range-label"><label for="snr">Signal-to-noise ratio</label><output id="snr-value" for="snr">24 dB</output></div><input id="snr" type="range" min="-5" max="40" step="1" value="24" disabled><div class="range-endpoints"><span>−5 dB · noisy</span><span>40 dB · clean</span></div></div>
+<label class="toggle-row" for="dropout"><span>Middle-third dropout</span><input type="checkbox" id="dropout" role="switch"><span class="toggle" aria-hidden="true"></span></label><p class="field-help dropout-help">Erase audio to test detection and recovery limits.</p>
+<button class="run-button" id="run" type="submit"><span id="run-label">Run modem</span><span aria-hidden="true">→</span></button>
+<p id="request-state" class="request-state" role="status" aria-live="polite">Loading Rust backend…</p>
+<button type="button" id="stop-stream" class="download-button" hidden>Stop stream</button></form>
+<div class="evidence-note"><span class="note-icon">i</span><p id="mode-note">Local codec loopback. No RF transmission or live VARA session.</p></div>
+<div class="aside-footer"><span class="live-dot"></span> 48 kHz mono <span>·</span> Deterministic seed</div>
+</aside>
+<section class="workspace" aria-label="Modem run results">
+<div class="metrics"><div><span class="metric-label">FRAME INTEGRITY</span><strong id="metric-frames">—<small>verified</small></strong></div><div><span class="metric-label">AUDIO DURATION</span><strong id="metric-duration">—<small>seconds</small></strong></div><div><span class="metric-label">SAMPLE RATE</span><strong>48.0<small>kHz</small></strong></div><div><span class="metric-label">RUST PROCESSING</span><strong id="metric-elapsed">—<small>ms</small></strong></div></div>
+<div class="primary-grid">
+<article class="plot-card waterfall-card"><div class="card-heading"><div><h2>Signal waterfall</h2><p id="plot-description">Received audio · Hann-windowed STFT</p></div><span class="plot-tag">SIGPLOT</span></div><div class="plot-stage"><div id="waterfall" class="plot waterfall" aria-label="SigPlot spectrogram: frequency versus time"></div><div id="plot-empty" class="plot-empty">Run the modem to inspect the signal.</div></div><div class="plot-footer"><span>Frequency / time</span><span class="color-legend"><span>−100</span><i></i><span>0 dBFS</span></span></div></article>
+<article class="payload-card"><div class="card-heading"><div><h2>Receiver output</h2><p>CRC + byte-for-byte comparison</p></div><span id="result-light" class="result-light"></span></div><div class="payload-content"><span id="verification-badge" class="verification neutral">AWAITING SIGNAL</span><p class="payload-label">DECODED PAYLOAD</p><pre id="decoded-payload">Waiting for a run.</pre><p id="result-detail" class="result-detail">Results come from the Rust decoder.</p><div class="payload-facts"><div><span>Source</span><strong id="result-source">—</strong></div><div><span>Data level</span><strong id="result-level">—</strong></div><div><span>Channel</span><strong id="result-channel">Clean</strong></div><div><span>Energy candidates</span><strong id="result-candidates">—</strong></div></div><a class="download-button disabled" id="download" download="linkwise-received.wav" aria-disabled="true">↓ <span>Download received WAV</span></a><audio id="audio" controls preload="none" aria-label="Listen to received modem audio"></audio></div></article>
+</div>
+<div class="secondary-grid"><article class="plot-card"><div class="card-heading"><div><h2>Waveform envelope</h2><p>Minimum / maximum · 512-sample windows</p></div><span class="plot-tag">TIME</span></div><div id="waveform" class="plot small-plot" aria-label="SigPlot received waveform envelope"></div></article><article class="plot-card"><div class="card-heading"><div><h2>Spectrum slice</h2><p id="spectrum-caption">2,048-point FFT · 23.44 Hz bins</p></div><span class="plot-tag">FREQUENCY</span></div><div id="spectrum" class="plot small-plot" aria-label="SigPlot spectrum at the selected time"></div><div class="slice-control"><label for="slice">Inspect time</label><input type="range" id="slice" min="0" max="1" value="0" disabled><output id="slice-time" for="slice">— s</output></div></article></div>
+<details class="run-details" id="run-details"><summary><span>Frame evidence & processing trace</span><span class="details-meta" id="trace-meta">Actual Rust results</span></summary><div class="details-body"><div class="table-scroll"><table><thead><tr><th>FRAME</th><th>LEVEL</th><th>SAMPLE TIME</th><th>CONTROL</th><th>PAYLOAD HEX</th><th>MATCH</th></tr></thead><tbody id="frame-rows"></tbody></table></div><ol id="event-log"></ol><p class="provenance" id="provenance"></p></div></details>
+</section>
+</div>
+<footer class="page-footer"><span>Linkwise native modem research</span><span>Plots display Rust-computed samples and spectra. <a href="/vendor/LICENSE.sigplot">SigPlot license</a> · <a href="/vendor/NOTICE.sigplot">Notice</a></span></footer>
+</main>
+</body></html>

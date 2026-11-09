@@ -1,0 +1,138 @@
+[
+  {
+    "file": "bw500-level1-clean.wav",
+    "request": {
+      "source": "native",
+      "level": 1,
+      "message": "HELLO FROM LINKWISE",
+      "snr_db": null,
+      "seed": 20261109,
+      "dropout": false
+    },
+    "duration_s": 16.157333333333334,
+    "decoded_text": "HELLO FROM LINKWISE",
+    "payload_verified": true,
+    "frames": [
+      {
+        "slot": 0,
+        "level": 1,
+        "start_s": 0.18533333333333332,
+        "end_s": 5.476,
+        "control": 153,
+        "payload_hex": "48454c4c4f2046524f",
+        "text": "HELLO FRO",
+        "matches_expected": true
+      },
+      {
+        "slot": 1,
+        "level": 1,
+        "start_s": 5.476,
+        "end_s": 10.766666666666667,
+        "control": 153,
+        "payload_hex": "4d204c494e4b574953",
+        "text": "M LINKWIS",
+        "matches_expected": true
+      },
+      {
+        "slot": 2,
+        "level": 1,
+        "start_s": 10.766666666666667,
+        "end_s": 16.057333333333332,
+        "control": 153,
+        "payload_hex": "450000000000000000",
+        "text": "E",
+        "matches_expected": true
+      }
+    ],
+    "sha256": "6558d2788920019729d7ab8c9ff288370cc7722d1e94a8a7a16076dd6db42345",
+    "encoding": "PCM16 mono 48000 Hz; quantized from Rust float32 export",
+    "pcm16_decode_verified": true
+  },
+  {
+    "file": "bw500-level2-clean.wav",
+    "request": {
+      "source": "native",
+      "level": 2,
+      "message": "HELLO FROM LINKWISE",
+      "snr_db": null,
+      "seed": 20261109,
+      "dropout": false
+    },
+    "duration_s": 5.149333333333334,
+    "decoded_text": "HELLO FROM LINKWISE",
+    "payload_verified": true,
+    "frames": [
+      {
+        "slot": 0,
+        "level": 2,
+        "start_s": 0.18533333333333332,
+        "end_s": 5.049333333333333,
+        "control": 153,
+        "payload_hex": "48454c4c4f2046524f4d204c494e4b57495345000000",
+        "text": "HELLO FROM LINKWISE",
+        "matches_expected": true
+      }
+    ],
+    "sha256": "0578595d5d0dec47b1b51e2f287b64fbd3380019ff3a3d2424e04188494bfb7b",
+    "encoding": "PCM16 mono 48000 Hz; quantized from Rust float32 export",
+    "pcm16_decode_verified": true
+  },
+  {
+    "file": "bw500-level3-clean.wav",
+    "request": {
+      "source": "native",
+      "level": 3,
+      "message": "HELLO FROM LINKWISE",
+      "snr_db": null,
+      "seed": 20261109,
+      "dropout": false
+    },
+    "duration_s": 5.1066666666666665,
+    "decoded_text": "HELLO FROM LINKWISE",
+    "payload_verified": true,
+    "frames": [
+      {
+        "slot": 0,
+        "level": 3,
+        "start_s": 0.18533333333333332,
+        "end_s": 5.006666666666667,
+        "control": 153,
+        "payload_hex": "48454c4c4f2046524f4d204c494e4b57495345000000000000000000000000000000",
+        "text": "HELLO FROM LINKWISE",
+        "matches_expected": true
+      }
+    ],
+    "sha256": "a7a75afe1feb230dda23cd059ecba1758f1262010d5a2577f41c103f6e51c1ea",
+    "encoding": "PCM16 mono 48000 Hz; quantized from Rust float32 export",
+    "pcm16_decode_verified": true
+  },
+  {
+    "file": "bw500-level3-snr24db.wav",
+    "request": {
+      "source": "native",
+      "level": 3,
+      "message": "HELLO FROM LINKWISE",
+      "snr_db": 24,
+      "seed": 20261109,
+      "dropout": false
+    },
+    "duration_s": 5.1066666666666665,
+    "decoded_text": "HELLO FROM LINKWISE",
+    "payload_verified": true,
+    "frames": [
+      {
+        "slot": 0,
+        "level": 3,
+        "start_s": 0.18533333333333332,
+        "end_s": 5.006666666666667,
+        "control": 153,
+        "payload_hex": "48454c4c4f2046524f4d204c494e4b57495345000000000000000000000000000000",
+        "text": "HELLO FROM LINKWISE",
+        "matches_expected": true
+      }
+    ],
+    "sha256": "b9a4acf11faf0d3110c988ec0eb0542d21b08cbe48d71cd763eb514b3085768c",
+    "encoding": "PCM16 mono 48000 Hz; quantized from Rust float32 export",
+    "pcm16_decode_verified": true
+  }
+]

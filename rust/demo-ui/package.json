@@ -1,0 +1,10 @@
+{
+  "name": "linkwise-modem-demo-ui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Build-only dependency bundle for the local Rust SigPlot demo",
+  "type": "module",
+  "scripts": { "build": "node build-sigplot.mjs" },
+  "dependencies": { "sigplot": "3.1.7" },
+  "devDependencies": { "esbuild": "0.25.12" }
+}

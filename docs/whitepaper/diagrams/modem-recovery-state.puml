@@ -1,0 +1,36 @@
+@startuml Linkwise_Modem_Recovery
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 10
+skinparam ArrowColor #2A9D8F
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 25
+top to bottom direction
+state "Active sender" as Active {
+ state "Ready\nqueued bytes owned" as Ready
+ state "Sending DATA\nlocal token / TX watchdog" as Sending
+ state "Await validated answer\nreceive-window binding" as Waiting
+ state "Sending state query\nDATA not repeated" as Query
+ state "Retired once\nnext queued block" as Acked
+ [*] --> Ready
+ Ready -right-> Sending : start
+ Sending -right-> Waiting : TX complete
+ Waiting --> Acked : Delivered
+ Acked --> Ready : next block
+ Waiting --> Sending : NotDelivered\nretry budget remains
+ Waiting --> Query : answer deadline\nquery budget remains
+ Query --> Waiting : query TX complete
+}
+state "Faulted\nunresolved bytes retained" as Fault
+state "Aborted\nqueue discarded" as Abort
+Active --> Fault : TX failure / watchdog\nquery or retry budget exhausted
+Active --> Abort : explicit abort
+Fault --> Abort : explicit abort
+note bottom of Active
+ Event-level policy; wire codecs and turn integration remain open.
+ Local tokens are not on-air sequence numbers.
+end note
+@enduml
