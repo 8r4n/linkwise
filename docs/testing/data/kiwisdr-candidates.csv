@@ -1,0 +1,12 @@
+candidate_id,registry_id,label,tier,latitude,longitude,distance_km,initial_bearing_deg,url,listed_status,listed_updated
+R01,b83df63a0803,"San Diego, CA",control,32.860591,-117.188889,60.0,246.4,http://kiwisdr.ka9q.net:8073,active,"Monday, 09-Nov-2026 22:47:26 GMT"
+R02,78047338ad5c,"Half Moon Bay, CA / KFS Omni",pilot,37.39,-122.41,712.7,313.8,http://kiwisdr.kfsdr.com:8073,active,"Monday, 09-Nov-2026 23:15:02 GMT"
+R03,38d2697cd2cd,Northern Utah / Kiwi 1,pilot,41.59,-112.27,1019.3,20.8,http://kiwisdr1.sdrutah.org:8073,active,"Monday, 09-Nov-2026 23:26:16 GMT"
+R04,f82e0c014dbd,"Winthrop, WA / MVARC",expanded,48.51908,-120.22304,1741.2,351.1,http://mvarc.proxy.kiwisdr.com,active,"Monday, 09-Nov-2026 22:47:26 GMT"
+R05,d4e95e802f9a,"Maui, Hawaii",pilot,20.76,-156.33,4146.6,261.0,http://22215.proxy.kiwisdr.com,active,"Monday, 09-Nov-2026 23:22:54 GMT"
+R06,78047381b8d6,Washington DC area / NA5B,expanded,38.766582,-77.214693,3582.2,68.5,http://www.na5b.com:8073,active,"Monday, 09-Nov-2026 22:54:16 GMT"
+R07,e415f6f6fd1a,"Tokyo, Japan / JK1LOT",expanded,35.54,139.46,9048.0,307.0,http://jk1lot.ham-radio-op.net:8073,active,"Monday, 09-Nov-2026 22:57:39 GMT"
+R08,884aeaf5408e,"Marahau, New Zealand / Kiwi 1",expanded,-41.006131,173.009502,10921.1,226.1,http://kiwisdr1.owdjim.gen.nz:8073,active,"Monday, 09-Nov-2026 22:48:27 GMT"
+R09,985dad7f4aa9,"Santiago, Chile",expanded,-33.457213,-70.671042,8795.7,142.3,http://ce3pbr.proxy.kiwisdr.com,active,"Monday, 09-Nov-2026 23:22:21 GMT"
+R10,ec24b8cfd0db,"Wessex, United Kingdom / G8JNJ",expanded,50.74,-2.63,8698.5,36.2,http://wessex.zapto.org:8073,active,"Monday, 09-Nov-2026 22:47:08 GMT"
+R11,98f07b9205c5,"Gqeberha, South Africa / ZS2JB",stretch,-33.98,25.64,16537.7,102.1,http://alg.twrmon.net:8073,active,"Monday, 09-Nov-2026 22:51:24 GMT"

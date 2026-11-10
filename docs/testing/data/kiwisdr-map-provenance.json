@@ -1,0 +1,22 @@
+{
+  "map_source": "tools/build-kiwisdr-candidate-map.py",
+  "selection_source": "docs/testing/data/kiwisdr-candidates.json",
+  "projection": "+ellps=WGS84 +proj=aeqd +lon_0=-116.6019637 +lat_0=33.0786552 +x_0=0.0 +y_0=0.0 +no_defs",
+  "datum": "WGS84",
+  "geodesic_method": "pyproj.Geod WGS84 ellipsoid; shortest geodesic; initial forward bearing clockwise from true north",
+  "basemap": "Natural Earth via Cartopy; 110m global and 50m western-US detail",
+  "basemap_source": "https://www.naturalearthdata.com/",
+  "software": {
+    "geopandas": "1.0.1",
+    "cartopy": "0.23.0",
+    "matplotlib": "3.9.4"
+  },
+  "selection_sha256": "bd4382cd1114df0e83e8dc3241c5d6bcd5776dba7889e89f882381f34089b9d2",
+  "artifacts": {
+    "docs/testing/figures/kiwisdr-candidate-map.pdf": "0d4fc8ff630d842077711a43e65a9e86c1d8aca937bbdf944ef083fc9bf1ecc6",
+    "docs/testing/figures/kiwisdr-candidate-map.png": "5b2e1202288f18a7114a90c3c1c45d2bf6c385a7e3650f5b8af417cb636657c1",
+    "docs/testing/data/kiwisdr-candidates.gpkg": "910da7bdafccab1b76e01a47a9d749ded9fdbda7731c3fc62762d5ad34093095",
+    "docs/testing/data/kiwisdr-candidates.geojson": "8cb2589a0eff48b3e0b4f88502e364f3450a7a18c73b6d1dcc057253cc3c2b8e",
+    "docs/testing/data/kiwisdr-candidates.csv": "289f88dc1e969646bad0d898e976158222f19958693de096678916d038f66ee3"
+  }
+}

@@ -1,0 +1,36 @@
+@startuml Kiwi_Observation_Scoring
+!theme plain
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam ArrowColor #216875
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 24
+title Proposed scoring decisions for each scheduled receiver / burst observation
+top to bottom direction
+rectangle "Scheduled observation\n+ expected-frame identity" as Planned
+rectangle "Full transmission\nconfirmed?" as TX
+rectangle "TX unconfirmed / partial\nnot an expected full frame" as NoTX
+ rectangle "Capture available\nand decode-eligible?" as Valid
+rectangle "Infrastructure / capture outcome\nretain reason; exclude from RF denominator" as Invalid
+ rectangle "Exact expected\nframe recovered?" as Exact
+rectangle "Exact recovery\ncount expected identity once" as Pass
+rectangle "Valid RF/decode miss\ninclude in RF denominator" as Miss
+Planned -right-> TX
+TX --> NoTX : no
+TX -right-> Valid : yes
+Valid --> Invalid : no
+Valid -right-> Exact : yes
+Exact --> Pass : yes
+Exact --> Miss : no
+note bottom of Miss
+A valid recording with no acquired
+burst is still a miss.
+Record duplicates and conflicting CRC-
+valid frames separately.
+Decode success must not decide capture
+eligibility.
+end note
+@enduml
