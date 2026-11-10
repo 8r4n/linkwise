@@ -1,0 +1,33 @@
+@startuml Kiwi_Measurement_Chain
+!theme plain
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam ArrowColor #216875
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 24
+title Proposed KiwiSDR measurement chain
+top to bottom direction
+rectangle "Known waveform\n+ expected frames" as Oracle
+rectangle "Qualified RF\ntransmit station" as TX
+rectangle "Kiwi A / B / C\nremote observers" as Kiwi
+rectangle "Immutable originals\n+ capture metadata" as Store
+rectangle "Versioned import\n48 kHz mono" as Import
+rectangle "Rust decoder\nbaseline / candidate" as RX
+rectangle "Exact-byte report\n+ exclusions" as Report
+Oracle -right-> TX
+TX -right-> Kiwi : HF
+Kiwi -down-> Store : audio or IQ
+Store -left-> Import
+Import -left-> RX
+RX -down-> Report
+Oracle ..> Report : oracle
+note bottom of Kiwi
+Receive-only observations: no ACKs to
+the transmitter.
+Internet capture transport is not an
+RF return path.
+end note
+@enduml

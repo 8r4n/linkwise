@@ -1,0 +1,26 @@
+{
+  "repository": "https://github.com/jks-prv/kiwiclient",
+  "revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+  "source_url": "https://raw.githubusercontent.com/jks-prv/kiwiclient/4eb733e6b6147f7fbeb97ced64cdac029b202d18/kiwirecorder.py",
+  "source_sha256": "048cd486fcf0b48d17a445bf4917bf804136aab57ebbd6eacc4e3e96b3e57645",
+  "verification": "AST inspection of option declarations; no client executed or receiver stream opened",
+  "verified_options": [
+    "-s",
+    "-p",
+    "-f",
+    "-m",
+    "-L",
+    "-H",
+    "-g",
+    "--ncomp",
+    "--tlimit",
+    "--connect-timeout",
+    "--connect-retries",
+    "--busy-timeout",
+    "--busy-retries",
+    "--fn",
+    "--station",
+    "--log",
+    "-d"
+  ]
+}

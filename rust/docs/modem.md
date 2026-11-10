@@ -31,6 +31,12 @@ than retained history are marked `truncated` and produce no decoded frames.
 WAV decoding reports an error for such candidates. Device capture fails on a
 queue overflow or device error rather than joining discontinuous samples.
 
+## Planned remote RF observation
+
+The [KiwiSDR modem test plan](kiwisdr-test-plan.md) defines proposed capture,
+conversion, frame-scoring, and regression experiments using cooperating remote
+receivers. It is a draft plan, not evidence of RF tests or live interoperability.
+
 ## Reproduce reference validation
 
 From the repository root:

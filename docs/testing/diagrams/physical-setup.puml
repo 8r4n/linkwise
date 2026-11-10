@@ -1,0 +1,35 @@
+@startuml Kiwi_Physical_Setup
+!theme plain
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam ArrowColor #216875
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 24
+title Proposed physical test setup and observation boundaries
+top to bottom direction
+rectangle "Frozen source WAV\n+ expected-frame manifest" as WAV
+rectangle "Qualified playback\n+ audio interface" as Playback
+rectangle "Transceiver\nverified configuration" as Radio
+rectangle "Antenna system" as Ant
+rectangle "Remote Kiwi\nantenna + receiver" as Kiwi
+rectangle "Local transmit monitor\nrecording + timestamps" as Monitor
+rectangle "Station execution\nPTT owner + stop path" as Control
+WAV -right-> Playback : audio
+Playback -right-> Radio : TX audio
+Radio -right-> Ant : RF
+Ant -down-> Kiwi : HF path
+Radio --> Monitor : qualified monitor path
+Control --> Radio : PTT / release
+Control --> Monitor : start / stop / fault evidence
+note bottom of Monitor
+Monitor implementation and calibration
+must be qualified.
+A generated WAV alone does not prove
+RF transmission.
+A Kiwi capture is not proof of remote
+station receipt.
+end note
+@enduml

@@ -1,0 +1,38 @@
+@startuml Kiwi_Capture_Processing
+!theme plain
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 13
+skinparam ArrowColor #216875
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 24
+title Proposed capture processing: score raw and corrected profiles separately
+top to bottom direction
+rectangle "Original audio / IQ\nimmutable + hashed" as Original
+rectangle "Continuity / settings\n+ eligibility checks" as Check
+rectangle "Versioned demodulation\n+ resample to 48 kHz" as Import
+rectangle "As-received profile\nfixed conversion scale" as Raw
+rectangle "Diagnostic profile\nexplicit correction recipe" as Diagnostic
+rectangle "Baseline + candidate\nRust decoding" as Decode
+rectangle "Stratified report\npaired results + exclusions" as Report
+rectangle "Invalid capture intervals\nretain evidence + reasons" as Invalid
+Original --> Check
+Check --> Import : eligible intervals
+Check --> Invalid : invalid intervals
+Import --> Raw
+Import --> Diagnostic
+Raw --> Decode
+Diagnostic --> Decode
+Decode --> Report : separate profile labels
+Invalid --> Report : separate denominator
+note bottom of Import
+Keep original-to-derived sample
+mapping and guards.
+Never interpolate a gap and call it a
+valid RF observation.
+GNSS/timing, SNR/amplitude and decode
+eligibility are distinct.
+end note
+@enduml

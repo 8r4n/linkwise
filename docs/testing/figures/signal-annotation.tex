@@ -1,0 +1,24 @@
+% Conceptual spectrogram illustration. No RF, SNR or power measurements shown.
+\begin{tikzpicture}[>=Latex,x=1cm,y=1cm,font=\small]
+\node[anchor=west,font=\bfseries] at (0,6.5) {SCHEMATIC ONLY -- not a measured KiwiSDR spectrogram};
+\fill[pale] (0,0) rectangle (14,4.8);
+\fill[accent!16] (3.0,0.5) rectangle (8.9,4.3);
+\foreach \y in {1.1,1.45,1.8,2.15,2.5,2.85,3.2,3.55} {
+ \draw[accent!65,line width=2pt] (3.25,\y)--(5.3,\y);
+ \draw[accent!35,line width=2pt] (5.3,\y)--(6.6,\y);
+ \draw[accent!65,line width=2pt] (6.6,\y)--(8.65,\y);
+}
+\fill[orange!25] (10.5,0) rectangle (10.85,4.8);
+\draw[->] (0,0)--(14.6,0) node[right]{sample time};
+\draw[->] (0,0)--(0,5.2) node[above]{audio frequency};
+\draw[dashed] (3,0)--(3,4.8);\draw[dashed] (8.9,0)--(8.9,4.8);
+\node[anchor=south,align=center] at (1.5,0.3) {Noise-only\\reference};
+\node[anchor=south,align=center] at (5.9,5.15) {Expected burst window\\from independent manifest};
+\node[anchor=south,align=center] at (11.7,5.15) {Illustrative interference\\classify; do not erase};
+\draw[->] (10.9,5.05)--(10.7,4.2);
+\draw[<->,accent,thick] (3.4,-0.55)--(8.5,-0.55);
+\node[anchor=north,align=center] at (5.9,-0.65) {Decoded-frame sample range, if returned\\verify payload bytes against the oracle};
+\node[anchor=north,align=center,text width=13cm] at (7,-1.65)
+ {A visible signal is not a decoded frame. Noise estimates require declared bandwidth,\\
+ consistent settings and estimator validity. No numerical SNR is asserted here.};
+\end{tikzpicture}
