@@ -85,7 +85,7 @@ impl ModemPort for BenchPort {
             io::Error::new(io::ErrorKind::NotConnected, "bench session is disconnected")
         })?;
         // Reserve delivery space before accepting bytes into the runtime. The
-        // DATA stream also drains this queue, so waiting here would deadlock.
+        // DATA stream drains queued output before calling us again.
         let delivery = self.received.try_reserve().map_err(io::Error::other)?;
         let before = pair.caller.snapshot().await.map_err(debug_error)?;
         if before.state != State::Connected {

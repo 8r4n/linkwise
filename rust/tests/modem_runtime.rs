@@ -1,8 +1,8 @@
 use linkwise::modem::{
     arq::Answer,
     runtime::{
-        Admission, Error, Failure, Limits, Runtime, State, TransmissionId,
-        device::{DeviceEvent, ExecutionDevice, SimulatedDevice, Transmission},
+        Admission, Error, Event, Failure, Limits, Runtime, State, TransmissionId,
+        device::{DeviceError, DeviceEvent, ExecutionDevice, SimulatedDevice, Transmission},
     },
 };
 use std::time::Duration;
@@ -356,6 +356,84 @@ fn handshake_receive_deadline_does_not_report_connected() {
     );
     assert_eq!(m.snapshot().state, State::Faulted);
     assert_eq!(m.snapshot().peer, None);
+}
+
+#[test]
+fn polled_final_release_obeys_admission_deadlines() {
+    #[derive(Default)]
+    struct PollingRelease(SimulatedDevice);
+
+    impl ExecutionDevice for PollingRelease {
+        fn start(
+            &mut self,
+            id: TransmissionId,
+            tx: Transmission,
+            deadline: Duration,
+        ) -> Result<(), DeviceError> {
+            self.0.start(id, tx, deadline)
+        }
+
+        fn release(&mut self, id: TransmissionId) -> Result<(), DeviceError> {
+            self.0.release(id)
+        }
+
+        fn poll(&mut self, now: Duration) -> Option<DeviceEvent> {
+            self.0.confirm_release().or_else(|| self.0.poll(now))
+        }
+    }
+
+    for (lease, timeout, now, failure) in [
+        (2, 100, 1, None),
+        (2, 100, 2, Some(Failure::LeaseExpired)),
+        (100, 2, 2, Some(Failure::SessionExpired)),
+    ] {
+        let mut caller = Runtime::new(
+            Limits {
+                session_timeout: secs(timeout),
+                ..Limits::default()
+            },
+            PollingRelease::default(),
+        )
+        .unwrap();
+        let mut callee = Modem::new(Limits::default(), SimulatedDevice::default()).unwrap();
+        let mut request = admission(Uuid::new_v4(), "W9SSJ", Some("W1AW"));
+        request.lease_expires = secs(lease);
+        let caller_session = caller.begin(ZERO, request).unwrap();
+        let callee_session = callee
+            .begin(ZERO, admission(Uuid::new_v4(), "W1AW", None))
+            .unwrap();
+
+        for _ in 0..2 {
+            let (_, Transmission::Establishment(burst)) =
+                caller.device_mut().0.take_transmission().unwrap()
+            else {
+                panic!("caller handshake")
+            };
+            let presented = caller.device().0.presented().unwrap();
+            caller.device_event(ZERO, presented).unwrap();
+            caller.tick(ZERO).unwrap();
+            callee
+                .receive_handshake(ZERO, callee_session, burst)
+                .unwrap();
+            let (_, Transmission::Establishment(burst)) = finish(&mut callee, ZERO) else {
+                panic!("callee handshake")
+            };
+            caller
+                .receive_handshake(ZERO, caller_session, burst)
+                .unwrap();
+        }
+
+        let presented = caller.device().0.presented().unwrap();
+        caller.device_event(ZERO, presented).unwrap();
+        assert!(caller.snapshot().release_pending);
+        caller.tick(secs(now)).unwrap();
+        let connected = std::iter::from_fn(|| caller.pop_event())
+            .any(|event| matches!(event, Event::State(State::Connected)));
+        assert_eq!(connected, failure.is_none());
+        assert_eq!(caller.snapshot().failure, failure);
+        assert!(!caller.snapshot().release_pending);
+        assert!(!caller.device().0.is_keyed());
+    }
 }
 
 #[test]

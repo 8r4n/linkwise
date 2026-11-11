@@ -144,16 +144,19 @@ where
     let mut receiving = true;
     loop {
         tokio::select! {
-            count = read.read(&mut input) => {
-                let count = count?;
-                if count == 0 { return Ok(()); }
-                port.data(&input[..count]).await?;
-            }
+            // Drain queued output before accepting more input from a backend
+            // that reserves bounded delivery space while handling each block.
+            biased;
             bytes = received.recv(), if receiving => {
                 match bytes {
                     Some(bytes) => write_bytes(&mut write, &bytes, write_timeout).await?,
                     None => receiving = false,
                 }
+            }
+            count = read.read(&mut input) => {
+                let count = count?;
+                if count == 0 { return Ok(()); }
+                port.data(&input[..count]).await?;
             }
         }
     }

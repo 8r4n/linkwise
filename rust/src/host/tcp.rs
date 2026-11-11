@@ -192,6 +192,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sustained_data_drains_a_bounded_echo_queue() {
+        timeout(Duration::from_secs(5), async {
+            let address = SocketAddr::from(([127, 0, 0, 1], 0));
+            let mut listener = Listener::bind(address, address, Duration::from_secs(1))
+                .await
+                .unwrap();
+            let (control_address, data_address) = listener.addresses().unwrap();
+            let (_notice, notices) = mpsc::channel(1);
+            let (echo, received) = mpsc::channel(1);
+            let server = tokio::spawn(async move {
+                let port = Port {
+                    echo,
+                    closed: Mutex::new(Vec::new()),
+                };
+                listener.serve_one(&port, notices, received).await
+            });
+
+            let _control = TcpStream::connect(control_address).await.unwrap();
+            let data = TcpStream::connect(data_address).await.unwrap();
+            let (mut reader, mut writer) = data.into_split();
+            let payload: Vec<_> = (0..256 * 1024).map(|i| (i % 251) as u8).collect();
+            let mut reply = vec![0; payload.len()];
+            tokio::try_join!(writer.write_all(&payload), reader.read_exact(&mut reply)).unwrap();
+            assert_eq!(reply, payload);
+            drop((reader, writer));
+            server.await.unwrap().unwrap();
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
     async fn incomplete_pair_expires_without_entering_the_backend() {
         let address = SocketAddr::from(([127, 0, 0, 1], 0));
         let listener = Listener::bind(address, address, Duration::from_millis(25))

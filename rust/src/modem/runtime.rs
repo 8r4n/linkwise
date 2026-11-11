@@ -476,11 +476,24 @@ impl<D: ExecutionDevice> Runtime<D> {
             return Err(Error::StaleTime);
         }
         self.now = now;
-        if let Some(event) = self.device.poll(now) {
+        let completion = match self.device.poll(now) {
+            Some(event @ (DeviceEvent::WatchdogReleased(_) | DeviceEvent::Failed(_))) => {
+                self.apply_device(event);
+                None
+            }
+            completion => completion,
+        };
+        self.check_deadlines(now);
+        // A release still clears device ownership after a deadline fault.
+        if let Some(event) = completion {
             self.apply_device(event);
         }
+        Ok(())
+    }
+
+    fn check_deadlines(&mut self, now: Duration) {
         if !self.live() {
-            return Ok(());
+            return;
         }
         if now >= self.lease_expires {
             self.fault(Failure::LeaseExpired);
@@ -498,7 +511,6 @@ impl<D: ExecutionDevice> Runtime<D> {
         } else if let Some(action) = self.sender.tick(now) {
             self.arq_action(action);
         }
-        Ok(())
     }
 
     fn apply_device(&mut self, event: DeviceEvent) {
