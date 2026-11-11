@@ -17,7 +17,7 @@ From the repository root:
 # Regenerate LaTeX after editing the Markdown plan.
 python3 tools/build-kiwisdr-test-plan.py
 
-# Regenerate and render the PDF; requires latexmk/pdflatex, PlantUML, Tectonic and Python PyMuPDF.
+# Regenerate and render the PDF; requires PlantUML, Tectonic and Python PyMuPDF.
 python3 tools/build-kiwisdr-test-plan.py --build
 ```
 
@@ -30,7 +30,7 @@ measurement flow is rendered as a PlantUML vector figure in the LaTeX edition.
 Five PlantUML sources live under `diagrams/`; two TikZ schematics live under
 `figures/`. The build uses installed PlantUML/Tectonic tools or the whitepaper
 workspace-local fallback tools, with the same `LINKWISE_PLANTUML`,
-`LINKWISE_TECTONIC` and `LINKWISE_JAVA_HOME` overrides.
+`LINKWISE_TECTONIC` and `LINKWISE_JAVA_HOME` overrides. The main PDF uses latexmk/pdflatex when available and Tectonic otherwise.
 
 **Layout rule:** all figures, diagrams and tables (including revision history)
 use dedicated landscape pages. Both width and height are bounded, with reserved
@@ -38,8 +38,9 @@ caption space. Keep text legible; restructure any crowded source. Do not add
 portrait tables or inline diagrams to the publication edition. The title-page
 metadata is prose, rather than a portrait table.
 
-Keep results and readiness status explicit. This is a plan, not an executed test
-report, receiver reservation, station authorization, or modem qualification claim.
+The plan records the exploratory live receive result and the regression
+expectations. The controlled RF campaign still requires a readiness review and
+a scheduled transmitter and receiver window.
 
 ## Julian transmitter and candidate map
 
