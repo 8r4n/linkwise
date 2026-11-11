@@ -53,43 +53,7 @@ impl AudioHandshake {
         audio: &[f32],
         candidate: Range<usize>,
     ) -> Option<Action> {
-        if candidate.start >= candidate.end
-            || candidate.end > audio.len()
-            || audio.iter().any(|sample| !sample.is_finite())
-        {
-            return None;
-        }
-        let burst = match self.protocol.expected()? {
-            Expected::Request(called) => {
-                Message::ConnectRequest(Bandwidth::Hz500).find(called, audio, candidate.start)?;
-                Burst::Request {
-                    called: called.into(),
-                }
-            }
-            Expected::Response(called) => {
-                Message::ConnectResponse(Bandwidth::Hz500).find(called, audio, candidate.start)?;
-                Burst::Response {
-                    called: called.into(),
-                }
-            }
-            Expected::Setup => {
-                let decoded = self.waveform.decode(audio, candidate)?;
-                Burst::Setup(LinkSetup::decode(Profile::Bw500, &decoded.frame)?)
-            }
-            Expected::ConnectedAck(caller) => {
-                control::find_connected_ack(Bandwidth::Hz500, caller, audio, candidate.start)?;
-                Burst::ConnectedAck {
-                    caller: caller.into(),
-                }
-            }
-            Expected::Confirm(called) => {
-                Message::Bw500Confirm.find(called, audio, candidate.start)?;
-                Burst::Confirm {
-                    called: called.into(),
-                    level: 4,
-                }
-            }
-        };
+        let burst = decode_burst(&self.waveform, self.protocol.expected()?, audio, candidate)?;
         self.handle(now, Event::Received(burst))
     }
 
@@ -98,25 +62,7 @@ impl AudioHandshake {
             handshake::Action::Established(session) => Action::Established(session),
             handshake::Action::Failed(failure) => Action::Failed(failure),
             handshake::Action::Transmit { token, burst } => {
-                let audio = match burst {
-                    Burst::Request { called } => {
-                        Message::ConnectRequest(Bandwidth::Hz500).synthesize(&called)
-                    }
-                    Burst::Response { called } => {
-                        Message::ConnectResponse(Bandwidth::Hz500).synthesize(&called)
-                    }
-                    Burst::Setup(setup) => setup
-                        .encode(Profile::Bw500)
-                        .and_then(|frame| frame.try_into().ok())
-                        .and_then(|frame| self.waveform.synthesize(&frame)),
-                    Burst::ConnectedAck { caller } => {
-                        control::synthesize_connected_ack(Bandwidth::Hz500, &caller)
-                    }
-                    Burst::Confirm { called, level: 4 } => {
-                        Message::Bw500Confirm.synthesize(&called)
-                    }
-                    _ => None,
-                };
+                let audio = encode_burst(&self.waveform, &burst);
                 match audio {
                     Some(audio) => Action::Transmit { token, audio },
                     None => {
@@ -131,5 +77,66 @@ impl AudioHandshake {
                 }
             }
         })
+    }
+}
+
+pub(crate) fn decode_burst(
+    waveform: &Waveform,
+    expected: Expected<'_>,
+    audio: &[f32],
+    candidate: Range<usize>,
+) -> Option<Burst> {
+    if candidate.start >= candidate.end
+        || candidate.end > audio.len()
+        || audio.iter().any(|sample| !sample.is_finite())
+    {
+        return None;
+    }
+    Some(match expected {
+        Expected::Request(called) => {
+            Message::ConnectRequest(Bandwidth::Hz500).find(called, audio, candidate.start)?;
+            Burst::Request {
+                called: called.into(),
+            }
+        }
+        Expected::Response(called) => {
+            Message::ConnectResponse(Bandwidth::Hz500).find(called, audio, candidate.start)?;
+            Burst::Response {
+                called: called.into(),
+            }
+        }
+        Expected::Setup => {
+            let decoded = waveform.decode(audio, candidate)?;
+            Burst::Setup(LinkSetup::decode(Profile::Bw500, &decoded.frame)?)
+        }
+        Expected::ConnectedAck(caller) => {
+            control::find_connected_ack(Bandwidth::Hz500, caller, audio, candidate.start)?;
+            Burst::ConnectedAck {
+                caller: caller.into(),
+            }
+        }
+        Expected::Confirm(called) => {
+            Message::Bw500Confirm.find(called, audio, candidate.start)?;
+            Burst::Confirm {
+                called: called.into(),
+                level: 4,
+            }
+        }
+    })
+}
+
+pub(crate) fn encode_burst(waveform: &Waveform, burst: &Burst) -> Option<Vec<f32>> {
+    match burst {
+        Burst::Request { called } => Message::ConnectRequest(Bandwidth::Hz500).synthesize(called),
+        Burst::Response { called } => Message::ConnectResponse(Bandwidth::Hz500).synthesize(called),
+        Burst::Setup(setup) => setup
+            .encode(Profile::Bw500)
+            .and_then(|frame| frame.try_into().ok())
+            .and_then(|frame| waveform.synthesize(&frame)),
+        Burst::ConnectedAck { caller } => {
+            control::synthesize_connected_ack(Bandwidth::Hz500, caller)
+        }
+        Burst::Confirm { called, level: 4 } => Message::Bw500Confirm.synthesize(called),
+        _ => None,
     }
 }

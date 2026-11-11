@@ -134,3 +134,22 @@ fn level4_streaming_receiver_preserves_data_and_rejects_corrupted_audio() {
     corrupted[20_000..160_000].fill(0.0);
     assert!(waveform.decode(&corrupted, 4320..corrupted.len()).is_none());
 }
+
+#[test]
+#[ignore = "requires the verified external level-4 measurement profile"]
+fn two_runtimes_exchange_audio_and_recover_erased_answer_and_data() {
+    use linkwise::modem::runtime::audio_loopback;
+
+    let profile =
+        std::fs::read_to_string(std::env::var("LINKWISE_BW500_PROFILE").unwrap()).unwrap();
+    let waveform = Waveform::from_json(&profile).unwrap();
+    let outgoing: Vec<u8> = (0..79).map(|n| (n * 19) as u8).collect();
+    let incoming: Vec<u8> = (0..70).map(|n| (255 - n * 11) as u8).collect();
+    let report = audio_loopback::run(&waveform, &outgoing, &incoming).unwrap();
+    assert_eq!(report.responder_received, outgoing);
+    assert_eq!(report.caller_received, incoming);
+    assert_eq!(report.caller_data_attempts, 3);
+    assert_eq!(report.responder_data_attempts, 4);
+    assert_eq!(report.state_queries, 2);
+    assert_eq!(report.duplicate_frames, 2);
+}

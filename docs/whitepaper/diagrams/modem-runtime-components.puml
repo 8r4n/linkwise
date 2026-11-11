@@ -2,6 +2,7 @@
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
+skinparam Padding 8
 skinparam defaultFontName "Latin Modern Roman"
 skinparam defaultFontSize 10
 skinparam ArrowColor #2A9D8F
@@ -9,27 +10,35 @@ skinparam packageStyle rectangle
 skinparam nodesep 20
 skinparam ranksep 25
 top to bottom direction
-rectangle "ChatGPT Agent / Codex\nstrategic orchestration" as AI
-rectangle "MCP inbound adapter\nidentity / schema / results" as MCP
-rectangle "Station execution service\nprepare / grant / lease / session" as Station
+rectangle "ChatGPT Agent / Codex\noptional strategic orchestration" as AI
+rectangle "MCP inbound adapter\nmanagement / observations" as MCP
+rectangle "Traditional client\nExpress / Pat" as Client
+rectangle "Host TCP adapter\nexclusive socket pair\ncommands + binary DATA" as Host
+rectangle "Station execution service\nstandalone / managed admission\npolicy / lease / operation" as Station
 AI -right-> MCP
-MCP -right-> Station
+Client -right-> Host
+MCP --> Station : prepare / arm reservation
+Host --> Station : CONNECT / attach / channel loss
 rectangle "ModemSessionPort\nbackend lifecycle interface" as Port
 rectangle "PTT arbiter + watchdog\nsole software key-up path" as PTT
 Station --> Port : bounded lifecycle
 Station --> PTT : session authority
 package "Backend adapters -- proposed interchangeability" {
- rectangle "Native Rust adapter\nintegration incomplete" as Native
+ rectangle "Native Rust adapter\none session actor\nphase / tokens / timers\nbyte accounting" as Native
  rectangle "External VARA adapter\nrelease-qualified interface" as Vara
  rectangle "Simulator adapter\nsame domain contract" as Sim
 }
 Port <|.. Native
 Port <|.. Vara
 Port <|.. Sim
+Host ..> Native : host::ModemPort data/events\nbound to admitted owner
+rectangle "Audio execution adapter\ncapture / presentation\ncancellation / epochs\nsimulation before native OS" as Audio
+Native ..> Audio : bounded execution
+Native ..> PTT : permitted keying / release
 package "Native components -- implemented prototypes" {
- rectangle "Capture + receive worker\nburst / acquisition / FEC / CRC" as RX
- rectangle "AudioHandshake\nphase-specific audio exchange" as HS
- rectangle "DATA codec + ARQ sender\nwire integration incomplete" as Link
+ rectangle "Capture + receive worker\nacquisition / FEC / CRC" as RX
+ rectangle "AudioHandshake\nphased audio exchange" as HS
+ rectangle "DATA codec + ARQ sender\nwire integration pending" as Link
  RX -[hidden]right-> HS
  HS -[hidden]right-> Link
 }
@@ -37,7 +46,8 @@ Native ..> RX : assemble
 Native ..> HS : assemble
 Native ..> Link : assemble
 note bottom of Link
- Runtime assembly and live keying remain proposed.
- Codec components do not form an operational service.
+ Dotted native integration remains proposed.
+ Shared runtime first; OS packaging follows.
+ Traditional-client bytes stay outside MCP.
 end note
 @enduml

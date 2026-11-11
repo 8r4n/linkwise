@@ -186,16 +186,19 @@ to agree for a session to work.
 VARA HF is an existing third-party HF modem used with Winlink and other
 applications. The Winlink project distributes VARA products but describes
 them as third-party software, not software managed by the Winlink team [22].
-In the proposed deployment, VARA remains an external modem process. Winlink
+The external-VARA deployment uses a separate modem process. Winlink
 setup material identifies local TCP command/data interfaces for VARA HF
 (commonly ports 8300/8301, subject to local configuration) [29]. A Linkwise
 adapter could use that client-facing boundary to coordinate modem lifecycle
 and session state, route audio, and request PTT through the arbiter. The exact
 commands, status fields, licensing, and automation behavior must be verified
 against the selected VARA release before they are treated as stable
-contracts. Linkwise does not claim to implement or replace
-the VARA waveform. A future native modem is a separate research and
-interoperability effort.
+contracts. The native Rust modem is a separate research and interoperability
+effort with implemented DSP/protocol components but no qualified operational
+service. Section~\ref{sec:modem-shared-runtime} defines its proposed shared
+runtime and traditional-client interface. Both backend choices use the same
+station execution and PTT authority; only one owns a radio session. Host TCP
+compatibility and on-air compatibility require separate qualification.
 
 The initial target transceiver is the Icom IC-7200. Its USB connection
 provides CI-V computer control and audio transfer, so the radio adapter can
@@ -1021,7 +1024,11 @@ verifies readback, and returns a short-lived handle bound to that state.
 Authorization is a separate local deterministic policy decision, bounded by
 candidate, configuration, service scope, power, and expiry. Starting a
 session consumes both handles; a prior MCP read is never authorization. MCP
-discovery/invocation does not itself grant authority [5].
+discovery/invocation does not itself grant authority [5]. For host-mediated
+native sessions, accepted start records the operation and arms the expected
+client reservation before invoking the client. Its matching \texttt{CONNECT}
+starts that same attempt, subject to fresh validation and attachment expiry
+(Section~\ref{sec:modem-client-admission}).
 
 \subsection{PTT and transmit-arbitration adapter}
 PTT is separate from CAT configuration because it is a safety-critical
@@ -1138,8 +1145,8 @@ external command/status behavior must be qualified against the selected
 release before its fields become stable MCP contracts. For VARA, Linkwise
 must consume a qualified explicit status/event from the selected release and
 preserve its native code and semantics; it must not infer connection from
-audio, RF energy, or a locally requested connect. A future native modem uses
-the same domain event contract, with its distinct implementation version.
+audio, RF energy, or a locally requested connect. The proposed native runtime
+uses the same domain event contract, with its distinct implementation version.
 The evidence layers are intentionally separate: RF activity is a DSP
 observation; modem link-up is a protocol connection; Winlink session and
 transfer completion come from the Winlink client; CMS acceptance or recipient
@@ -1261,7 +1268,11 @@ safety acceptance.
   \item \textbf{Candidate analysis:} source-normalized evidence, ranking/explanations, simulated test fixtures.
   \item \textbf{Preparation:} exclusive lease, configuration writes, readback, and mismatch handling; no transmission.
   \item \textbf{Session supervision:} supported Winlink client adapter, separate authorization, watchdog, timeouts, abort and recovery.
-  \item \textbf{Modem interoperability:} build waveform analyzer and receivers/transmitter from verified captures; test against unmodified VARA in controlled conditions.
+  \item \textbf{Modem interoperability:} levels 1--3 pilot acquisition is implemented.
+        Receive evidence includes one live KiwiSDR frame and three published off-air
+        frames. Remaining gates include measured live frame recovery, production DATA
+        sequencing and recovery, native audio/PTT, and bidirectional testing with
+        unmodified VARA and a named Winlink client.
   \item \textbf{Adaptive operation:} learn from historical outcomes and enable only bounded automation that has passed station-specific review.
 \end{enumerate}
 

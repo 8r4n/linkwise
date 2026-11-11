@@ -128,28 +128,88 @@ fn keyed_stream(called: &str, seed_offset: u32, preadvance: u32) -> Option<Rando
 /// Builds the eleven-symbol response to link setup, keyed to the caller.
 /// Both tones of each symbol are returned in ascending bin order.
 pub fn connected_ack_tones(bandwidth: Bandwidth, caller: &str) -> Option<[[u8; 2]; 11]> {
+    let tail = answer_tail(bandwidth, caller, 1080, 0)?;
+    let mut pairs = [[0; 2]; 11];
+    pairs[..4].copy_from_slice(&[[64, 67], [56, 74], [64, 69], [68, 78]]);
+    pairs[4..].copy_from_slice(&tail);
+    Some(pairs)
+}
+
+fn answer_tail(bandwidth: Bandwidth, key: &str, seed: u32, frame: usize) -> Option<[[u8; 2]; 7]> {
     let (base, coarse_bins, alternate) = match bandwidth {
         Bandwidth::Hz500 => (50, 2, false),
         Bandwidth::Hz2300 => (29, 5, true),
         Bandwidth::Hz2750 => (22, 6, true),
     };
-    let mut random = keyed_stream(caller, 1080, 1)?;
-    let mut pairs = [[0; 2]; 11];
-    pairs[..4].copy_from_slice(&[[64, 67], [56, 74], [64, 69], [68, 78]]);
-    for (index, pair) in pairs[4..].iter_mut().enumerate() {
-        let first = random.draw(coarse_bins);
-        let mut second = random.draw(coarse_bins);
-        while second == first {
-            second = random.draw(coarse_bins);
+    let mut random = keyed_stream(key, seed, 1)?;
+    let mut pairs = [[0; 2]; 7];
+    for _ in 0..=frame {
+        for (index, pair) in pairs.iter_mut().enumerate() {
+            let first = random.draw(coarse_bins);
+            let mut second = random.draw(coarse_bins);
+            while second == first {
+                second = random.draw(coarse_bins);
+            }
+            let parity = usize::from(alternate && index % 2 == 0);
+            *pair = [
+                (base + parity + 14 * first + 2 * random.draw(7)) as u8,
+                (base + parity + 14 * second + 2 * random.draw(7)) as u8,
+            ];
+            pair.sort_unstable();
         }
-        let parity = usize::from(alternate && index % 2 == 0);
-        *pair = [
-            (base + parity + 14 * first + 2 * random.draw(7)) as u8,
-            (base + parity + 14 * second + 2 * random.draw(7)) as u8,
-        ];
-        pair.sort_unstable();
     }
     Some(pairs)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bw500IntermediateReply {
+    SameLevel,
+    IncreaseOne,
+    IncreaseTwo,
+    IncreaseThree,
+    IncreaseFour,
+    DecreaseOne,
+    NotDelivered,
+}
+
+impl Bw500IntermediateReply {
+    /// Called-station keyed intermediate answer. The role identifies the
+    /// station sending the answer, independently of which station sent DATA.
+    pub fn tones(self, called: &str, responder_sends: bool) -> Option<[[u8; 2]; 8]> {
+        let frame = match self {
+            Self::SameLevel => 0,
+            Self::IncreaseOne => 6,
+            Self::IncreaseTwo => 4,
+            Self::IncreaseThree => 7,
+            Self::IncreaseFour => 8,
+            Self::DecreaseOne => 5,
+            Self::NotDelivered => 1,
+        };
+        let seed = if responder_sends { 290 } else { 62 };
+        let tail = answer_tail(Bandwidth::Hz500, called, seed, frame)?;
+        let mut pairs = [[64, 67]; 8];
+        pairs[1..].copy_from_slice(&tail);
+        Some(pairs)
+    }
+
+    pub fn synthesize(self, called: &str, responder_sends: bool) -> Option<Vec<f32>> {
+        Some(render(self.tones(called, responder_sends)?))
+    }
+
+    /// Match an expected reply in a caller-supplied receive window.
+    pub fn find(
+        self,
+        called: &str,
+        responder_sends: bool,
+        audio: &[f32],
+        estimated_start: usize,
+    ) -> Option<usize> {
+        find_pairs(
+            &self.tones(called, responder_sends)?,
+            audio,
+            estimated_start,
+        )
+    }
 }
 
 /// Renders the response to link setup at 48 kHz for offline bench work.
@@ -165,10 +225,18 @@ pub fn find_connected_ack(
     audio: &[f32],
     estimated_start: usize,
 ) -> Option<usize> {
-    let pairs = connected_ack_tones(bandwidth, caller)?;
+    find_pairs(
+        &connected_ack_tones(bandwidth, caller)?,
+        audio,
+        estimated_start,
+    )
+}
+
+fn find_pairs(pairs: &[[u8; 2]], audio: &[f32], estimated_start: usize) -> Option<usize> {
     let tones: Vec<_> = pairs
+        .iter()
         .map(|pair| pair.map(|bin| Tone::new(usize::from(bin), SYMBOL_SAMPLES)))
-        .into();
+        .collect();
     let length = tones.len() * SYMBOL_SAMPLES;
     let last = audio.len().checked_sub(length)?;
     let first = estimated_start.saturating_sub(SYMBOL_SAMPLES);
@@ -223,6 +291,52 @@ fn render<const N: usize>(symbols: impl IntoIterator<Item = [u8; N]>) -> Vec<f32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn matches_published_bw500_intermediate_answer_vectors() {
+        use Bw500IntermediateReply::{DecreaseOne, SameLevel};
+        assert_eq!(
+            SameLevel.tones("BBBB2", true).unwrap(),
+            [
+                [64, 67],
+                [60, 64],
+                [52, 68],
+                [56, 64],
+                [58, 70],
+                [54, 68],
+                [60, 74],
+                [50, 70],
+            ]
+        );
+        assert_eq!(
+            SameLevel.tones("W1AW", false).unwrap(),
+            [
+                [64, 67],
+                [50, 66],
+                [60, 64],
+                [50, 68],
+                [58, 76],
+                [52, 76],
+                [58, 76],
+                [60, 68],
+            ]
+        );
+        let down = [
+            [64, 67],
+            [62, 76],
+            [58, 76],
+            [50, 68],
+            [50, 72],
+            [60, 74],
+            [50, 68],
+            [52, 76],
+        ];
+        assert_eq!(DecreaseOne.tones("W1AW", false).unwrap(), down);
+        let audio = render(down);
+        assert!(DecreaseOne.find("W1AW", false, &audio, 0).is_some());
+        assert!(SameLevel.find("W1AW", false, &audio, 0).is_none());
+        assert!(DecreaseOne.find("W1AW", true, &audio, 0).is_none());
+    }
 
     #[test]
     fn matches_two_stock_bw500_connected_ack_vectors() {

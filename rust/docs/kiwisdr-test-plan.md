@@ -1,8 +1,9 @@
 # Draft: Linkwise modem testing with the KiwiSDR network
 
 Plan ID: LW-MODEM-KIWI-001  
-Revision: 0.7, 9 November 2026  
-Status: proposed experiment; eleven candidate sites shortlisted from directory data; no recording windows agreed, recordings acquired, or RF tests performed under this plan.
+Revision: 0.8, 10 November 2026
+
+Status: one live receive frame verified in exploratory monitoring. The controlled campaign with known transmitted payloads remains unscheduled.
 
 Presentation rule: all figures, tables, and diagrams in the LaTeX/PDF edition
 use dedicated landscape pages, scaled within both page dimensions with room for
@@ -16,12 +17,15 @@ transmissions, measure one-way frame recovery under actual HF conditions, and
 build a reproducible decoder regression corpus. Test the native modem first;
 agent chat, global routing, and message-service behavior are outside this plan.
 
-A successful observation means that a specified receiver captured an actual RF
-transmission and Linkwise recovered the expected frame bytes. It does not prove
-bidirectional connectivity, stock VARA acceptance, a working ARQ session, remote
-message receipt, or agent processing. Kiwi receivers are observers, not modem
-peers issuing acknowledgments. Any later stock-decoder comparison is a separate
-experiment with a qualified reference instance.
+The controlled campaign scores a receiver observation when a known RF
+transmission overlaps a valid capture and Linkwise recovers the expected frame
+bytes. Exploratory monitoring verified one CRC-valid BW500 level-2 frame from
+the full Lake Merwin KiwiSDR recording on 7.105 MHz USB at about 5:25 p.m. PST
+on 10 November 2026. Six filter settings reproduced that same frame. The
+transmitter-side frame count and payload were unavailable, so this result
+establishes receive capability for one observed frame. The controlled trial
+will measure recovery rates with a known denominator. Two-way VARA and Winlink
+qualification require separate station tests. [Lab notes](../../lab-notes/lab-notes.pdf)
 
 Use three distinct evidence labels:
 
@@ -33,10 +37,11 @@ Use three distinct evidence labels:
 ## 2. Current implementation and prerequisites
 
 The [modem guide](modem.md) is the implementation baseline. The current decoder
-accepts 48 kHz mono PCM16 or float32 WAVs. The receiver has a fixed 1% full-scale
-RMS acquisition threshold, no AGC or frequency/sample-clock tracking, and bounded
-30-second history. Level 4 requires an external measurement profile and currently
-handles one frame per burst. Preserve these limitations in every report.
+accepts 48 kHz mono PCM16 or float32 WAVs. Levels 1–3 use a rolling pilot
+search with 0 and ±12 Hz frequency hypotheses. Level 4 uses the fixed 1% RMS
+energy gate and requires an external measurement profile. It handles one frame
+per burst. The audio history is capped at 30 seconds, and the receiver does
+not track sample-clock drift. Preserve these limits in every report.
 
 Available now:
 
@@ -215,7 +220,7 @@ the detector's candidate; do not decode an arbitrarily truncated burst.
 | --- | --- | --- | --- |
 | K0: offline qualification | Known clean waveforms, round-trip conversion, sample gap controls, off-target/background controls | Levels 1–3; no RF or public slots required | Qualify tooling and the exact-byte oracle |
 | K1: receiver preflight | Background plus one scheduled known level-1 burst | One cooperating receiver and one valid observation window | Verify tuning, capture continuity, and acquisition scale |
-| K2: pilot | Interleaved levels 1–3, fixed station power/configuration | 10 bursts per level, up to three simultaneous receivers | Establish the first one-way recovery dataset |
+| K2: pilot | Interleaved levels 1–3, fixed station power/configuration | 10 bursts per level, up to three simultaneous receivers | Measure one-way recovery against known transmissions |
 | K3: temporal replication | Repeat K2 in distinct contact windows | At least three sessions; record dates and UTC separately | Expose time/path variation without pooling it away |
 | K4: decoder comparison | Identical retained K2/K3 captures replayed through baseline and candidate commits | All valid captures; paired comparison | Isolate software changes from HF variation |
 | K5: diagnostic extension | One variable at a time: bounded offset, power setting, AGC profile, or optional level 4 | Separate predeclared blocks after K0–K2 | Characterize specific failure modes |
@@ -249,8 +254,8 @@ transmissions do not experience identical channels.
    before looking at decoder success. Preserve all exclusions with reasons.
 7. Derive 48 kHz mono analysis WAVs with a pinned high-quality resampler and,
    for IQ, a pinned demodulation pipeline. Record delay and original sample/time
-   mapping. Segment only at known quiet boundaries, keeping guards; never cut
-   or splice across gaps to fabricate continuity.
+   mapping. Keep each eligible continuous interval intact, including background and
+   guards. Split at actual discontinuities and retain their source ranges.
 8. Decode both baseline and candidate versions and compare exact frame bytes.
    Generate the report, archive required artifacts, and retain failures as well
    as successful examples. Publish only material covered by the capture terms.
@@ -281,12 +286,38 @@ Run two explicitly different decoder profiles on each eligible capture:
 
 1. **As received:** fixed conversion scale; no per-burst amplitude normalization,
    denoising, carrier correction, or timing correction beyond the declared import.
-   This exposes the current fixed acquisition threshold's practical behavior.
+   This exposes acquisition behavior on the original capture scale.
 2. **Diagnostic:** optional documented gain, frequency, or sample-rate correction.
    Save the transform and never mix these results into the as-received score.
 
 Converting an actual lower-rate recording to 48 kHz changes representation; it
 does not restore missing bandwidth or eliminate oscillator/sample-clock errors.
+
+### Regression replays before the next RF session
+
+Build Linkwise once and replay each full 48 kHz mono input using the existing
+`linkwise decode-wav` command. Preserve the IQ demodulation settings and
+resample at the recorded input rate before importing IQ. The decoder finds
+level-1--3 boundaries and its own frequency hypotheses. The regression
+supplies no frame windows or manual frequency correction.
+
+- **Lake Merwin live capture.** Expect exactly one level-2 frame from the full
+  7.105 MHz USB derivative. Check the 23-byte body hash in the evidence record.
+  The IQ center is 7.1065 MHz. Both 330 Hz and 1200 Hz baseband low-pass
+  derivatives are verified profiles.
+- **Published off-air exchange.** Replay the full slot 13 recording. Require
+  three frames in order, levels 2, 3, 2, with the recorded body hashes.
+- **Kiwi noise controls.** Require byte-exact recovery of each +6 dB stock
+  level-1 and level-2 injection. Require zero frames from the unmodified
+  Maui noise capture.
+
+Compare SHA-256 over decoded payload-field bytes followed by the one control
+byte. Check count and order as well as hashes. Report lost or added frames,
+duplicated frames, and truncated energy candidates. These are regression
+cases, separate from the frozen holdout and the live recovery denominator.
+The archived automatic acquisition JSON and preprocessing evidence are in the
+local follow-up directory listed in the lab notes.
+
 
 ## 8. Metrics and scoring
 
@@ -300,6 +331,9 @@ does not restore missing bandwidth or eliminate oscillator/sample-clock errors.
 | Offline decode cost | Wall/CPU time and peak memory per audio duration, fixed machine/configuration | New harness; exclude RF pacing/network wait |
 | Frequency offset / fading | Estimated against the known signal, with method and uncertainty | Later instrumentation; not currently exported as qualified metrics |
 | SNR | Declared in-band signal/noise estimate with bandwidth, method, and uncertainty | Separate estimator; not a raw S-meter comparison |
+
+Report the number of confirmed complete transmissions, eligible captured
+observations, and unique exact recoveries separately.
 
 Missing expected frames count as failures when capture and transmission evidence
 are valid, even if acquisition finds nothing. Count a repeated decoded frame
@@ -333,6 +367,8 @@ Pre-register any change before collecting the evaluation dataset.
   conversion with identical expected bytes; repeated replay produces identical
   frame results; seeded capture gaps are identified and not silently repaired;
   metadata/hashes and original-to-derived sample mapping are complete.
+  The full-recording regression cases in section 7 must also meet their exact
+  frame-count, order, and hash expectations.
 - **K1 capture gate:** one correctly tuned, contiguous observation includes its
   full known RF burst and guards, with local transmission confirmation and
   usable settings evidence. A failed decode can still be a valid diagnostic
@@ -651,9 +687,10 @@ build configuration. Before F03, assign the actual capture path with `export KIW
 The commands below are for **demodulated mono audio only**;
 never downmix an IQ recording as though it were audio. `KIWI_AUDIO_WAV` is the
 actual capture filename from E01. `KIWI_START_SAMPLE` and `KIWI_END_SAMPLE` are
-reviewed indices at the original sample rate, covering one complete burst and
-guards inside a continuous eligible interval. They are not guessed from network
-arrival times. Conversion does not establish continuity or correct fading.
+reviewed start and end indices at the original sample rate for a complete
+continuous eligible interval, including background and guards. For a fully
+continuous capture, use zero and the original sample count. Use source sample
+indices rather than network arrival times. Conversion preserves sample order.
 
 | Import step | Exact command / action | Expected result | Evidence / disposition |
 | --- | --- | --- | --- |
@@ -664,12 +701,12 @@ arrival times. Conversion does not establish continuity or correct fading.
 | Conversion step | Exact command / action | Expected result | Evidence / disposition |
 | --- | --- | --- | --- |
 | F04 | `mkdir "$KIWI_RUN_DIR/$KIWI_NODE_ID/derived"` | New derivative directory created. | Existing evidence directory must not be overwritten. |
-| F05 | `ffmpeg -nostdin -n -i "$KIWI_AUDIO_WAV" -af "atrim=start_sample=$KIWI_START_SAMPLE:end_sample=$KIWI_END_SAMPLE,asetpts=PTS-STARTPTS,aresample=48000:resampler=soxr:precision=28" -ac 1 -c:a pcm_s16le "$KIWI_RUN_DIR/$KIWI_NODE_ID/derived/burst.wav"` | New 48 kHz mono PCM16 WAV with declared trimming/resampling only. Original stays unchanged. | Save source indices, filter recipe and resampler delay/mapping evidence. No gain normalization or gap interpolation permitted. |
-| F06 | `rust/target/debug/linkwise decode-wav "$KIWI_RUN_DIR/$KIWI_NODE_ID/derived/burst.wav" > "$KIWI_RUN_DIR/$KIWI_NODE_ID/decode.json"` | Valid JSON with observed frames, or an explicit decoder error retained. Zero recovered frames is a valid RF/decode miss when the observation is eligible. | Process exit 0 is not a pass; compare bytes in F07. |
+| F05 | `ffmpeg -nostdin -n -i "$KIWI_AUDIO_WAV" -af "atrim=start_sample=$KIWI_START_SAMPLE:end_sample=$KIWI_END_SAMPLE,asetpts=PTS-STARTPTS,aresample=48000:resampler=soxr:precision=28" -ac 1 -c:a pcm_s16le "$KIWI_RUN_DIR/$KIWI_NODE_ID/derived/capture-48k.wav"` | New 48 kHz mono PCM16 WAV for the continuous interval. Original stays unchanged. | Save the interval mapping and filter settings. Preserve noise and guards. |
+| F06 | `rust/target/debug/linkwise decode-wav "$KIWI_RUN_DIR/$KIWI_NODE_ID/derived/capture-48k.wav" > "$KIWI_RUN_DIR/$KIWI_NODE_ID/decode.json"` | Valid JSON with observed frames, or an explicit decoder error retained. Zero recovered frames is a valid RF/decode miss when the observation is eligible. | Compare count, order, and bytes in F07. Preserve truncated energy candidate counts. |
 
 | Result step | Exact command / action | Expected result | Evidence / disposition |
 | --- | --- | --- | --- |
-| F07 | MANUAL: compare every returned level, control and full payload hex with the independently identified transmitted burst in `stimuli/manifest.json`. | Exact match counts that expected identity once. Missing expected frame counts as a miss; duplicates/conflicts recorded separately. | Do not use the local-source `kiwisdr-bench.py verify` as an RF scorer; it verifies source files, not capture associations. |
+| F07 | MANUAL: map each decoded sample range to its original capture interval and confirmed transmit window. Compare level, control and full payload with `stimuli/manifest.json`. | Exact match counts that expected identity once. Missing expected frame counts as a miss; duplicates/conflicts recorded separately. | Do not use the local-source `kiwisdr-bench.py verify` as an RF scorer; it verifies source files, not capture associations. |
 | F08 | MANUAL: reconcile every planned receiver/burst with TX confirmation, eligibility, exact match/miss and exclusion reason. | Denominators include eligible undetected bursts; infrastructure failures remain visible separately. | Automated RF association and aggregate reporting are still backlog items. |
 | F09 | MANUAL: repeat F05–F08 on a frozen corpus with a separately built candidate decoder and identical conversion. | Paired gains/losses, mismatches and resource results retained by receiver, level and session. | No improvement claim without both versions and the frozen oracle. |
 

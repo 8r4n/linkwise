@@ -95,6 +95,12 @@ impl Sender {
         self.buffered
     }
 
+    /// Read-only retained payload, in send order; includes the outstanding
+    /// block. Inspection never retires, discards, or authorizes replay.
+    pub fn retained_blocks(&self) -> impl Iterator<Item = &[u8]> {
+        self.queue.iter().map(Vec::as_slice)
+    }
+
     pub fn start(&mut self, now: Duration) -> Option<Action> {
         if !self.advance(now) || !matches!(self.state, State::Ready) || self.queue.is_empty() {
             return None;

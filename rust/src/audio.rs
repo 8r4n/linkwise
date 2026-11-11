@@ -1,4 +1,7 @@
-//! Optional CPAL input capture. DSP runs on a worker, outside the callback.
+//! Optional CPAL capture and playback. DSP runs outside the callback.
+
+#[cfg(feature = "audio-device")]
+pub mod playback;
 
 #[cfg(feature = "audio-device")]
 pub mod device {

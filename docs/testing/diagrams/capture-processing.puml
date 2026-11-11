@@ -8,14 +8,14 @@ skinparam ArrowColor #216875
 skinparam packageStyle rectangle
 skinparam nodesep 20
 skinparam ranksep 24
-title Proposed capture processing: score raw and corrected profiles separately
+title Capture processing: score as-received and diagnostic profiles separately
 top to bottom direction
 rectangle "Original audio / IQ\nimmutable + hashed" as Original
 rectangle "Continuity / settings\n+ eligibility checks" as Check
 rectangle "Versioned demodulation\n+ resample to 48 kHz" as Import
 rectangle "As-received profile\nfixed conversion scale" as Raw
 rectangle "Diagnostic profile\nexplicit correction recipe" as Diagnostic
-rectangle "Baseline + candidate\nRust decoding" as Decode
+rectangle "Continuous replay\nBW500 pilot acquisition\nCRC validation" as Decode
 rectangle "Stratified report\npaired results + exclusions" as Report
 rectangle "Invalid capture intervals\nretain evidence + reasons" as Invalid
 Original --> Check
@@ -29,7 +29,8 @@ Decode --> Report : separate profile labels
 Invalid --> Report : separate denominator
 note bottom of Import
 Keep original-to-derived sample
-mapping and guards.
+mapping and guards. Replay the entire
+continuous eligible interval.
 Never interpolate a gap and call it a
 valid RF observation.
 GNSS/timing, SNR/amplitude and decode

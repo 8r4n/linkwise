@@ -15,6 +15,7 @@ It does not yet implement a complete VARA-compatible link or Winlink transport.
 | `modem::handshake` / `audio_handshake` | Establishment state machine and audio codec boundary; phase-specific peer-keyed matching | Two-role event tests and complete local synthesized-audio handshake through confirm; playback completion is supplied by the device owner |
 | `modem::arq` | Bounded stop-and-wait sender, missing-answer queries, decoded-NAK retries, watchdogs and retained unresolved bytes | Event-level tests; not bound to a live PHY/session |
 | `modem::data` | Uncompressed full/short DATA containers, caller-keyed trailers and CRC | Documented 200-byte delivery reconstruction, corruption/wrong-session rejection; changing full-frame fields remain caller-supplied |
+| `modem::runtime` / `runtime::device` | Single-owner establishment/ARQ runtime, bounded bytes/events, token-bound presentation/release, capture continuity, expiry and simulated watchdog | Deterministic integration tests at the validated-event boundary; foreground `linkwise-modemd --simulate`; no operational PHY or TCP listeners |
 | `api::CommandDecoder` / `host` | Bounded BW500/OFF command codec, command/notification stream transport, raw bidirectional DATA transport and channel-loss callbacks | Fragment/coalescing, resynchronization, binary byte preservation and EOF cleanup over duplex streams; operational modem backend not yet connected |
 | `modem::receiver` | Streaming 48 kHz mono level 1–3 reception, absolute sample positions, bounded history | Chunk invariance, history wrap, EOF, overflow, non-finite input and nonframe tests; reference WAV replay |
 | `audio::device` | Optional CPAL input, explicit device/channel, f32/i16/u16 conversion, bounded queue | Channel/conversion/overflow tests; built and enumerated input devices on macOS |
@@ -24,12 +25,22 @@ indicate peer identity, connection establishment, payload delivery, or Winlink
 message acceptance. DATA fields retain protocol padding and control bytes;
 application-message reassembly is not implemented.
 
-The energy detector uses a fixed 1% full-scale RMS threshold. It is intended for
-controlled audio and has no AGC, fading recovery, or frequency/sample-clock
-tracking. The level-4 implementation currently decodes one frame per burst and synthesizes no randomized acquisition lead. It does not implement carrier or sample-clock tracking. The receiver retains at most 30 seconds of audio. Candidates older
-than retained history are marked `truncated` and produce no decoded frames.
-WAV decoding reports an error for such candidates. Device capture fails on a
-queue overflow or device error rather than joining discontinuous samples.
+The WAV and device receive commands use a rolling pilot search for BW500
+levels 1–3. It checks every 128 samples, normalizes pilot scores against
+energy in the occupied band and guard bins, and tries frequency offsets of
+0 and ±12 Hz. Because the search spans the expected frame length, a short
+drop in energy does not split acquisition. CRC validation gates output and
+overlap suppression prevents the same frame from being emitted again as the
+search advances. The library opts in through
+`Receiver::with_pilot_acquisition()`.
+
+Level 4 still uses the fixed 1% RMS energy gate and decodes one frame per
+burst when its measurement profile is available. The audio history is
+bounded to 30 seconds. The WAV report counts overlong energy candidates in
+`truncated_energy_candidates` while retaining the independent pilot results.
+Neither acquisition path tracks sample-clock drift. A capture gap or
+device failure ends the stream.
+
 
 ## Planned remote RF observation
 
@@ -124,6 +135,65 @@ returning a synthesized waveform must not produce an operational-modem claim.
 The published layout notes explicitly leave the full DATA field's sequencing
 and some recovery behavior unfixed; the current DATA codec therefore takes that
 field as an input instead of inventing a rule.
+
+## TCP bench and native playback
+
+`linkwise-modemd --serve-bench W9SSJ` exercises the paired loopback TCP
+listener with an explicitly simulated peer. The optional CPAL output
+primitive provides timestamp estimates for a prepared burst on a named
+device and channel. See the [runtime guide](modem-runtime.md) for entry
+points and hardware qualification limits.
+
+`control::Bw500IntermediateReply` generates and matches the called-keyed
+eight-symbol reply family. Independent stock-derived vectors cover
+same-level answers from both roles and a caller-issued decrease-one
+answer. The NAK and other rate steps follow the published generator and
+still need independent vectors. These codecs are available for future
+session integration. The published frame notes are linked in the runtime
+guide.
+
+## Shared-core implementation plan (proposed)
+
+The first milestone is now implemented at the validated-event boundary:
+one serialized session owner, explicitly advanced monotonic time, bounded
+byte/event queues, and simulated device execution. Run `cargo run --locked
+--bin linkwise-modemd -- --simulate` from `rust/`. See the
+[runtime guide](modem-runtime.md) for APIs, evidence, and remaining work.
+The foreground simulation uses the clock-driven runner with simulated devices.
+
+The authoritative proposed contracts and exit criteria are in the
+[white paper modem chapter](../../docs/whitepaper/modem-software-architecture.tex)
+and [software design, section 3.6](../../docs/architecture/software-design.md).
+The dependency order is:
+
+1. Session states, typed events, operation/session/transmission tokens,
+   idempotent cleanup, finite budgets, and byte-accounting invariants.
+2. Simulated capture continuity, playback presentation/cancellation, PTT
+   assertion/release and turnaround. Inject faults and stale completions.
+3. Complete the first BW500, compression-off link profile: wire-qualified
+   handshake, packetization, DATA/reply/query, ARQ, duplicate handling,
+   turn/rate behavior, keepalive and disconnect. A codec's supported level
+   does not automatically become a supported session mode.
+4. Add loopback TCP command/data listeners, exclusive pairing in either
+   arrival order, attachment/stall timeouts, notifications and backpressure.
+   Qualify each target client's initialization and buffer semantics.
+5. Route standalone `CONNECT` and managed client reservations through the
+   same station admission, lease and authorization path. Managed `CONNECT`
+   consumes the reservation within the existing operation, once.
+6. Demonstrate bidirectional reference-peer and named Winlink-client transfers;
+   preserve command/audio/byte evidence and recovery results.
+
+Independent reference measurements run alongside these stages wherever wire
+behavior is unresolved. Socket tests and synthetic two-runtime transfers do
+not establish on-air compatibility. Platform-specific audio/PTT adapters,
+permissions and startup packaging follow the common contracts. Real device
+and inhibited/conducted PTT qualification remain required before RF use.
+
+The shared runtime must keep `host::ModemPort` (inbound client commands/data)
+separate from proposed `ModemSessionPort` (backend lifecycle). Client channel
+loss cancels the session and requests PTT release; replacement sockets do not
+adopt it. No reconnect or process restart automatically replays unresolved
+bytes. In-memory retention alone does not provide crash durability.
 
 ## Reference setup attempted on this workstation
 

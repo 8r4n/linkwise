@@ -3,7 +3,8 @@
 //! The current executable provides an MCP stdio adapter over the
 //! [`radio::RadioControlPort`] contract, with simulated and Hamlib/`rigctld`
 //! backends. Native modem codecs, audio capture and host stream transports
-//! are separate components; they do not yet form a qualified live modem.
+//! are complemented by a deterministic session runtime and foreground device
+//! simulation; they do not yet form a qualified live modem.
 //! See `docs/modem.md` for implemented behavior and remaining integration.
 //!
 //! Contributor architecture and invariants are documented in
