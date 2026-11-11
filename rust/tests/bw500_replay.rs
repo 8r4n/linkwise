@@ -60,3 +60,77 @@ fn decodes_published_bw500_payloads() {
         }
     }
 }
+
+#[test]
+#[ignore = "requires the local stock VARA multi-frame and retry captures"]
+fn decodes_stock_bw500_delivery_and_level_fallback() {
+    use linkwise::modem::{
+        bw500_waveform::Waveform,
+        data,
+        receiver::{Receiver, Reception},
+    };
+
+    let root = PathBuf::from(
+        env::var_os("LINKWISE_STOCK_BW500_CAPTURE_DIR")
+            .expect("set LINKWISE_STOCK_BW500_CAPTURE_DIR"),
+    );
+    let profile = std::fs::read_to_string(root.join("harness/profile.json")).unwrap();
+    let expected: Vec<u8> = (0..200).collect();
+
+    for (role, rejected_first, expected_levels) in [
+        ("macos/responder", false, &[4, 4, 4, 4, 4][..]),
+        ("macos/recover", true, &[3, 3, 3, 3, 3, 3][..]),
+        ("ubuntu/responder-initial", false, &[4, 4, 4, 4, 4][..]),
+    ] {
+        let mut captures: Vec<_> = root
+            .join("cases")
+            .join(role)
+            .read_dir()
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| {
+                path.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .ends_with("-receive-data-from-vara.wav")
+            })
+            .collect();
+        captures.sort();
+        let mut bytes = Vec::new();
+        let mut levels = Vec::new();
+        let mut rejected = false;
+        for path in captures {
+            let mut wav = hound::WavReader::open(path).unwrap();
+            assert_eq!(wav.spec().sample_rate, 48_000);
+            let channels = usize::from(wav.spec().channels);
+            let audio: Vec<f32> = wav
+                .samples::<f32>()
+                .step_by(channels)
+                .map(Result::unwrap)
+                .collect();
+            let mut receiver = Receiver::with_level4(Waveform::from_json(&profile).unwrap());
+            let mut collect = |reception: Reception| {
+                for received in reception.frames {
+                    let level = received.level;
+                    let Some(frame) = data::decode_received(level, &received.frame, "KN6MQS")
+                    else {
+                        continue;
+                    };
+                    if rejected_first && !rejected {
+                        assert_eq!(level, 4);
+                        assert_eq!(frame.payload, expected[..43]);
+                        rejected = true;
+                        continue;
+                    }
+                    levels.push(level);
+                    bytes.extend(frame.payload);
+                }
+            };
+            receiver.push(&audio, &mut collect).unwrap();
+            receiver.finish(collect);
+        }
+        assert_eq!(rejected, rejected_first, "{role}");
+        assert_eq!(levels, expected_levels, "{role}");
+        assert_eq!(bytes, expected, "{role}");
+    }
+}

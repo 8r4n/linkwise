@@ -35,8 +35,8 @@ original project material. The supplied
 structures, but its DoW acquisition class and markings were not imported or
 copied.
 
-The whitepaper is a proposed-system design, not a claim that modem, MCP, or
-automated RF session-control behavior is implemented. The contract-level
+The whitepaper describes the proposed station system and the implemented
+radio-free modem and MCP components. The contract-level
 software design is in
 [`../architecture/software-design.md`](../architecture/software-design.md);
 supporting architecture, requirements, and safety documents are in
@@ -55,6 +55,6 @@ preparation and authorization.
 The proposed standalone modem runtime and traditional-client integration are
 specified in the same modem chapter. It defines standalone/managed admission,
 exclusive TCP channel ownership, audio/PTT completion, byte accounting, and
-six shared-core implementation gates before OS packaging. The first milestone
-is a foreground session owner with virtual time and simulated audio/PTT;
-these additions are design contracts, not an implemented service.
+six shared-core implementation gates for station integration. The chapter
+also records the foreground radio-free service, preview installers, and
+the scope of the stock VARA and Winlink Express tests.

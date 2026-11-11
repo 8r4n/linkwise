@@ -11,7 +11,7 @@ const SYMBOL_SAMPLES: usize = 2048;
 const REQUEST_PREAMBLE: &[u8] = &[74, 68, 70, 60, 60, 77, 50, 76, 78, 74];
 const RESPONSE_PREAMBLE: &[u8] = &[62, 67, 55, 66, 59, 72, 68, 55];
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Bandwidth {
     Hz500,
     Hz2300,
@@ -25,11 +25,38 @@ pub enum Message {
     /// Observed caller recovery burst in a stock BW500 session.
     Bw500Recovery,
     Bw500Confirm,
+    WideConfirm(Bandwidth),
+    WideSetupNak(Bandwidth),
+    /// Called-station-keyed rejection of a link-setup burst.
+    Bw500SetupNak,
+    /// First BW500 poll sent by the caller after confirmation.
+    Bw500KeepaliveA,
+    /// Second BW500 poll sent by the caller after confirmation.
+    Bw500KeepaliveB,
+    /// Caller-keyed request for the transmit turn.
+    Bw500CallerTurnRequest,
+    /// Caller-keyed request sent by the responder.
+    Bw500ResponderTurnRequest,
+    Bw500FinalQueryShort,
+    Bw500FinalQuery,
+    Bw500AlternateQueryShort,
+    Bw500AlternateQuery,
+    Bw500IntermediateQueryAck,
+    Bw500Drained,
+    Bw500ResponderDrained,
+    Bw500ResponderOverNak,
+    Bw500ResponderTurnIdle,
+    Bw500CallerTurnRelease,
+    Bw500ResponderTurnRelease,
 }
 
 impl Message {
-    /// Returns the 48 kHz / 2048-point bin sequence for a dialed callsign.
-    pub fn tones(self, called: &str) -> Option<Vec<u8>> {
+    /// Returns the 48 kHz / 2048-point bin sequence for the message's callsign key.
+    pub fn tones(self, key: &str) -> Option<Vec<u8>> {
+        self.tones_on(key, Bandwidth::Hz500)
+    }
+
+    fn tones_on(self, key: &str, bandwidth: Bandwidth) -> Option<Vec<u8>> {
         use Bandwidth::*;
         let (head, count, seed_offset, preadvance, base, coarse_bins, alternate) = match self {
             Self::ConnectRequest(Hz500) => (REQUEST_PREAMBLE, 31, 57, 1, 50, 2, false),
@@ -39,9 +66,43 @@ impl Message {
             Self::ConnectResponse(Hz2300) => (RESPONSE_PREAMBLE, 15, 289, 511, 29, 5, true),
             Self::ConnectResponse(Hz2750) => (RESPONSE_PREAMBLE, 15, 579, 91, 22, 6, true),
             Self::Bw500Recovery => (&[74][..], 31, 60, 1117, 50, 2, false),
-            Self::Bw500Confirm => (&[62][..], 15, 1551, 91, 50, 2, false),
+            Self::Bw500SetupNak | Self::WideSetupNak(Hz500) => {
+                (&[62][..], 15, 289, 31, 50, 2, false)
+            }
+            Self::WideSetupNak(Hz2300) => (&[62][..], 15, 289, 31, 29, 5, true),
+            Self::WideSetupNak(Hz2750) => (&[62][..], 15, 289, 31, 22, 6, true),
+            Self::Bw500Confirm | Self::WideConfirm(Hz500) => {
+                (&[62][..], 15, 1551, 91, 50, 2, false)
+            }
+            Self::WideConfirm(Hz2300) => (&[62][..], 15, 1551, 91, 29, 5, true),
+            Self::WideConfirm(Hz2750) => (&[62][..], 15, 1551, 91, 22, 6, true),
+            Self::Bw500KeepaliveA => (&[74][..], 31, 1550, 187, 50, 2, false),
+            Self::Bw500KeepaliveB => (&[74][..], 31, 60, 1241, 50, 2, false),
+            Self::Bw500FinalQueryShort => (&[62][..], 15, 61, 331, 50, 2, false),
+            Self::Bw500FinalQuery => (&[74][..], 31, 60, 683, 50, 2, false),
+            Self::Bw500AlternateQueryShort => (&[62][..], 15, 61, 361, 50, 2, false),
+            Self::Bw500AlternateQuery => (&[74][..], 31, 60, 745, 50, 2, false),
+            Self::Bw500IntermediateQueryAck => (&[74][..], 31, 288, 1, 50, 2, false),
+            Self::Bw500Drained => (&[74][..], 31, 60, 807, 50, 2, false),
+            Self::Bw500ResponderDrained => (&[74][..], 31, 288, 807, 50, 2, false),
+            Self::Bw500ResponderOverNak => (&[74][..], 31, 288, 1117, 50, 2, false),
+            Self::Bw500ResponderTurnIdle => (&[74][..], 31, 1078, 63, 50, 2, false),
+            Self::Bw500CallerTurnRelease => (&[62, 67][..], 15, 61, 391, 50, 2, false),
+            Self::Bw500ResponderTurnRelease => (&[62, 67][..], 15, 289, 391, 50, 2, false),
+            Self::Bw500ResponderTurnRequest => (&[74][..], 31, 1078, 1, 50, 2, false),
+            Self::Bw500CallerTurnRequest => (&[74][..], 31, 850, 1, 50, 2, false),
         };
-        let mut random = keyed_stream(called, seed_offset, preadvance)?;
+        let (base, coarse_bins, alternate) = match self {
+            Self::Bw500KeepaliveA
+            | Self::Bw500KeepaliveB
+            | Self::Bw500CallerTurnRequest
+            | Self::Bw500ResponderTurnRequest => {
+                let (base, bins, alternate) = answer_geometry(bandwidth);
+                (base as u32, bins as u32, alternate)
+            }
+            _ => (base, coarse_bins, alternate),
+        };
+        let mut random = keyed_stream(key, seed_offset, preadvance)?;
         let mut tones = head.to_vec();
         for index in 0..count {
             let coarse = (random.advance() * coarse_bins) >> 24;
@@ -53,16 +114,32 @@ impl Message {
     }
 
     /// Renders one control burst as normalized 48 kHz mono audio for bench tests.
-    pub fn synthesize(self, called: &str) -> Option<Vec<f32>> {
-        let bins = self.tones(called)?;
+    pub fn synthesize(self, key: &str) -> Option<Vec<f32>> {
+        self.synthesize_on(key, Bandwidth::Hz500)
+    }
+
+    /// Render a session control using the negotiated bandwidth's alphabet.
+    pub fn synthesize_on(self, key: &str, bandwidth: Bandwidth) -> Option<Vec<f32>> {
+        let bins = self.tones_on(key, bandwidth)?;
         Some(render(bins.into_iter().map(|bin| [bin])))
     }
 
     /// Searches for an expected burst near the estimated start of a 48 kHz
     /// bench recording. The caller supplies the expected message and callsign.
-    pub fn find(self, called: &str, audio: &[f32], estimated_start: usize) -> Option<usize> {
+    pub fn find(self, key: &str, audio: &[f32], estimated_start: usize) -> Option<usize> {
+        self.find_on(key, audio, estimated_start, Bandwidth::Hz500)
+    }
+
+    /// Match a session control using the negotiated bandwidth's alphabet.
+    pub fn find_on(
+        self,
+        key: &str,
+        audio: &[f32],
+        estimated_start: usize,
+        bandwidth: Bandwidth,
+    ) -> Option<usize> {
         let tones: Vec<_> = self
-            .tones(called)?
+            .tones_on(key, bandwidth)?
             .into_iter()
             .map(|bin| Tone::new(usize::from(bin), SYMBOL_SAMPLES))
             .collect();
@@ -128,7 +205,15 @@ fn keyed_stream(called: &str, seed_offset: u32, preadvance: u32) -> Option<Rando
 /// Builds the eleven-symbol response to link setup, keyed to the caller.
 /// Both tones of each symbol are returned in ascending bin order.
 pub fn connected_ack_tones(bandwidth: Bandwidth, caller: &str) -> Option<[[u8; 2]; 11]> {
-    let tail = answer_tail(bandwidth, caller, 1080, 0)?;
+    responder_ack_tones(bandwidth, caller, 0)
+}
+
+fn responder_ack_tones(bandwidth: Bandwidth, caller: &str, frame: usize) -> Option<[[u8; 2]; 11]> {
+    answer_pairs(bandwidth, caller, 1080, frame)
+}
+
+fn answer_pairs(bandwidth: Bandwidth, key: &str, seed: u32, frame: usize) -> Option<[[u8; 2]; 11]> {
+    let tail = answer_tail(bandwidth, key, seed, frame)?;
     let mut pairs = [[0; 2]; 11];
     pairs[..4].copy_from_slice(&[[64, 67], [56, 74], [64, 69], [68, 78]]);
     pairs[4..].copy_from_slice(&tail);
@@ -136,12 +221,39 @@ pub fn connected_ack_tones(bandwidth: Bandwidth, caller: &str) -> Option<[[u8; 2
 }
 
 fn answer_tail(bandwidth: Bandwidth, key: &str, seed: u32, frame: usize) -> Option<[[u8; 2]; 7]> {
-    let (base, coarse_bins, alternate) = match bandwidth {
+    let (base, coarse_bins, alternate) = answer_geometry(bandwidth);
+    let mut random = keyed_stream(key, seed, 1)?;
+    Some(answer_frame(
+        &mut random,
+        base,
+        coarse_bins,
+        alternate,
+        frame,
+    ))
+}
+
+fn answer_geometry(bandwidth: Bandwidth) -> (usize, usize, bool) {
+    match bandwidth {
         Bandwidth::Hz500 => (50, 2, false),
         Bandwidth::Hz2300 => (29, 5, true),
         Bandwidth::Hz2750 => (22, 6, true),
-    };
-    let mut random = keyed_stream(key, seed, 1)?;
+    }
+}
+
+pub(super) fn lead_stream(bandwidth: Bandwidth, caller: &str, responder: bool) -> Option<Random24> {
+    let (base, coarse_bins, alternate) = answer_geometry(bandwidth);
+    let mut random = keyed_stream(caller, if responder { 1080 } else { 852 }, 1)?;
+    answer_frame(&mut random, base, coarse_bins, alternate, 1);
+    Some(random)
+}
+
+fn answer_frame(
+    random: &mut Random24,
+    base: usize,
+    coarse_bins: usize,
+    alternate: bool,
+    frame: usize,
+) -> [[u8; 2]; 7] {
     let mut pairs = [[0; 2]; 7];
     for _ in 0..=frame {
         for (index, pair) in pairs.iter_mut().enumerate() {
@@ -158,7 +270,7 @@ fn answer_tail(bandwidth: Bandwidth, key: &str, seed: u32, frame: usize) -> Opti
             pair.sort_unstable();
         }
     }
-    Some(pairs)
+    pairs
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -232,6 +344,95 @@ pub fn find_connected_ack(
     )
 }
 
+/// Renders the BW500 responder's caller-keyed reply to a post-connect poll.
+pub fn synthesize_bw500_poll_ack(caller: &str) -> Option<Vec<f32>> {
+    poll_ack(Bandwidth::Hz500, caller)
+}
+
+/// Matches the BW500 poll reply, including its state-dependent tail.
+pub fn find_bw500_poll_ack(caller: &str, audio: &[f32], estimated_start: usize) -> Option<usize> {
+    find_poll_ack(Bandwidth::Hz500, caller, audio, estimated_start)
+}
+
+/// Renders the BW500 responder's called-station-keyed grant of the transmit turn.
+pub fn synthesize_bw500_turn_grant(called: &str) -> Option<Vec<f32>> {
+    turn_grant(Bandwidth::Hz500, called, true)
+}
+
+/// Matches the BW500 transmit-turn grant with its called-station key.
+pub fn find_bw500_turn_grant(called: &str, audio: &[f32], estimated_start: usize) -> Option<usize> {
+    find_turn_grant(Bandwidth::Hz500, called, true, audio, estimated_start)
+}
+
+/// Builds the caller's reply to a responder's turn request.
+pub fn synthesize_bw500_caller_turn_grant(called: &str) -> Option<Vec<f32>> {
+    turn_grant(Bandwidth::Hz500, called, false)
+}
+
+pub fn find_bw500_caller_turn_grant(called: &str, audio: &[f32], start: usize) -> Option<usize> {
+    find_turn_grant(Bandwidth::Hz500, called, false, audio, start)
+}
+
+/// Builds the caller's acknowledgment of a closing DATA frame.
+pub fn synthesize_bw500_caller_data_ack(caller: &str) -> Option<Vec<f32>> {
+    caller_data_ack(Bandwidth::Hz500, caller)
+}
+
+pub fn find_bw500_caller_data_ack(caller: &str, audio: &[f32], start: usize) -> Option<usize> {
+    find_caller_data_ack(Bandwidth::Hz500, caller, audio, start)
+}
+
+/// Render or match the post-confirmation poll reply at the selected bandwidth.
+pub fn poll_ack(bandwidth: Bandwidth, caller: &str) -> Option<Vec<f32>> {
+    Some(render(responder_ack_tones(bandwidth, caller, 1)?))
+}
+
+pub fn find_poll_ack(
+    bandwidth: Bandwidth,
+    caller: &str,
+    audio: &[f32],
+    start: usize,
+) -> Option<usize> {
+    find_pairs(&responder_ack_tones(bandwidth, caller, 1)?, audio, start)
+}
+
+/// Render or match the grant from either station.
+pub fn turn_grant(bandwidth: Bandwidth, called: &str, responder: bool) -> Option<Vec<f32>> {
+    Some(render(answer_pairs(
+        bandwidth,
+        called,
+        if responder { 290 } else { 62 },
+        13,
+    )?))
+}
+
+pub fn find_turn_grant(
+    bandwidth: Bandwidth,
+    called: &str,
+    responder: bool,
+    audio: &[f32],
+    start: usize,
+) -> Option<usize> {
+    find_pairs(
+        &answer_pairs(bandwidth, called, if responder { 290 } else { 62 }, 13)?,
+        audio,
+        start,
+    )
+}
+
+pub fn caller_data_ack(bandwidth: Bandwidth, caller: &str) -> Option<Vec<f32>> {
+    Some(render(answer_pairs(bandwidth, caller, 852, 0)?))
+}
+
+pub fn find_caller_data_ack(
+    bandwidth: Bandwidth,
+    caller: &str,
+    audio: &[f32],
+    start: usize,
+) -> Option<usize> {
+    find_pairs(&answer_pairs(bandwidth, caller, 852, 0)?, audio, start)
+}
+
 fn find_pairs(pairs: &[[u8; 2]], audio: &[f32], estimated_start: usize) -> Option<usize> {
     let tones: Vec<_> = pairs
         .iter()
@@ -291,6 +492,69 @@ fn render<const N: usize>(symbols: impl IntoIterator<Item = [u8; N]>) -> Vec<f32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn matches_stock_bw500_post_connect_vectors() {
+        // Windows VARA HF 4.9.1, 2026-11-11 virtual audio matrix.
+        assert_eq!(
+            Message::Bw500KeepaliveA.tones("W1AW").unwrap(),
+            [
+                74, 68, 62, 72, 66, 68, 60, 72, 72, 54, 58, 52, 50, 68, 52, 56, 68, 76, 58, 50, 68,
+                58, 70, 52, 56, 74, 76, 72, 74, 58, 52, 50,
+            ]
+        );
+        assert_eq!(
+            responder_ack_tones(Bandwidth::Hz500, "W1AW", 1).unwrap(),
+            [
+                [64, 67],
+                [56, 74],
+                [64, 69],
+                [68, 78],
+                [62, 66],
+                [52, 68],
+                [50, 64],
+                [50, 76],
+                [52, 72],
+                [62, 64],
+                [56, 64],
+            ]
+        );
+        assert_eq!(
+            Message::Bw500CallerTurnRequest.tones("KN6MQS").unwrap(),
+            [
+                74, 60, 60, 74, 62, 52, 64, 76, 72, 58, 54, 70, 66, 76, 74, 54, 68, 74, 54, 66, 72,
+                66, 50, 50, 60, 72, 54, 54, 76, 60, 56, 54,
+            ]
+        );
+        assert_eq!(
+            answer_pairs(Bandwidth::Hz500, "KN6MQS", 290, 13).unwrap(),
+            [
+                [64, 67],
+                [56, 74],
+                [64, 69],
+                [68, 78],
+                [54, 64],
+                [58, 68],
+                [50, 76],
+                [50, 64],
+                [52, 74],
+                [58, 76],
+                [54, 66],
+            ]
+        );
+        assert_eq!(
+            Message::Bw500SetupNak.tones("KN6MQS").unwrap(),
+            [
+                62, 56, 56, 68, 66, 76, 56, 52, 66, 76, 56, 54, 56, 62, 52, 66
+            ]
+        );
+        let audio = synthesize_bw500_poll_ack("W1AW").unwrap();
+        assert_eq!(find_bw500_poll_ack("W1AW", &audio, 0), Some(0));
+        assert_eq!(
+            find_connected_ack(Bandwidth::Hz500, "W1AW", &audio, 0),
+            None
+        );
+    }
 
     #[test]
     fn matches_published_bw500_intermediate_answer_vectors() {

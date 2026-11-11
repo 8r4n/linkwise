@@ -1,4 +1,4 @@
-//! Bounded CR-delimited host command codec for the implemented BW500 subset.
+//! Bounded CR-delimited host command codec for VARA-style clients.
 //!
 //! This codec is transport-independent. Parsing a command is not acceptance by
 //! a modem: the session owner must check state, authority, configured identity
@@ -12,7 +12,15 @@ pub enum Command {
     Abort,
     Disconnect,
     Bw500,
+    Bw2300,
+    Bw2750,
     CompressionOff,
+    CompressionOn,
+    CompressionText,
+    Public(bool),
+    Cwid(bool),
+    P2pSession,
+    WinlinkSession,
     Version,
     ClearTxBuffer,
 }
@@ -81,7 +89,17 @@ fn parse(line: &[u8]) -> Result<Command, Wrong> {
         ["ABORT"] => Command::Abort,
         ["DISCONNECT"] => Command::Disconnect,
         ["BW500"] => Command::Bw500,
+        ["BW2300"] => Command::Bw2300,
+        ["BW2750"] => Command::Bw2750,
         ["COMPRESSION", "OFF"] => Command::CompressionOff,
+        ["COMPRESSION", "ON"] => Command::CompressionOn,
+        ["COMPRESSION", "TEXT"] => Command::CompressionText,
+        ["PUBLIC", "ON"] => Command::Public(true),
+        ["PUBLIC", "OFF"] => Command::Public(false),
+        ["CWID", "ON"] => Command::Cwid(true),
+        ["CWID", "OFF"] => Command::Cwid(false),
+        ["P2P", "SESSION"] => Command::P2pSession,
+        ["WINLINK", "SESSION"] => Command::WinlinkSession,
         ["VERSION"] => Command::Version,
         ["CLEANTXBUFFER"] => Command::ClearTxBuffer,
         _ => return Err(Wrong),
@@ -122,7 +140,7 @@ mod tests {
         let mut commands = Vec::new();
         decoder.push(&[b'X'; 513], |command| commands.push(command));
         decoder.push(
-            b"ABORT\rVERSION\r\xff\rMYCALL bad_call\rCOMPRESSION TEXT\r",
+            b"ABORT\rVERSION\r\xff\rMYCALL bad_call\rCOMPRESSION TEXT EXTRA\r",
             |command| commands.push(command),
         );
         assert_eq!(
@@ -133,6 +151,28 @@ mod tests {
                 Err(Wrong),
                 Err(Wrong),
                 Err(Wrong)
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_observed_winlink_and_pat_setup_commands() {
+        let mut commands = Vec::new();
+        CommandDecoder::default().push(
+            b"PUBLIC ON\rCWID ON\rCOMPRESSION ON\rCOMPRESSION TEXT\rBW2750\rBW2300\rP2P SESSION\rWINLINK SESSION\r",
+            |command| commands.push(command),
+        );
+        assert_eq!(
+            commands,
+            [
+                Ok(Command::Public(true)),
+                Ok(Command::Cwid(true)),
+                Ok(Command::CompressionOn),
+                Ok(Command::CompressionText),
+                Ok(Command::Bw2750),
+                Ok(Command::Bw2300),
+                Ok(Command::P2pSession),
+                Ok(Command::WinlinkSession),
             ]
         );
     }

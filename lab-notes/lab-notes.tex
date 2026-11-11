@@ -53,7 +53,7 @@
 \title{Linkwise: Radio, Modem, and Link Management Research\\[0.4em]
 \large Lab notes and evidence ledger}
 \author{Engineering research log}
-\date{10 November 2026}
+\date{11 November 2026}
 
 \begin{document}
 \maketitle
@@ -66,7 +66,9 @@ hypotheses and local tests from reference-peer qualification. Native BW500
 codec, streaming receive, audio-handshake, DATA/ARQ, and host-stream components
 now exist. The 9 November entry records their implementation and validation.
 The 10 November entry adds a shared session runtime, a clock-driven runner, and
-a two-way BW500 audio loopback. Operational interoperability remains open.
+a two-way BW500 audio loopback. On 11 November, stock VARA HF accepted
+a Linkwise-initiated BW500 connection over virtual audio. Payload transfer
+and RF qualification remain open.
 \end{abstract}
 
 \tableofcontents
@@ -1612,6 +1614,419 @@ and three published off-air frames. Live frame error rate, sample-clock
 tracking, production link behavior, and two-way interoperability remain
 open.
 
+
+\section{2026-11-11: Stock VARA HF BW500 audio interoperability}
+
+\subsection{Bench setup and routing}
+
+The \pathtext{productize} worktree at base commit \texttt{c2c599f} supplied
+the Linkwise waveform generator and decoder. Stock VARA HF 4.9.1 ran in the
+Windows 11 ARM64 UTM guest. The earlier Winlink Express 1.8.6.0 TCP bench
+exercised the modem host interface using simulated connection events.
+This experiment used the actual VARA audio waveforms. The guest had no
+attached radio or serial PTT device. VARA's local command and data sockets
+were used for configuration and event logging.
+
+The first connection attempts returned \texttt{MISSING SOUNDCARD}.
+Opening VARA's soundcard settings and confirming the guest's High Definition
+Audio devices restored playback. Windows WASAPI loopback recorded VARA's
+speaker output at 48 kHz. For the reverse path, VB-CABLE was installed in the
+guest with approval and Windows was rebooted. VARA's input was set to
+\texttt{CABLE Output}, with output still routed to the guest speakers.
+Linkwise's 48 kHz mono stimulus WAVs were converted to stereo PCM16 and
+played to \texttt{CABLE Input} through WinMM after the WASAPI playback
+initialization failed. A separate recording at the cable output verified
+that the Linkwise request reached the input path.
+
+\subsection{Observed exchanges}
+
+\begin{enumerate}[leftmargin=*]
+  \item Stock VARA originated a BW500 request from \texttt{KN6MQS} to the
+        isolated lab fixture \texttt{W1AW}. Linkwise recognized the
+        \texttt{W1AW}-keyed request in the speaker recording. The same
+        recording produced no request match when checked against
+        \texttt{KN6MQS}.
+  \item With stock VARA listening as \texttt{KN6MQS}, the harness played a
+        Linkwise-generated request addressed to it. VARA reported
+        \texttt{PENDING} and transmitted a response. Linkwise identified the
+        response for \texttt{KN6MQS} at sample 121024 in the separate
+        request/response recording. The check for \texttt{W1AW} produced
+        no response match.
+  \item The harness then replayed the Linkwise request, level-4 setup and
+        confirmation in a separate run. It used VARA's software
+        \texttt{PTT OFF} events to time the next burst. VARA reported
+        \texttt{CONNECTED W1AW KN6MQS 500} after setup, along with
+        \texttt{SN 22.1} and \texttt{LINK UNREGISTERED}. Linkwise detected
+        \texttt{W1AW}-keyed acknowledgments at samples 402304 and 486304 in
+        the handshake recording, after setup and confirmation respectively.
+        The harness ended the session with \texttt{ABORT}.
+\end{enumerate}
+
+\subsection{Evidence and qualification limits}
+
+The Git-ignored evidence directory contains the TCP logs, stimulus
+definitions, harness and decoder source, and a SHA-256 manifest.
+The primary records are:
+
+\begin{lstlisting}
+reference/vara/fixtures/stock-audio-2026-11-11/
+  vara-request.wav
+  vara-response.wav
+  cable-monitor.wav
+  vara-full-handshake.wav
+  full.log
+\end{lstlisting}
+
+Linkwise's
+\pathtext{render-wav} command generated the stimuli using the verified BW500
+profile for setup. The capture analysis used Linkwise's burst detector and
+callsign-keyed control-waveform detectors.
+
+This qualifies BW500 connection establishment for a Linkwise initiator
+against a stock VARA responder on the virtual cable. With VARA as initiator,
+the test covered its request through Linkwise's receive detector. Stock-peer
+payload delivery, Winlink message exchange over audio, other bandwidths,
+physical audio devices, and RF/PTT operation remain open. The temporary
+scheduled tasks and host file server were removed. VB-CABLE and the VARA
+bench routing remain configured in the Windows guest.
+
+\section{2026-11-11: Radio-free BW500 streams and Winlink messages}
+
+The virtual BW500 daemon now sends multi-frame deliveries, buffers a
+stream across deliveries, and supports reversing the transmit turn.
+The socket regression covered binary payloads, split TCP writes, short
+negative-answer retry, and repeated closing-frame acknowledgments without
+duplicate host delivery.
+
+Stock VARA HF 4.9.1 in Windows UTM received all 200 test bytes from
+Linkwise across four full frames and a closing frame. With VARA sending
+in a separate session, the harness corrupted the first DATA burst.
+Linkwise rejected it, VARA retransmitted at a lower rate, and Linkwise
+delivered all 200 original bytes. A third session confirmed that stock
+VARA could take the turn after receiving 13 bytes from Linkwise. It sent
+nine bytes back and reported \texttt{BUFFER 0} after Linkwise acknowledged
+them. Two attempts at reversal after a 200-byte send stopped earlier,
+one at setup and the other at a rejected intermediate DATA frame.
+
+Pat 1.0.1 delivered the same test message in two Winlink B2F peer-to-peer
+sessions between Linkwise daemons. One session used the socket audio cable.
+The second used native ALSA playback and capture in Ubuntu UTM. Both
+receiver mailboxes contained the expected message body. The tests stayed
+on the local bench. Winlink Express message delivery, adaptive recovery
+for rejected multi-frame sends, missing-answer state queries, wide-mode
+setup and DATA, and native macOS capture remain open.
+
+The waveform captures, command transcripts, Pat message files, and
+validation logs are in the local evidence directory.
+
+\begin{lstlisting}
+reference/vara/fixtures/radio-free-bw500-2026-11-11/
+\end{lstlisting}
+
+\section{2026-11-11: Wide-mode DATA, acknowledgment recovery, and Express}
+
+The radio-free daemon gained fixed-bandwidth BW2300 and BW2750 operation
+at level~4. It uses the published VARA HF coding and bin-allocation
+measurements. The six saved stock setup captures decoded to the same
+CRC-valid caller and level. The measured pilot bins included the class
+offset in both bandwidths.
+
+In fresh sessions with stock VARA HF 4.9.1 on Windows UTM, Linkwise
+completed setup and transferred the exact 13-byte sequence in both
+directions at each wide bandwidth. The first BW2750 send reached setup
+but delivered no host bytes. A fresh run delivered the payload and
+received its acknowledgment. The Linkwise-to-Linkwise socket regression
+also exercised the 86-byte frame limit and changed the transmit turn
+within one connection at each bandwidth.
+
+The BW500 bench withheld stock VARA's closing acknowledgment after a
+13-byte transfer. Linkwise queried the peer, decoded its turn request,
+sent the drained control, and then reported \texttt{BUFFER 0}. A separate
+regression between Linkwise daemons forced a first-frame rejection on a
+200-byte send. Linkwise repacketized at level~3 and delivered every byte
+once. On the stock bench, an intentionally invalid CRC provoked a
+rejection. Linkwise sent the level~3 retry, which stock VARA rejected.
+Stock-peer retry interoperability, rejection after an acknowledged
+intermediate frame, and loss of an intermediate answer remain open.
+
+Winlink Express 1.8.6.0 received a B2F message from Pat 1.0.1 through two
+Linkwise BW500 daemons over the socket audio cable. The Express inbox
+displayed message \texttt{CJWXH5QGOITB} with the expected text. The
+captured message and Pat session log are in the evidence directory.
+Express originated no message in this test. Its original local VARA
+endpoint was restored after the run.
+
+The macOS host reported no native input device. The Mac build could
+run the socket tests, but native CoreAudio capture requires an input
+endpoint. The experiments used local virtual audio throughout.
+
+The ARM64 socket regression passed on macOS, Windows, Ubuntu, and
+Fedora. The refreshed Windows, Ubuntu, and Fedora installers passed
+install, launch, simulation, and removal checks. The macOS package
+was expanded and its executable and bundled guide were checked.
+All four artifact checksums matched. The refreshed previews and their
+checksums are in \pathtext{dist/radio-free-refresh/}.
+
+\subsection{Validation and evidence}
+
+The audio-enabled Rust suite passed 54 unit tests and 18 integration
+tests. A separate replay test, enabled explicitly for the local stock
+captures, passed on all six wide-mode recordings. The socket harness
+ran the normal BW500 transfer, the withheld-ACK case, the forced
+first-frame rejection, and the two wide-bandwidth cases. The evidence
+directory contains the command transcripts and waveforms for each
+stock-peer run, including the failed initial BW2750 send and the
+failed stock level-3 retry. The Express export records the P2P flag,
+message ID, and exact body alongside the Pat sender transcript. The
+evidence files passed verification against the directory's SHA-256
+manifest.
+
+\begin{lstlisting}
+reference/vara/fixtures/radio-free-qualification-2026-11-11/
+\end{lstlisting}
+
+\section{2026-11-11: Winlink JPEG attachment test}
+
+Pat 1.0.1 sent \pathtext{Photo 1.jpg} from the local KN6MQS bench
+station to the local W1AW fixture using two Linkwise BW500 daemons
+and the socket audio cable in Ubuntu UTM. Pat's command-line composer
+re-encoded the JPEG, and the recipient received a 7,395-byte attachment.
+A second run supplied the original JPEG as an octet stream to Pat's
+local composer. The recipient's B2F message \texttt{OG2352CAFKZR}
+contained all 20,902 bytes. The extracted attachment matched the
+original byte for byte and had the same SHA-256 digest. This test
+used Pat at both ends and stayed on the local bench.
+
+\subsection{Stock VARA attachment matrix}
+
+The directional matrix used Pat 1.0.1, the original 20,902-byte
+attachment, and stock VARA HF 4.9.1 on Windows UTM. The mixed pairs
+used BW500. The stock-only control used BW2750 and a shared Windows
+audio loop. Pat's stock modem commands were configured for P2P with
+modem compression disabled in the follow-up runs.
+
+\begin{itemize}[leftmargin=*]
+  \item Linkwise to Linkwise delivered the exact attachment.
+  \item Linkwise to VARA reached \texttt{CONNECTED} at the stock
+        responder. The Linkwise sender timed out before the B2F transfer.
+  \item VARA to Linkwise connected at both modems in the P2P follow-up.
+        Linkwise then requested the transmit turn for queued session
+        data. The exchange stalled before a B2F attachment proposal.
+  \item VARA to VARA reached \texttt{CONNECTED} at the stock responder
+        only. The caller timed out after repeated transmissions on the
+        shared audio route. The run did not qualify a stock-only
+        attachment transfer over independently routed endpoints.
+\end{itemize}
+
+The transcripts are in
+\pathtext{reference/vara/fixtures/attachment-matrix-2026-11-11/}.
+
+\subsection{BW500 interoperability fixes and retest}
+
+Stock VARA can send its first DATA frame immediately after the caller
+confirms setup. Linkwise now accepts that CRC-validated frame as
+confirmation and delivers its bytes to the host. On the responder
+side, Linkwise can send its queued greeting immediately after setup.
+The BW500 bench daemon also handles crossed turn requests, repeats a
+grant if the peer repeats its request, and recognizes the observed
+stock turn release controls. A replay test covers the captured
+stock greeting. The DATA decoder also recognizes the captured
+42-byte level-4 closing frame and checks its level field.
+
+Both mixed directions exchanged Winlink greetings and carried
+attachment proposal bytes. In the Linkwise-to-VARA run, VARA
+acknowledged the first two DATA frames but did not acknowledge a
+later delivery before the Linkwise retry limit. In the reverse
+direction, the receiver saw the proposal line. The host TCP trace
+shows that Pat wrote the six-byte \texttt{F>} checksum line to VARA
+after \texttt{BUFFER 0}. The audio trace shows a turn release and a
+return release, and the receiving Pat never saw the checksum line.
+The stock-only result still requires independent audio routing.
+
+With the final daemon build, Linkwise to Linkwise delivered message
+\texttt{DOAQKKZUNH2E} and the original 20,902-byte JPEG. The
+extracted attachment matched the source byte for byte. All 73
+audio-enabled Rust tests passed, along with the socket scenarios
+and captured greeting replay. The local evidence includes the
+waveforms and host and audio transcripts.
+
+\begin{lstlisting}
+reference/vara/fixtures/attachment-recovery-2026-11-11/
+\end{lstlisting}
+
+\subsection{Recovery after an explicit rejection or turn handback}
+
+Tone analysis identified the responder's long over rejection after
+Linkwise's recovery query. Linkwise now retries an eligible rejected
+delivery once at level~3, keeping the bytes queued until the retry
+is acknowledged. In a live repeat, VARA rejected the lower-rate
+transmission as well. A separate experiment sent the next delivery
+without requesting another turn. VARA repeated its own turn request
+and the experiment was reverted.
+
+After an empty turn handback, Linkwise now accepts the peer's next
+DATA frame without requiring a separate turn request. The previous
+closing frame can still be acknowledged again without delivering
+duplicate bytes. The captured stock rejection and caller release
+both pass socket replay with exact payload recovery.
+
+Changing the local receiver fixture to \texttt{W1A} shortened the
+greeting by one byte. Pat could then queue the checksum line while
+VARA still had 41 bytes buffered. This exposed a CRC-valid level-4
+closing frame with 41 payload bytes, a delimiter and a rate byte.
+Linkwise now decodes the frame and the live receiver gets the B2F
+proposal. VARA reported that six checksum bytes remained queued
+after it released the turn. Those bytes still did not reach the
+receiver after Linkwise returned the turn.
+
+Linkwise also transmitted the 41-byte closing format to stock VARA
+as part of an 84-byte delivery. Stock VARA delivered the complete
+proposal and checksum to Pat, which returned \texttt{FS +} to accept
+the message. The first three binary DATA frames arrived. VARA
+rejected the fourth, and the receiver mailbox contained no
+attachment. Linkwise now retries an explicitly rejected frame
+once, preserving bytes already acknowledged in the same delivery.
+The next live repeat delivered all 203 bytes of the first binary
+delivery. Stock VARA did not acknowledge the first frame of the
+second delivery, and the receiving mailbox still contained no
+attachment. With the final daemon build, the Linkwise-only test
+delivered message \texttt{Y6SYVBKENR6V} and the original 20,902-byte
+JPEG with matching SHA-256. The 74 audio-enabled Rust tests and
+socket regressions passed.
+
+\subsection{Analysis of the remaining turn stalls}
+
+A fresh Linkwise-to-VARA run again delivered four 43-byte frames
+and a 31-byte closing frame for the first binary delivery. The
+responder then sent a caller-keyed turn request, acknowledged the
+grant by sending its turn-idle burst, and returned the called-keyed
+drained burst after Linkwise requested the turn again. Linkwise
+treated that last burst as a grant and keyed the first frame of the
+next delivery. The stock output captured no reply to this frame.
+Linkwise has a state query for a missing closing acknowledgment,
+but its intermediate-frame timeout exits with delivery unconfirmed
+without asking the peer which frame it received.
+Published stock observations distinguish an empty-queue
+announcement from an explicit grant. The same announcement
+preceded successful proposal DATA earlier in this run, so the
+announcement alone does not explain the second-delivery failure.
+
+In the reverse run, the stock host buffer had six bytes pending
+after the proposal and emitted the 17-symbol caller release.
+Linkwise generated the corresponding responder release with the
+expected called-station tone sequence. Stock output contained no
+subsequent DATA. Linkwise records a handback when it writes the
+waveform and has no bounded recovery for a silent peer in that
+state. A shared-mode tap on the Windows VB-CABLE capture endpoint
+recorded the complete 34,848-sample Linkwise return waveform with
+normalized correlation of 1.00000000 at the printed precision.
+This verifies delivery to the endpoint. The capture does not
+establish whether VARA opened its receive window in time or
+interpreted the release as valid in its current session state.
+
+\subsection{Bounded intermediate acknowledgment recovery}
+
+The BW500 bench caller now sends a short state query and, if the
+peer stays silent, a long query for an outstanding intermediate
+DATA frame. The query phase follows the transmitted full-frame
+count in the current delivery. An accepted reply advances one
+frame. A recognized negative reply permits a retry of the
+outstanding frame. Two unanswered queries end the session with
+delivery unconfirmed.
+
+The socket regression sent two consecutive 203-byte deliveries,
+held the second delivery's first acknowledgment through both
+queries, and delivered all 406 bytes exactly once. The same test
+replayed a captured stock negative reply and checked that only the
+outstanding frame was repeated. A final withheld reply checked the
+timeout and verified that no DATA was sent on silence. The 74
+audio-enabled Rust tests and the socket suite passed. The final
+Linkwise-only run received the original 20,902-byte JPEG with a
+matching SHA-256 in message \texttt{32G2ANB7N4UJ}.
+
+On the live Linkwise-to-VARA run, Pat accepted the proposal. VARA
+rejected the first binary frame and Linkwise retried it. When
+the retry drew no acknowledgment, Linkwise queried. VARA
+answered with the called-station-keyed long rejection
+(31 of 31 payload tones matched). Linkwise stopped at its retry
+limit. The exchange verified a live response to the query and
+left delivery unconfirmed.
+
+The reverse-direction timing experiments delayed the empty
+handback by 180~ms and 600~ms in separate runs. In each run, the
+stock modem still reported six bytes buffered and emitted no
+subsequent DATA. These trials did not establish a runtime timing
+fix for this direction.
+
+\subsection{Second Windows guest for stock VARA comparisons}
+
+UTM cloned the Windows 11 ARM64 guest as
+\texttt{Linkwise Windows 11 ARM64 VARA Peer}. Both guests booted
+and ran the installed stock VARA HF modem. Each guest has its
+own VB-CABLE endpoints. The original guest's bridge uses host
+ports 28760--28762 for command, DATA and audio. The peer uses
+28770--28772 in the same order. This layout provides separate
+connections for recording the two directions of a stock-only
+exchange. Both bridges accepted all three connections and returned
+	exttt{VERSION VARA HF v4.9.1} on their respective command ports.
+This probe checked bridge connectivity. The stock-only audio
+exchange remains to be run.
+
+\subsection{Stock VARA reference and relay timing}
+
+The two Windows guests answered their version queries over
+separate bridges. In the BW500 stock-to-stock run, the
+burst-based relay captured the caller's full connect waveform
+before playing it into the peer. The caller began a retry
+57~ms before the peer reported PTT on for its first response.
+Both modems continued trying to connect. Neither reached the
+binary-transfer fixture.
+
+The streaming relay forwards the Windows capture blocks as they
+arrive and starts both audio streams after both bridges connect.
+The caller's capture delivered between about 29 and 45 thousand
+samples per wall-clock second over four keyed windows, even though
+the samples are labeled 48~kHz. Thus the relay must preserve the
+waveform through uneven arrival and account for its buffering delay
+before a stock capture can qualify as a timing reference.
+
+A tap on the receiving guest's VB-CABLE endpoint found that the
+best fixed alignment of a 1.76-second acquisition burst had
+normalized correlation of 0.144. Matching shorter sections
+placed the later part of the burst progressively farther from
+the first section's alignment. This is consistent with gaps in
+streamed playback. Neither the unbuffered nor buffered
+streaming trial established a stable stock connection. Reversing
+the roles of the Windows guests also stalled at acquisition. These
+trials did not reach either the six-byte handback fixture or
+two consecutive 203-byte deliveries.
+
+\subsection{Virtual cable routing and receive calibration}
+
+The next bench trial moved VARA transmit away from the emulated
+speaker. The two playback endpoints of the installed VB-CABLE
+driver could not be opened together in this configuration.
+WinMM reported an already allocated device, and the shared
+WASAPI playback trial failed to initialize even at the
+endpoint's native 48~kHz float format.
+
+Both guests could open a single shared render endpoint. The
+bench forwarded its loopback only during local VARA PTT, with a
+short tail after unkeying. The peer detected activity, but no
+stock connection completed. The caller's first captured active
+region included a 2.4-second segment, longer than the nominal
+1.76-second acquisition burst. The host then injected a saved
+stock acquisition waveform into both receive paths at a paced
+48~kHz for comparison against capture-endpoint taps.
+The 91,839-sample reference matched at approximately 0.13
+normalized correlation on both taps. Preloading the complete
+record before playback produced the same result. With the
+original relay and speaker routing restored, the original
+guest's tap matched at 0.11 and the peer tap contained no
+detectable copy of the probe. These controls did not qualify the
+Windows receive path. The original VARA device assignments and
+both bridge scripts were restored after testing.
+
 \section{Chronicle maintenance}
 
 Update this log during the work, not only when milestones are complete. Add
@@ -1625,18 +2040,12 @@ so the presentation and notes do not diverge.
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]
-  \item Establish a working unmodified VARA reference runtime. The user now
-        reports no configured reference instance; the isolated Wine attempt
-        failed its environment gate. Capture exact command/status bytes and
-        both audio directions with provenance before making interop claims.
-  \item Qualify level-4 setup/DATA audio, acquisition leads, multi-frame
-        behavior, and timing against independent recordings and the reference
-        peer. Extend impairment and native device tests without promoting
-        synthetic results to interoperability evidence.
-  \item Resolve and document wire DATA-field sequencing and recovery replies;
-        integrate the container codec and bounded sender with rate, turn,
-        keepalive, duplicate, and disconnect behavior. Preserve unresolved
-        bytes and query after a missing answer rather than blindly repeat DATA.
+  \item Qualify Winlink Express as the B2F message sender and exercise
+        native CoreAudio capture with an available input endpoint.
+  \item Extend wide-mode DATA qualification to adaptive rates, multi-frame
+        deliveries, and loss recovery.
+  \item Qualify state queries for missing intermediate answers and
+        repacketization after rejection later in a BW500 delivery.
   \item Connect the host command/data transports to one operational session
         owner with explicit socket pairing, buffering, backpressure, and
         channel-loss cleanup. Parsing a command is not session acceptance.

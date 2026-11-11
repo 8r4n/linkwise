@@ -45,6 +45,36 @@ pub fn output_devices() -> Result<Vec<String>, Box<dyn std::error::Error>> {
         .collect()
 }
 
+/// Checks the selected output format without opening a playback stream.
+pub fn check_output(name: &str, channel: u16) -> Result<(), Box<dyn std::error::Error>> {
+    output_config(name, channel).map(|_| ())
+}
+
+fn output_config(
+    name: &str,
+    channel: u16,
+) -> Result<(cpal::Device, cpal::SupportedStreamConfig), Box<dyn std::error::Error>> {
+    let host = cpal::default_host();
+    let device = host
+        .output_devices()?
+        .find(|device| device.name().ok().as_deref() == Some(name))
+        .ok_or("requested output device is unavailable")?;
+    let config = device
+        .supported_output_configs()?
+        .find(|config| {
+            config.channels() > channel
+                && config.min_sample_rate().0 <= RATE
+                && config.max_sample_rate().0 >= RATE
+                && matches!(
+                    config.sample_format(),
+                    cpal::SampleFormat::F32 | cpal::SampleFormat::I16 | cpal::SampleFormat::U16
+                )
+        })
+        .ok_or("output device needs a supported f32/i16/u16 channel at 48 kHz")?
+        .with_sample_rate(cpal::SampleRate(RATE));
+    Ok((device, config))
+}
+
 impl Playback {
     /// Use a named device and channel. The entire burst is prepared before
     /// opening the stream. Idle frames and unselected channels are silent.
@@ -62,24 +92,7 @@ impl Playback {
                 "playback requires a named device and 1 to 720000 normalized samples".into(),
             );
         }
-        let host = cpal::default_host();
-        let device = host
-            .output_devices()?
-            .find(|device| device.name().ok().as_deref() == Some(name))
-            .ok_or("requested output device is unavailable")?;
-        let supported = device
-            .supported_output_configs()?
-            .find(|config| {
-                config.channels() > channel
-                    && config.min_sample_rate().0 <= RATE
-                    && config.max_sample_rate().0 >= RATE
-                    && matches!(
-                        config.sample_format(),
-                        cpal::SampleFormat::F32 | cpal::SampleFormat::I16 | cpal::SampleFormat::U16
-                    )
-            })
-            .ok_or("output device needs a supported f32/i16/u16 channel at 48 kHz")?
-            .with_sample_rate(cpal::SampleRate(RATE));
+        let (device, supported) = output_config(name, channel)?;
         let config = supported.config();
         let (send, scheduled) = mpsc::sync_channel(1);
         let failed = Arc::new(AtomicBool::new(false));

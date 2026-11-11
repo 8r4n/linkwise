@@ -24,7 +24,7 @@ impl Profile {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinkSetup {
     pub caller: String,
     pub high_speed: bool,

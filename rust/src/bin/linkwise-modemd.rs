@@ -1,6 +1,10 @@
-//! Foreground modem simulation and loopback host harness.
+//! Foreground modem diagnostics, simulations, and loopback host harness.
 #[path = "linkwise-modemd/bench_host.rs"]
 mod bench_host;
+#[path = "linkwise-modemd/setup.rs"]
+mod setup;
+#[path = "linkwise-modemd/virtual_host.rs"]
+mod virtual_host;
 use linkwise::modem::{
     arq::Answer,
     runtime::{
@@ -14,13 +18,32 @@ use uuid::Uuid;
 
 type Modem = Handle<SimulatedDevice>;
 
+const USAGE: &str = "Usage: linkwise-modemd --version | --audio-devices | --check-config FILE | --check-station FILE | --simulate | --simulate-audio PROFILE | --serve-bench CALL [CONTROL_PORT DATA_PORT] | --serve-virtual-bw500 CALL PROFILE [CONTROL_PORT DATA_PORT AUDIO_PORT] | --serve-virtual-wide CALL BANDWIDTH [CONTROL_PORT DATA_PORT AUDIO_PORT] | --virtual-audio-device AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE";
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args == ["--help"] || args == ["-h"] {
         println!(
-            "Usage: linkwise-modemd --simulate | --simulate-audio PROFILE | --serve-bench CALL [CONTROL_PORT DATA_PORT]\n\nRuns two clock-driven session owners through establishment, binary DATA,\na lost answer and a state query. Uses simulated protocol/device events only;\naudio, radio and Winlink devices remain outside this simulation.\n\n--simulate-audio runs the two-way BW500 audio bench with a measured profile.\n--serve-bench serves one local TCP command/data pair with a simulated echo peer."
+            "{USAGE}\n\n--audio-devices lists native input and output names.\n--check-config validates the station settings and any configured profile.\n--check-station checks audio input, output format, and local port availability.\n--simulate and --simulate-audio run local modem simulations.\n--serve-bench serves a simulated echo peer over local TCP.\n--serve-virtual-bw500 and --serve-virtual-wide use a loopback waveform cable.\n--virtual-audio-device attaches isolated audio devices to that cable (audio-device build)."
         );
+        return;
+    }
+    let setup_result = match args.as_slice() {
+        [mode] if mode == "--version" => {
+            println!("linkwise-modemd {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
+        [mode] if mode == "--audio-devices" => Some(setup::list_audio_devices()),
+        [mode, file] if mode == "--check-config" => Some(setup::check_config(file)),
+        [mode, file] if mode == "--check-station" => Some(setup::check_station(file).await),
+        _ => None,
+    };
+    if let Some(result) = setup_result {
+        if let Err(error) = result {
+            eprintln!("Setup check failed: {error}");
+            std::process::exit(1);
+        }
         return;
     }
     if let [mode, path] = args.as_slice() {
@@ -32,6 +55,30 @@ async fn main() {
             return;
         }
     }
+    #[cfg(feature = "audio-device")]
+    if args
+        .first()
+        .is_some_and(|arg| arg == "--virtual-audio-device")
+    {
+        if let Err(error) = virtual_host::bridge(&args[1..]).await {
+            eprintln!("Virtual audio device failed: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    if args.first().is_some_and(|arg| {
+        matches!(
+            arg.as_str(),
+            "--serve-virtual-bw500" | "--serve-virtual-wide"
+        )
+    }) {
+        if let Err(error) = virtual_host::serve(&args[1..], args[0] == "--serve-virtual-wide").await
+        {
+            eprintln!("Virtual modem host failed: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if args.first().is_some_and(|arg| arg == "--serve-bench") {
         if let Err(error) = bench_host::serve(&args[1..]).await {
             eprintln!("Bench host failed: {error}");
@@ -40,9 +87,7 @@ async fn main() {
         return;
     }
     if args != ["--simulate"] {
-        eprintln!(
-            "Usage: linkwise-modemd --simulate | --simulate-audio PROFILE | --serve-bench CALL [CONTROL_PORT DATA_PORT] (or --help)"
-        );
+        eprintln!("{USAGE}");
         std::process::exit(2);
     }
     if let Err(error) = simulate().await {

@@ -3,17 +3,17 @@
 \label{sec:modem-software}
 
 This section connects the proposed ports-and-adapters architecture to the
-Rust modem implementation as of 10 November 2026. It identifies implemented
-DSP and simulated execution, and records their verification limits.
-Statements marked \emph{proposed integration} describe work needed for an
-operational station. The receive evidence includes one live KiwiSDR frame.
-Reference-peer acceptance and Winlink transfer remain separate gates.
+Rust modem implementation as of 11 November 2026. The radio-free modem
+preview serves traditional clients over paired TCP sockets and exchanges
+audio with a bench peer. The proposed station runtime adds policy, device
+ownership, and physical transmit control. The evidence table records
+modem interoperability, client transfer, and station qualification separately.
 
 \subsection{Standalone modem product and shared runtime}
 \label{sec:modem-shared-runtime}
 \emph{Proposed integration.} The native modem should be delivered as a shared
 Rust runtime usable by traditional amateur-radio applications without an AI
-host. A foreground executable, provisionally \path{linkwise-modemd}, will
+host. The foreground executable \path{linkwise-modemd} will
 assemble the runtime and its adapters. Optional operating-system supervision
 and graphical configuration do not define a different protocol engine.
 Linkwise orchestration remains an additional client of the station execution
@@ -26,14 +26,10 @@ The implementation supports virtual time for deterministic tests and a
 monotonic clock for the foreground runner. The device execution tests use
 simulated audio and PTT.
 
-The first intended operational profile is BW500 with compression disabled.
-This is an implementation target, not an advertised interoperable capability.
-Its release manifest must enumerate supported establishment roles, levels,
-DATA forms, host commands, reply/query forms, turn/rate behavior, keepalive,
-and disconnect behavior. Initial native audio establishment is level 4;
-existing level-1--3 codec support does not establish those session modes.
-Unknown wire-field sequencing and recovery behavior require independent
-vectors or reference captures before implementation claims are extended.
+The radio-free preview supports uncompressed BW500 and fixed level-4
+BW2300/BW2750. BW500 remains the first target for station integration.
+A release manifest must enumerate the qualified roles, DATA forms,
+host commands, reply/query forms, rate behavior, and disconnect behavior.
 
 \subsection{Traditional-client interface and session admission}
 \label{sec:modem-client-admission}
@@ -45,9 +41,12 @@ a command nor opening a socket establishes on-air interoperability. Winlink
 message framing, mailbox exchange, and message acceptance remain the client's
 responsibility. No message body or continuous modem stream traverses MCP.
 
-The existing \path{host::control}, \path{host::data}, and
-\path{api::CommandDecoder} are reusable transport components. They do not
-currently listen on sockets, pair clients, or execute operational sessions.
+The preview uses \path{host::tcp} to pair one host command socket and one
+DATA socket. \path{api::CommandDecoder} parses the command stream.
+A separate IPv4 loopback socket exchanges audio with a single cable peer.
+Each record has a four-byte big-endian sample count followed by little-endian
+32-bit float samples at 48 kHz mono. The audio bridge can attach named
+virtual capture and playback devices.
 A compatibility matrix must record initialization commands, replies,
 asynchronous notifications, buffer semantics, and unsupported behavior for
 each qualified client/version. The current parser supports only a subset;
@@ -150,7 +149,7 @@ and paired TCP bench exercise stages three and four with simulated peers.
 Rolling pilot acquisition for levels 1--3 has separate off-air receive
 evidence (Table~\ref{tab:modem-evidence-gates}). The remaining work includes
 production DATA sequencing and recovery, native audio/PTT integration,
-and a qualified client and reference peer. The sequence below defines the
+and broader client and reference-peer qualification. The sequence below defines the
 scope and exit criteria for each stage.
 \begin{enumerate}
 \item \textbf{Session contracts and owner.} Define typed commands/events,
@@ -312,13 +311,13 @@ monotonic instants enforce deadlines; absolute sample counters locate signal
 evidence. One must not substitute for another.
 
 \subsection{Native implementation map and current limits}
-The Rust package contains executable components rather than a complete service:
+The Rust package contains the foreground bench service and reusable components.
 \path{audio::device} captures input; \path{modem::receiver} bounds and dispatches
 receive candidates; \path{modem::waveform} supplies energy detection and tone
 correlation; \path{modem::bw500} implements index-modulated levels 1--3;
 \path{modem::bw500_level4} handles level-4 channel coding;
 \path{modem::bw500_waveform} adds measured-reference two-band synthesis and
-reception; \path{modem::coding} implements whitening, CRC, interleavers, and
+reception; \path{modem::wide_level4} supplies level-4 setup and DATA waveforms for BW2300 and BW2750; \path{modem::coding} implements whitening, CRC, interleavers, and
 FEC. \path{modem::control}, \path{modem::setup}, \path{modem::handshake}, and
 \path{modem::audio_handshake} cover keyed control, caller setup, and
 establishment. \path{modem::data} and \path{modem::arq} are frame/container
@@ -326,13 +325,20 @@ and sender components. \path{api::CommandDecoder} and \path{host} implement
 host stream boundaries.
 
 The clock-driven \path{modem::runtime} combines establishment and ARQ at
-the validated-event boundary. The simulated audio loopback exercises
-bidirectional delivery and recovery with bench framing. The paired TCP bench
-exercises the host interface with a simulated peer. The optional CPAL output
-primitive reports a presentation estimate. Production integration still needs
-qualified playback and PTT completion, wire answer/query recognition, rate,
-turn, keepalive and disconnect behavior, and an operational host backend.
-The external VARA adapter needs a release-specific command/status contract.
+the validated-event boundary. The virtual host in \path{linkwise-modemd}
+owns its bench handshake, transmit turn, pending DATA, and deadlines.
+In BW500 it queues up to 4,096 bytes and segments the stream into measured
+uncompressed deliveries of up to 203 bytes. The wide modes use uncompressed
+closing frames of up to 86 bytes and split longer writes across deliveries.
+The optional CPAL bridge provides native capture and playback for isolated
+audio routes. Station integration still needs qualified hardware playback
+completion, PTT release, and the station admission and ownership contracts.
+
+ARM64 preview installers and station guides are available for macOS,
+Windows, Ubuntu, and Fedora. Windows, Ubuntu, and Fedora passed install,
+launch, simulation, and removal checks. The extracted macOS package
+executable ran successfully, and its bundled guide was checked. Native macOS
+capture awaits an input endpoint.
 
 \section{DSP implementation pipeline}
 \label{sec:modem-dsp}
@@ -758,6 +764,13 @@ accounting. The sender's queue currently holds supplied blocks; its byte count
 must not be exposed as Winlink delivery progress or raw-host \texttt{BUFFER}
 semantics without that integration.
 
+The BW500 bench implements a bounded query after a missing caller closing
+acknowledgment. Stock VARA answered with a turn request and Linkwise sent
+the drained control before reporting \texttt{BUFFER 0}. A 200-byte
+level-3 retry passed between Linkwise peers. Stock VARA rejected the first
+retry frame in the invalid-CRC experiment. Missing intermediate answers
+and general repacketization remain open.
+
 \landscapeplantuml{build/diagrams/Linkwise_Modem_Recovery}{Implemented event-level ARQ sender behavior and remaining wire integration. Missing answers request state; only a validated negative reply permits DATA retransmission.}{fig:modem-recovery}
 
 \subsection{Execution isolation, keying, and failure containment}
@@ -829,26 +842,27 @@ frames. These checks cover the tested recordings.\\
 Receiver robustness & Measure live frame recovery on known transmissions.
 Characterize offset, fading, interference, clipping, sample-clock error,
 false alarms, and processing latency.\\
-Reference acceptance & Show an unmodified release accepts native requests,
-setup and DATA and that native RX accepts its replies; preserve both audio
-directions, command bytes, readbacks, timing and payload comparisons.\\
+Reference acceptance & Stock VARA HF 4.9.1 and Linkwise exchanged exact
+13-byte payloads in both connection roles at BW2300 and BW2750 level 4.
+Six saved wide setup recordings replayed with valid CRCs. Wide adaptive
+rates and multi-frame deliveries remain open.\\
 Session reliability & Deliberately lose DATA and answers, duplicate replies,
 interrupt playback, restart the owner, exhaust budgets and change rates;
 prove byte preservation and distinguish unresolved from acknowledged bytes.\\
 Station safety & Qualify actual device presentation, turnaround, exclusive
 lease, permit expiry, duty limits, watchdog release and independent stop on
 an inhibited or conducted setup before operational RF use.\\
-Host and Winlink & Bind one command/data owner to the session engine; test
-backpressure, disconnect/reconnect and supported client outcomes; keep modem
-connection, client completion and CMS/recipient evidence distinct.\\
+Host and Winlink & Pat 1.0.1 sent a B2F peer-to-peer message through two
+Linkwise BW500 daemons to Winlink Express 1.8.6.0. The Express inbox
+displayed the exact body. Express outbound delivery and gateway/CMS
+qualification remain open.\\
 \bottomrule
 \end{longtable}
 
-The attempted i386 Debian/Wine reference bench on the ARM64 Mac initialized
-Wine but failed during COM registration with an illegal-instruction exception
-and WineDbg attach error. It supplied no usable stock-VARA endpoint and was
-stopped. That is a failed environment gate, not acceptance/rejection evidence
-for native DSP. Until a functioning reference peer, operational runtime, and
-native device qualification exist, Linkwise must report these components as
-implemented prototypes with bounded local evidence rather than a complete
-VARA-compatible modem.
+The earlier i386 Debian/Wine bench on the ARM64 Mac stopped after an
+illegal-instruction exception during COM registration and a WineDbg
+attach error. The later Windows UTM bench provided a working stock peer.
+The November 11 lab chronicle records the stock Windows UTM runs, the
+Express message export, and installer checks. Its evidence manifest links
+the measured results to the captured audio and command transcripts.
+Physical transmit control and operational RF qualification remain open.

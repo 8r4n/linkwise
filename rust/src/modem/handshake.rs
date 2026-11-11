@@ -1,4 +1,4 @@
-//! BW500 link establishment at the boundary between validated bursts and audio.
+//! Level-4 link establishment at the boundary between validated bursts and audio.
 //!
 //! The protocol order follows §5.3 of Saul St John's VARA HF notes. The
 //! runtime owns waveform matching, turn-around, and actual playback. This
@@ -12,13 +12,14 @@ use super::setup::{LinkSetup, Profile};
 const LEVEL: u8 = 4;
 
 /// Decoders must validate CRCs and match each control waveform to its key
-/// before passing a burst here. These types represent BW500 traffic only.
+/// before passing a burst here. These types represent decoded setup traffic.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Burst {
     Request { called: String },
     Response { called: String },
     Setup(LinkSetup),
     ConnectedAck { caller: String },
+    SetupRejected { called: String },
     Confirm { called: String, level: u8 },
 }
 
@@ -33,6 +34,7 @@ pub struct Established {
 pub enum Failure {
     TimedOut,
     TransmitFailed,
+    SetupRejected,
     Aborted,
 }
 
@@ -56,7 +58,7 @@ pub enum Expected<'a> {
     Request(&'a str),
     Response(&'a str),
     Setup,
-    ConnectedAck(&'a str),
+    ConnectedAck { caller: &'a str, called: &'a str },
     Confirm(&'a str),
 }
 
@@ -94,6 +96,7 @@ pub struct Handshake {
     deadline: Option<Duration>,
     last_time: Duration,
     next_token: u64,
+    retried_setup: bool,
     state: State,
     session: Option<Session>,
 }
@@ -106,9 +109,13 @@ impl Handshake {
                 Some(Expected::Response(&self.session.as_ref()?.called))
             }
             State::Receiving(Wait::Setup) => Some(Expected::Setup),
-            State::Receiving(Wait::ConnectedAck) => Some(Expected::ConnectedAck(
-                self.session.as_ref()?.caller.as_deref()?,
-            )),
+            State::Receiving(Wait::ConnectedAck) => {
+                let session = self.session.as_ref()?;
+                Some(Expected::ConnectedAck {
+                    caller: session.caller.as_deref()?,
+                    called: &session.called,
+                })
+            }
             State::Receiving(Wait::Confirm) => {
                 Some(Expected::Confirm(&self.session.as_ref()?.called))
             }
@@ -130,6 +137,7 @@ impl Handshake {
             deadline: None,
             last_time: Duration::ZERO,
             next_token: 0,
+            retried_setup: false,
             state: State::Idle,
             session: None,
         })
@@ -216,11 +224,7 @@ impl Handshake {
         let session = self.session.as_mut()?;
         let (burst, after) = match (phase, burst) {
             (Wait::Response, Burst::Response { called }) if session.called == called => (
-                Burst::Setup(LinkSetup {
-                    caller: self.local.caller.clone(),
-                    high_speed: self.local.high_speed,
-                    requested_level: self.local.requested_level,
-                }),
+                Burst::Setup(self.local.clone()),
                 AfterTransmit::Wait(Wait::ConnectedAck),
             ),
             (Wait::Setup, Burst::Setup(setup))
@@ -231,6 +235,16 @@ impl Handshake {
                 (
                     Burst::ConnectedAck { caller },
                     AfterTransmit::Wait(Wait::Confirm),
+                )
+            }
+            (Wait::ConnectedAck, Burst::SetupRejected { called }) if session.called == called => {
+                if self.retried_setup {
+                    return Some(self.fail(Failure::SetupRejected));
+                }
+                self.retried_setup = true;
+                (
+                    Burst::Setup(self.local.clone()),
+                    AfterTransmit::Wait(Wait::ConnectedAck),
                 )
             }
             (Wait::ConnectedAck, Burst::ConnectedAck { caller })
@@ -269,6 +283,7 @@ impl Handshake {
     fn reset(&mut self) -> Option<Session> {
         self.state = State::Idle;
         self.deadline = None;
+        self.retried_setup = false;
         self.session.take()
     }
 
@@ -321,6 +336,46 @@ mod tests {
             None,
         );
         burst
+    }
+
+    #[test]
+    fn retries_setup_once_only_for_the_called_station() {
+        let mut caller = station("W1AW", false);
+        let now = Duration::ZERO;
+        let action = caller.handle(
+            now,
+            Event::Call {
+                called: "KN6MQS".into(),
+            },
+        );
+        send(&mut caller, action);
+        let action = caller.handle(
+            now,
+            Event::Received(Burst::Response {
+                called: "KN6MQS".into(),
+            }),
+        );
+        let first = send(&mut caller, action);
+        assert_eq!(
+            caller.handle(
+                now,
+                Event::Received(Burst::SetupRejected {
+                    called: "W9SSJ".into()
+                })
+            ),
+            None,
+        );
+        let rejection = || {
+            Event::Received(Burst::SetupRejected {
+                called: "KN6MQS".into(),
+            })
+        };
+        let action = caller.handle(now, rejection());
+        assert_eq!(send(&mut caller, action), first);
+        assert_eq!(
+            caller.handle(now, rejection()),
+            Some(Action::Failed(Failure::SetupRejected))
+        );
     }
 
     #[test]

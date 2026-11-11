@@ -44,6 +44,9 @@ impl ModemPort for BenchPort {
             Command::Version => Reply::Version("LINKWISE SIMULATED BENCH".into()),
             Command::MyCall(calls) if calls.as_slice() == [self.local.as_str()] => Reply::Ok,
             Command::Bw500 | Command::CompressionOff | Command::Listen(false) => Reply::Ok,
+            // The echo peer models a direct connection. Gateway sessions,
+            // inbound calls, and on-air settings need an operational backend.
+            Command::P2pSession if self.pair.lock().await.is_none() => Reply::Ok,
             Command::Connect {
                 source,
                 destination,

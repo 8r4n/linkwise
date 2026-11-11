@@ -12,6 +12,6 @@ latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build lab-notes.tex
 latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build presentation.tex
 ```
 
-The presentation deliberately distinguishes completed setup and static
-analysis from pending dynamic testing. The Rust crate is not yet a functioning
-modem.
+The October presentation records the initial setup and static analysis.
+See the dated entries in the lab notes for current audio interoperability
+results and the limits of the radio-free runtime.

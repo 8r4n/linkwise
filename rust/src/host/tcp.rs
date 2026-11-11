@@ -71,8 +71,8 @@ impl Listener {
         })
     }
 
-    /// Serve exactly one pair, then await cleanup before returning. The
-    /// listener's exclusive borrow prevents concurrent pair owners.
+    /// Serve one pair with command-channel heartbeats, then await cleanup.
+    /// The listener's exclusive borrow prevents concurrent pair owners.
     pub async fn serve_one(
         &mut self,
         port: &dyn ModemPort,
@@ -81,7 +81,7 @@ impl Listener {
     ) -> io::Result<()> {
         let (control, data) = self.accept_pair().await?;
         let (channel, result) = {
-            let control = control_stream(control, port, notices, Some(WRITE_TIMEOUT));
+            let control = control_stream(control, port, notices, Some(WRITE_TIMEOUT), true);
             let data = data_stream(data, port, received, Some(WRITE_TIMEOUT));
             tokio::pin!(control, data);
             loop {

@@ -92,3 +92,6 @@ reference/vara/fixtures/
 # Local demo UI build dependencies
 rust/demo-ui/node_modules/
 rust/demo-ui/.sites-runtime/
+
+# Local modem installer output
+/dist/

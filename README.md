@@ -10,6 +10,16 @@ VARA HF is the interoperability target. Linkwise is a separate implementation:
 it is not a redistribution of VARA software, decompiled source, or proprietary
 assets.
 
+## Install the modem preview
+
+Follow the installation guide for
+[macOS](docs/install/macos.md), [Windows](docs/install/windows.md),
+[Ubuntu](docs/install/ubuntu.md), or [Fedora](docs/install/fedora.md).
+Each installer includes the station setup guide. The preview supports
+station checks and local simulations. Live Winlink message transfer and
+radio PTT remain under development. See the
+[packaging instructions](packaging/README.md) to build installers.
+
 ## Run the modem demo
 
 ```sh
@@ -283,6 +293,11 @@ aarch64-unknown-linux-gnu  x86_64-unknown-linux-gnu
 
 Cross-target compilation is necessary but does not replace native execution,
 audio-device validation, PTT testing, or reference interoperability tests.
+
+## Product test environments
+
+Use the [UTM test environment guide](docs/testing/utm-test-environments.md)
+to provision Windows, Ubuntu, and Fedora ARM64 guests on Apple silicon.
 
 ## Containerized radio-control services
 
