@@ -2,6 +2,7 @@
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
+skinparam Padding 8
 skinparam defaultFontName "Latin Modern Roman"
 skinparam defaultFontSize 10
 skinparam ArrowColor #2A9D8F
@@ -10,8 +11,8 @@ skinparam nodesep 20
 skinparam ranksep 25
 top to bottom direction
 rectangle "48 kHz mono\ncontinuous samples" as Audio
-rectangle "Energy gate\n480-sample windows" as Gate
-rectangle "24-reference lock\ncoarse / fine search" as Lock
+rectangle "Rolling spectra\n128-sample hops" as Gate
+rectangle "24-pilot search\n0 and +/-12 Hz\ntiming refinement" as Lock
 rectangle "Tone correlations\n8 hypotheses / 3 bits" as Metrics
 rectangle "Channel inverse\nscatter soft metrics" as Interleave
 rectangle "Turbo + de-whiten\nCRC checked each iteration" as Decode

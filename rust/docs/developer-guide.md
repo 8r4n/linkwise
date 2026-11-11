@@ -34,7 +34,10 @@ private TCP connection to Hamlib rigctld
 - `modem` implements BW500 receive/synthesis primitives and the handshake
   controller; `audio::device` optionally captures native 48 kHz audio through
   CPAL. These are separate from the radio MCP service. See [modem status](modem.md).
-- `api` and `platform` remain planned boundaries.
+- `modem::runtime` serializes establishment/ARQ and simulated device execution;
+  see the [runtime guide](modem-runtime.md). It does not open native devices or
+  host TCP listeners.
+- `api` implements the bounded host command decoder; `platform` remains a planned boundary.
 
 Relevant source: [`lib.rs`](../src/lib.rs), [`mcp.rs`](../src/mcp.rs), and
 [`radio.rs`](../src/radio.rs).

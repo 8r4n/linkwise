@@ -2,7 +2,7 @@
 
 **Document ID:** LINKWISE-SDD-001  
 **Version:** 0.1, proposed  
-**Status:** Draft design baseline; interfaces are not implemented
+**Status:** Draft design baseline; proposed integration contracts, with partial modem/host components implemented
 
 ## 1. Purpose and design scope
 
@@ -162,8 +162,10 @@ cancellation. Its key handlers are:
   autonomous runtime profile.
 - `StartSession`: revalidate handle, automatically issued local-policy grant,
   lease, inventory age, radio
-  readback, client/modem readiness, and interlocks immediately before asking
-  the supported Winlink client to begin one bounded session. Session grants
+  readback, client/modem readiness, and interlocks. For a host-mediated native
+  session, persist the operation and arm its expected client reservation
+  before asking the supported Winlink client to begin; its matching `CONNECT`
+  starts the backend within that operation, not a second attempt. Session grants
   are automatic within the installed envelope; no interactive approval is
   requested while autonomous operation is active.
 - `ObserveSession` / `AbortSession`: collect state and progress without
@@ -253,7 +255,7 @@ features.
 | --- | --- |
 | `RadioControlPort` / Hamlib adapter | Enumerate all backend-reported capabilities and state; read/set each supported typed control (frequency/VFO, mode/filter, power, antenna, levels, split, memory, functions, and backend extensions as supported); return per-control support, bounds, and readback. Translate rigctld replies/errors; never bypass policy or own PTT authorization. |
 | `PttControlPort` / PTT arbiter + qualified driver | Expose PTT observation, authorized assert, and unconditional idempotent release. Assert independently checks session or approved test context, lease, config revision, permit, limits, route health, and watchdog. Report requested and observed state separately. |
-| `ModemSessionPort` / VARA adapter | Observe lifecycle and link metrics; start/stop only through supported documented interface. Every keying request routes to PTT arbiter; model cannot sequence modem bursts. |
+| `ModemSessionPort` / native, external VARA, or simulated backend | Observe capabilities, lifecycle and qualified link metrics; accept bounded internal start/stop requests. The native adapter owns one session actor. Every keying request routes to the PTT arbiter; model cannot sequence modem bursts. |
 | `WinlinkClientPort` / client adapter | Expose only documented inventory/queue/session operations supported by that client. Return `Unsupported` for absent features; do not silently scrape a GUI. A client event is not proof of recipient delivery. |
 | `GatewayDirectoryPort` | Fetch source version, records, status/report timestamps, pagination and warnings. Normalize identity without collapsing multiple channels under one gateway. |
 | `PropagationProviderPort` | Accept explicit path, time, frequency, antenna/station and model settings; return a typed forecast with model/version/input provenance and uncertainty. |
@@ -267,6 +269,71 @@ explicit error classes. A remote provider outage returns partial evidence,
 not a fabricated healthy record. Adapter callbacks are converted to domain
 events on a bounded queue; queue overflow is observable and safety-critical
 events (abort/PTT release) use a separate priority path.
+
+### 3.6 Shared native modem runtime and traditional clients
+
+**Proposed integration.** The native modem is usable without an AI host. A
+foreground executable, provisionally `linkwise-modemd`, assembles common Rust
+session logic and device adapters. OS startup, permissions, audio APIs, and
+service-manager packaging remain outside the common core. The detailed
+contracts and staged exit criteria are in the white paper's
+[modem chapter](../whitepaper/modem-software-architecture.tex), sections
+“Standalone modem product and shared runtime” through “Shared-core
+implementation order and exit criteria”.
+
+A VARA-compatible host adapter supplies separate command/notification and raw
+binary DATA TCP channels, loopback by default, with configurable 8300/8301
+ports. Existing `host::ModemPort` is an inbound command/data boundary; it is
+not the outbound `ModemSessionPort`. Both are bound through station admission
+to one native session actor. The first intended profile is BW500 with
+compression off; supported host commands and on-air modes require separate,
+versioned qualification manifests. Client message/mailbox protocols stay in
+the Winlink client. No body bytes or protocol deadlines depend on MCP.
+
+Standalone `CONNECT` obtains local policy authorization and an exclusive lease.
+Managed start arms a bounded reservation for an expected client association;
+the matching `CONNECT` consumes it once and starts the backend within the
+existing operation. Bind the reservation to client owner, callsigns, lease,
+configuration and expiry. Reject mismatches and competing owners; expiry
+cleans up the reservation. Incoming calls require installed listen/respond
+authority before any response transmission.
+
+Initially allow one exclusive command/data pair per endpoint, either arrival
+order, and bounded attachment time. RF admission requires a complete pair.
+The legacy protocol has no authenticated pairing token; peer address is insufficient identity. A replacement socket
+cannot adopt a session. Loss of either channel detaches both, cancels the
+session and requests release; block new admission until cleanup completes.
+Loopback is not authentication. Shared/remote deployment needs an authenticated
+enclosing transport or a qualified ownership mechanism. AI-host loss follows
+its separate station policy.
+
+The native actor serializes peer/phase transitions, queued/outstanding bytes,
+and monotonic timers. Device completions carry session/transmission tokens;
+stale results cannot advance state. Capture continuity, actual presentation,
+cancellation uncertainty, observed PTT release and turnaround are explicit
+facts. Only qualified presentation and release/turnaround produce protocol
+TX completion. Abort/release has a priority path independent of full queues.
+All queues and client stalls are bounded; backpressure cannot stop deadlines.
+
+For each operation, accepted bytes equal pending plus outstanding plus
+acknowledged plus unresolved plus explicitly discarded bytes. These categories
+are mutually exclusive;
+retry attempts are separate. Receive counters distinguish decoded,
+reassembled/deduplicated, queued, and socket-written bytes. Socket writes do
+not prove client consumption. `BUFFER` must have client-qualified semantics;
+peer acknowledgment does not prove Winlink/CMS acceptance. Ambiguous failure
+retains unresolved payload in bounded session memory and records only counts
+and ranges in operation results; explicit clear/abort records discarded bytes.
+Reconnect/restart never automatically replays them. Crash durability requires
+a separate bounded journal; absent that evidence the outcome is unknown.
+
+The modem workstream proceeds through: (1) session contracts/owner and virtual
+clock; (2) simulated audio/PTT execution; (3) complete first link profile;
+(4) paired TCP service and host compatibility; (5) standalone/managed station
+integration; (6) reference-peer and named Winlink-client qualification.
+Independent measurements resolve wire uncertainties throughout. Steps 1–2
+are the first shared-core milestone. Native OS adapters and startup packaging
+follow stable contracts; hardware presentation/PTT qualification still gates RF.
 
 ## 4. Software interface contracts
 

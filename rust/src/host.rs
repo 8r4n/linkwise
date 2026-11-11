@@ -1,9 +1,11 @@
 //! Host byte-stream transports. Session execution is supplied by a modem port;
 //! this layer never manufactures CONNECTED, ACKs, or BUFFER advancement.
 
+pub mod tcp;
+
 use crate::api::{Command, CommandDecoder};
 use async_trait::async_trait;
-use std::io;
+use std::{io, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::mpsc,
@@ -59,48 +61,58 @@ pub trait ModemPort: Send + Sync {
 pub async fn control<S>(
     stream: S,
     port: &dyn ModemPort,
-    mut notices: mpsc::Receiver<Vec<u8>>,
+    notices: mpsc::Receiver<Vec<u8>>,
 ) -> io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let result = async {
-        let (mut read, mut write) = tokio::io::split(stream);
-        let mut decoder = CommandDecoder::default();
-        let mut input = [0; 1024];
-        let mut notifications_open = true;
-        loop {
-            tokio::select! {
-                count = read.read(&mut input) => {
-                    let count = count?;
-                    if count == 0 { return Ok(()); }
-                    let mut commands = Vec::new();
-                    decoder.push(&input[..count], |command| commands.push(command));
-                    for command in commands {
-                        let reply = match command {
-                            Ok(command) => port.command(command).await,
-                            Err(_) => Reply::Wrong,
-                        };
-                        write.write_all(&reply.bytes()?).await?;
-                    }
+    let result = control_stream(stream, port, notices, None).await;
+    port.closed(Channel::Control).await;
+    result
+}
+
+async fn control_stream<S>(
+    stream: S,
+    port: &dyn ModemPort,
+    mut notices: mpsc::Receiver<Vec<u8>>,
+    write_timeout: Option<Duration>,
+) -> io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let (mut read, mut write) = tokio::io::split(stream);
+    let mut decoder = CommandDecoder::default();
+    let mut input = [0; 1024];
+    let mut notifications_open = true;
+    loop {
+        tokio::select! {
+            count = read.read(&mut input) => {
+                let count = count?;
+                if count == 0 { return Ok(()); }
+                let mut commands = Vec::new();
+                decoder.push(&input[..count], |command| commands.push(command));
+                for command in commands {
+                    let reply = match command {
+                        Ok(command) => port.command(command).await,
+                        Err(_) => Reply::Wrong,
+                    };
+                    write_bytes(&mut write, &reply.bytes()?, write_timeout).await?;
                 }
-                notice = notices.recv(), if notifications_open => {
-                    match notice {
-                        None => notifications_open = false,
-                        Some(notice) => {
-                            if notice.len() > 1024 || notice.last() != Some(&b'\r')
-                                || !notice[..notice.len()-1].iter().all(|b| b.is_ascii_graphic() || *b == b' ') {
-                                return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid modem notification"));
-                            }
-                            write.write_all(&notice).await?;
+            }
+            notice = notices.recv(), if notifications_open => {
+                match notice {
+                    None => notifications_open = false,
+                    Some(notice) => {
+                        if notice.len() > 1024 || notice.last() != Some(&b'\r')
+                            || !notice[..notice.len()-1].iter().all(|b| b.is_ascii_graphic() || *b == b' ') {
+                            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid modem notification"));
                         }
+                        write_bytes(&mut write, &notice, write_timeout).await?;
                     }
                 }
             }
         }
-    }.await;
-    port.closed(Channel::Control).await;
-    result
+    }
 }
 
 /// Raw binary transport, without line splitting, KISS wrapping or text matching.
@@ -108,40 +120,71 @@ where
 pub async fn data<S>(
     stream: S,
     port: &dyn ModemPort,
-    mut received: mpsc::Receiver<Vec<u8>>,
+    received: mpsc::Receiver<Vec<u8>>,
 ) -> io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let result = async {
-        let (mut read, mut write) = tokio::io::split(stream);
-        let mut input = [0; 4096];
-        let mut receiving = true;
-        loop {
-            tokio::select! {
-                count = read.read(&mut input) => {
-                    let count = count?;
-                    if count == 0 { return Ok(()); }
-                    port.data(&input[..count]).await?;
-                }
-                bytes = received.recv(), if receiving => {
-                    match bytes {
-                        Some(bytes) => write.write_all(&bytes).await?,
-                        None => receiving = false,
-                    }
+    let result = data_stream(stream, port, received, None).await;
+    port.closed(Channel::Data).await;
+    result
+}
+
+async fn data_stream<S>(
+    stream: S,
+    port: &dyn ModemPort,
+    mut received: mpsc::Receiver<Vec<u8>>,
+    write_timeout: Option<Duration>,
+) -> io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let (mut read, mut write) = tokio::io::split(stream);
+    let mut input = [0; 4096];
+    let mut receiving = true;
+    loop {
+        tokio::select! {
+            count = read.read(&mut input) => {
+                let count = count?;
+                if count == 0 { return Ok(()); }
+                port.data(&input[..count]).await?;
+            }
+            bytes = received.recv(), if receiving => {
+                match bytes {
+                    Some(bytes) => write_bytes(&mut write, &bytes, write_timeout).await?,
+                    None => receiving = false,
                 }
             }
         }
     }
-    .await;
-    port.closed(Channel::Data).await;
-    result
+}
+
+async fn write_bytes(
+    writer: &mut (impl AsyncWrite + Unpin),
+    bytes: &[u8],
+    deadline: Option<Duration>,
+) -> io::Result<()> {
+    match deadline {
+        Some(duration) => tokio::time::timeout(duration, writer.write_all(bytes))
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "host write stalled"))?,
+        None => writer.write_all(bytes).await,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
+    #[tokio::test(start_paused = true)]
+    async fn bounded_writer_fails_when_the_peer_stops_reading() {
+        let (mut writer, _peer) = tokio::io::duplex(1);
+        let error = write_bytes(&mut writer, b"blocked", Some(Duration::from_secs(5)))
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    }
+
     #[derive(Default)]
     struct Port {
         bytes: Mutex<Vec<u8>>,

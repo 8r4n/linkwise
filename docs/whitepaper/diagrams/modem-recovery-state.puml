@@ -2,6 +2,7 @@
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
+skinparam Padding 8
 skinparam defaultFontName "Latin Modern Roman"
 skinparam defaultFontSize 10
 skinparam ArrowColor #2A9D8F
@@ -30,7 +31,10 @@ Active --> Fault : TX failure / watchdog\nquery or retry budget exhausted
 Active --> Abort : explicit abort
 Fault --> Abort : explicit abort
 note bottom of Active
- Event-level policy; wire codecs and turn integration remain open.
+ Implemented event-level sender; runtime integration remains proposed.
+ Qualified TX complete requires presentation and release/turnaround.
+ Client channel loss cancels; restart/reconnect never replays bytes.
+ Unresolved retention is in memory, not crash durability.
  Local tokens are not on-air sequence numbers.
 end note
 @enduml

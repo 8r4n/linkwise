@@ -7,6 +7,8 @@ use super::{
     waveform::{Tone, energy},
 };
 
+pub(crate) mod scan;
+
 pub const SAMPLE_RATE_HZ: u32 = 48_000;
 const LABELS: [usize; 8] = [0, 1, 3, 2, 7, 6, 4, 5];
 
@@ -229,6 +231,10 @@ fn decode_frame(mode: &Mode, tones: &[Tone], samples: &[f32]) -> Option<Frame> {
     if reference_score(mode, tones, samples) < 0.65 {
         return None;
     }
+    decode_aligned(mode, tones, samples)
+}
+
+fn decode_aligned(mode: &Mode, tones: &[Tone], samples: &[f32]) -> Option<Frame> {
     let mut coded = vec![0.0; mode.channel.len()];
     let mut channel = mode.channel.as_chunks::<3>().0.iter();
     for (column, chunk) in mode.columns.iter().zip(samples.chunks_exact(mode.symbol)) {

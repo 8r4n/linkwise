@@ -3,12 +3,195 @@
 \label{sec:modem-software}
 
 This section connects the proposed ports-and-adapters architecture to the
-native Rust modem components present on 9 November 2026. It describes the
-implemented DSP algorithms in enough detail to identify their data contracts,
-geometry, processing order, and verification limits. Statements marked
-\emph{proposed integration} describe work still required for an operational
-station. Passing a codec round trip is not evidence of a complete modem,
-reference-peer acceptance, or a transferred Winlink message.
+Rust modem implementation as of 10 November 2026. It identifies implemented
+DSP and simulated execution, and records their verification limits.
+Statements marked \emph{proposed integration} describe work needed for an
+operational station. The receive evidence includes one live KiwiSDR frame.
+Reference-peer acceptance and Winlink transfer remain separate gates.
+
+\subsection{Standalone modem product and shared runtime}
+\label{sec:modem-shared-runtime}
+\emph{Proposed integration.} The native modem should be delivered as a shared
+Rust runtime usable by traditional amateur-radio applications without an AI
+host. A foreground executable, provisionally \path{linkwise-modemd}, will
+assemble the runtime and its adapters. Optional operating-system supervision
+and graphical configuration do not define a different protocol engine.
+Linkwise orchestration remains an additional client of the station execution
+contract, not a prerequisite for an ordinary client connection.
+
+The common core owns session state, queues, deadlines, handshake and ARQ
+sequencing, byte accounting, and outcomes. Platform adapters provide audio
+capture and playback, device discovery, PTT, permissions, and process startup.
+The implementation supports virtual time for deterministic tests and a
+monotonic clock for the foreground runner. The device execution tests use
+simulated audio and PTT.
+
+The first intended operational profile is BW500 with compression disabled.
+This is an implementation target, not an advertised interoperable capability.
+Its release manifest must enumerate supported establishment roles, levels,
+DATA forms, host commands, reply/query forms, turn/rate behavior, keepalive,
+and disconnect behavior. Initial native audio establishment is level 4;
+existing level-1--3 codec support does not establish those session modes.
+Unknown wire-field sequencing and recovery behavior require independent
+vectors or reference captures before implementation claims are extended.
+
+\subsection{Traditional-client interface and session admission}
+\label{sec:modem-client-admission}
+\emph{Proposed integration.} A VARA-compatible host adapter exposes a
+CR-delimited command/notification TCP channel and a separate raw binary DATA
+channel. Ports default to loopback 8300/8301 where available and remain
+configurable. These are host-protocol compatibility goals; neither accepting
+a command nor opening a socket establishes on-air interoperability. Winlink
+message framing, mailbox exchange, and message acceptance remain the client's
+responsibility. No message body or continuous modem stream traverses MCP.
+
+The existing \path{host::control}, \path{host::data}, and
+\path{api::CommandDecoder} are reusable transport components. They do not
+currently listen on sockets, pair clients, or execute operational sessions.
+A compatibility matrix must record initialization commands, replies,
+asynchronous notifications, buffer semantics, and unsupported behavior for
+each qualified client/version. The current parser supports only a subset;
+unsupported commands continue to fail explicitly. In particular, an
+\texttt{OK} reply acknowledges command acceptance, not a completed RF link.
+
+One station execution service arbitrates both admission paths:
+\begin{description}
+\item[Standalone.] A locally configured client principal requests
+\texttt{CONNECT}. The service validates identity, station configuration,
+route readiness, lease availability, and installed authority, then creates
+one bounded operation and native session. Listening also requires an installed
+receive/respond policy; a decoded inbound call does not itself authorize PTT.
+\item[Managed.] The coordinator prepares and authorizes an attempt and
+reserves an expected client association. The accepted start arms that
+association; the matching client \texttt{CONNECT} consumes it once and starts
+the backend. It must not create a second operation. The reservation binds
+client ownership, local/remote callsigns, configuration revision, lease, and
+expiry. Mismatches, competing requests, and attachment timeout fail explicitly.
+\end{description}
+
+The legacy two-socket protocol supplies no authenticated pairing token.
+Initially permit one exclusive control/data pair per configured endpoint,
+with a bounded attachment timeout and an explicit pairing state machine that
+handles either arrival order. RF admission requires a complete pair.
+A replacement socket cannot adopt an existing
+session; when either channel closes, both are detached, admission is blocked
+until cleanup completes, and the active session is cancelled with PTT release
+requested. Peer address alone is not client identity. Loopback is a deployment
+restriction rather than authentication; shared or remote deployments require
+an authenticated enclosing transport or a separately qualified ownership
+mechanism. Model disconnect is different from modem-client channel loss.
+
+\subsection{Native session and device execution contracts}
+\label{sec:modem-execution-contracts}
+\emph{Proposed integration.} One serialized native session actor owns the
+current peer, protocol phase, transmit/receive epoch, outstanding DATA, and
+monotonic deadlines. Its lifecycle distinguishes idle, admitting,
+establishing, connected, closing, completed, aborted, and faulted states;
+transmit, answer-wait, query, and turn phases are subordinate protocol states.
+Only validated events in the current phase may advance it. Every asynchronous
+audio or device result carries a session identity and a unique transmission
+token; results from a previous session or transmission are ignored and
+recorded. Stop and channel-loss cleanup are idempotent. An accepted abort
+invalidates outstanding work before any late completion can advance state.
+
+Application lifecycle requests enter through \path{ModemSessionPort}; host
+commands enter through \path{host::ModemPort} and the same admission service.
+The native backend adapter binds both to the one actor. It must not run a
+second protocol machine in the TCP handler or in the station coordinator.
+External VARA and simulation remain alternative backends behind the lifecycle
+port; only the native backend assembles the Rust DSP/session components.
+
+Audio contracts identify a continuous capture epoch, absolute sample ranges,
+qualified route and format, and terminal discontinuity. Playback accepts
+owned bounded buffers and reports accepted, started, presented, cancelled,
+or failed with the transmission token. Queue acceptance or callback buffer
+consumption is not presentation completion. Cancellation must establish
+whether queued samples can still reach the device; uncertainty faults the
+session and prevents a new transmission. The PTT contract separates permit,
+assertion, release request, and observed release. Actual presentation plus
+qualified release/turnaround evidence is required before the actor emits a
+protocol transmit-complete event and arms its receive deadline. Independent
+watchdog release does not wait for the actor, event storage, or an AI host.
+
+All mailbox, audio, event, and byte queues have configured finite limits.
+Backpressure suspends acceptance at the host boundary without blocking DSP
+callbacks or the actor's stop/watchdog processing. Protocol deadlines cannot
+be extended by a slow client or a full notification queue. A stalled consumer
+has a bounded timeout and a terminal reason; events needed to account for
+bytes cannot silently disappear. Device loss, capture gaps, lease expiry,
+playback timeout, and unconfirmed PTT release terminate the normal path.
+
+Byte accounting distinguishes cumulative accepted bytes, pending bytes,
+unique outstanding bytes, peer-acknowledged bytes, unresolved bytes, and
+explicitly discarded bytes. For an operation, accepted bytes equal pending
+plus outstanding plus acknowledged plus unresolved plus discarded bytes;
+a byte occupies only one of those categories at a snapshot. Transmit attempts
+and retries are separate counters and never inflate acknowledged totals.
+Receive accounting distinguishes bytes decoded, reassembled/deduplicated,
+queued for the host, and written to its socket. Socket write completion is
+not proof the client consumed or committed the bytes. Host \texttt{BUFFER}
+notifications need a client-qualified mapping to these counters rather than
+the current ARQ queue size. Peer acknowledgment is not Winlink message or
+CMS acceptance.
+
+On ambiguous failure the operation result records unresolved byte counts and
+ranges; payload remains in bounded session-owned memory rather than audit
+events. Explicit abort/clear can discard bytes with a recorded count. No reconnect
+or process restart replays them automatically. In-memory retention does not
+promise crash durability: a crash produces an unknown outcome unless a
+separately implemented bounded journal supplies evidence. Native on-air
+duplicate handling must be qualified independently of local callback tokens.
+
+\subsection{Shared-core implementation order and exit criteria}
+\label{sec:modem-core-plan}
+The first two stages have an implementation at the validated-event boundary
+with a clock-driven runner and simulated devices. The BW500 audio loopback
+and paired TCP bench exercise stages three and four with simulated peers.
+Rolling pilot acquisition for levels 1--3 has separate off-air receive
+evidence (Table~\ref{tab:modem-evidence-gates}). The remaining work includes
+production DATA sequencing and recovery, native audio/PTT integration,
+and a qualified client and reference peer. The sequence below defines the
+scope and exit criteria for each stage.
+\begin{enumerate}
+\item \textbf{Session contracts and owner.} Define typed commands/events,
+state transitions, operation/session/transmission identities, finite budgets,
+byte-accounting rules, and a virtual clock. Demonstrate rejection of competing
+owners, illegal transitions, stale completion, and repeated cleanup.
+\item \textbf{Simulated audio and PTT execution.} Bind capture epochs,
+playback tokens, presentation, release, and turnaround to the actor. Inject
+late/missing completion, capture gaps, cancellation races, device loss, and
+watchdog expiry. Demonstrate independent release and no false TX completion.
+This yields the first foreground shared-core milestone without native devices.
+\item \textbf{First complete link profile.} Integrate establishment,
+packetization, DATA fields, validated replies/queries, ARQ, duplicate handling,
+turn/rate ownership, keepalive, and disconnect. Exchange arbitrary binary
+streams between two runtimes under deterministic loss, duplication, and delay;
+preserve byte-accounting invariants and identify unresolved outcomes. Resolve
+wire uncertainties with independent evidence rather than invented sequencing.
+\item \textbf{Traditional-client service.} Add loopback listeners, exclusive
+pairing, admission, notifications, timeouts, and bounded backpressure. A host
+harness must exercise initialization, both socket arrival orders, competing
+clients, binary preservation, stalled consumers, channel loss, and reconnect.
+Only advertise the tested host-protocol subset.
+\item \textbf{Station integration.} Bind standalone and managed admission to
+policy, leases, grants, reservations, and operation/event records. Prove a
+matching managed \texttt{CONNECT} starts exactly one attempt and a mismatch
+cannot transmit. Test client loss separately from model loss.
+\item \textbf{Reference and client qualification.} Demonstrate bidirectional
+transfers with an unmodified release-specific reference modem and a named
+Winlink client/version. Preserve commands, both audio directions, timing,
+payload comparisons, recovery evidence, and distinct modem/client outcomes.
+Native hardware measurements still require the corresponding device adapter.
+\end{enumerate}
+
+Only after these shared contracts stabilize should platform work supply
+macOS audio/permissions and launch-agent integration, Linux audio/device
+permissions and user-service integration, and Windows audio/device access
+and background-process packaging. Foreground operation comes first on each
+platform. A system service is optional and requires qualification in its
+actual execution context; it is not evidence of audio readiness. Each native
+adapter must satisfy the same fault/completion contract and undergo device
+and inhibited/conducted PTT qualification before operational RF use.
 
 \subsection{ChatGPT Agent and Codex as the orchestrating agents}
 ChatGPT Agent or Codex is the decision-making orchestrator: it observes station
@@ -76,10 +259,10 @@ backpressured data endpoint. Implementations may be native Rust, qualified
 external VARA, or simulation.\\
 Native session owner & Own one protocol state machine, receive/transmit epoch,
 current peer, timers, outstanding bytes, and the ordering of DSP and playback
-work. Its integration remains proposed.\\
+work. The simulated runtime implements session ownership and deadlines.\\
 Audio adapter & Own configured input/output routes, formats, buffers, sample
-continuity, and presentation-completion evidence. The current CPAL code
-implements input capture only.\\
+continuity, and presentation-completion evidence. CPAL provides input capture and an output
+primitive with a presentation estimate. Hardware completion remains open.\\
 PTT arbiter & Own the only software key-up path, one-use permits, route checks,
 key-up and session budgets, watchdog release, and requested/observed state.\\
 Winlink client adapter & Own its supported queue, message-service session,
@@ -142,13 +325,14 @@ establishment. \path{modem::data} and \path{modem::arq} are frame/container
 and sender components. \path{api::CommandDecoder} and \path{host} implement
 host stream boundaries.
 
-A proposed native runtime must assemble these behind one session owner,
-connect actual playback and PTT completion, qualify wire answer/query
-recognizers, implement rate/turn/keepalive/disconnect behavior, and bind the
-host streams to the operational session. Module existence does not establish
-those connections. The external VARA adapter likewise needs an explicitly
-qualified release-specific command/status interface rather than assumptions
-about GUI behavior or port responses.
+The clock-driven \path{modem::runtime} combines establishment and ARQ at
+the validated-event boundary. The simulated audio loopback exercises
+bidirectional delivery and recovery with bench framing. The paired TCP bench
+exercises the host interface with a simulated peer. The optional CPAL output
+primitive reports a presentation estimate. Production integration still needs
+qualified playback and PTT completion, wire answer/query recognition, rate,
+turn, keepalive and disconnect behavior, and an operational host backend.
+The external VARA adapter needs a release-specific command/status contract.
 
 \section{DSP implementation pipeline}
 \label{sec:modem-dsp}
@@ -172,20 +356,18 @@ and retains at most 30 s of mono history (1,440,000 float samples, about
 arrays, so the retained-history limit is not a whole-process memory limit.
 Absolute half-open sample ranges survive chunk boundaries and ring-buffer
 wrap. If a candidate began before retained history, it is marked truncated and
-emits no partial frame. WAV decoding treats that condition as an error.
+emits no partial frame. WAV reports count truncated energy candidates and
+retain independently acquired pilot frames.
 
 The energy detector accumulates 10 ms windows. A window is active when
 \[
  \frac{1}{W}\sum_{n=0}^{W-1}x[n]^2 \geq 10^{-4},\qquad W=480.
 \]
 A quiet window closes a candidate; end-of-stream flushes a partial window and
-any open candidate. This fixed 1\% full-scale RMS gate is a controlled-bench
-heuristic, not a noise estimator, AGC, RF squelch, or protocol detector.
-Impulsive noise and unrelated tones can produce candidates. Every later stage
-must establish its own synchronization and integrity evidence. The current
-receiver tries levels 1--3 first, returning the first family with CRC-valid
-frames; it attempts level 4 only if an external profile is configured and the
-index paths yield no frames.
+any open candidate. The 1\% full-scale RMS gate serves level-4 acquisition
+with an external measurement profile and reports energy candidates for
+diagnostics. The CLI scans level-1--3 pilots independently of this gate.
+Energy candidates can include impulsive noise and unrelated signals.
 
 \subsection{BW500 levels 1--3: tone-index geometry}
 These levels encode data by selecting a frequency bin for each symbol. They
@@ -232,33 +414,36 @@ message. The level-3 information block contains 37 complete bytes plus one
 padding bit: 34 payload bytes, one control byte, two CRC bytes, and a zero
 padding bit before whitening.
 
-\landscapeplantuml{build/diagrams/Linkwise_DSP_Index}{Implemented BW500 level 1--3 receive pipeline. Energy candidates, timing lock, soft metrics, and CRC-valid frames are separate evidence stages; none independently establishes a modem session.}{fig:dsp-index}
+\landscapeplantuml{build/diagrams/Linkwise_DSP_Index}{Implemented BW500 level 1--3 receive pipeline. Pilot acquisition locates index frames in continuous audio. Soft demodulation and CRC validation follow timing and frequency selection.}{fig:dsp-index}
 
 \subsection{Index-mode acquisition and soft demodulation}
-For a candidate beginning at sample $b$, the initial frame epoch estimate is
-$b+LH$, where $L$ is the mode's lead-symbol count. The receiver searches one
-symbol on either side of that estimate in 128-sample steps, then refines within
-128 samples of the best point in 16-sample steps. At each epoch, it evaluates
-the 24 known reference columns. A full-frame score below 0.65 is rejected.
-The threshold is an implementation heuristic, not a measured false-alarm rate.
+The WAV and device receive commands use \path{modem::bw500::scan} to
+search every 128 samples in a bounded rolling spectrum history. At each
+epoch, the scanner scores the 24 reference columns against energy in
+the occupied band and guard bins at offsets of 0 and $\pm$12 Hz. It
+considers hypotheses with a mean pilot score of at least 0.65 and
+refines timing in 16-sample steps. This lets a frame span brief drops in
+energy or continuous receiver noise. The library also retains the
+candidate-based decoder, which starts its search near $b+LH$ for burst
+start $b$ and lead length $L$. The score threshold has no measured
+false-alarm rate.
 
 For a symbol of length $H$ and bin $k$, the unnormalized tone energy is
 \[
  E_k=\left|\sum_{n=0}^{H-1}x[n]\exp(-j2\pi kn/H)\right|^2.
 \]
-The implementation divides by $(H/2)\sum x[n]^2$, with an epsilon floor, and
-averages the known-bin score over reference columns. For data, it measures the
+For timing refinement and soft decisions, the implementation divides by
+$(H/2)\sum x[n]^2$, with an epsilon floor. For data, it measures the
 eight mapped bin hypotheses. For each of the three bit positions, the soft
 metric is the largest normalized power among labels with bit 1 minus the
 largest among labels with bit 0. This max-based difference is a decoder input;
 it is not a calibrated log likelihood, SNR, or BER estimate.
 
 Metrics are scattered through the inverse channel permutation into FEC order.
-Only a CRC-valid result is returned. For a locked index family, the receiver
-can decode adjacent fixed-size frames inside the candidate, with one detector
-window of end tolerance. This is distinct from level 4, whose current
-waveform decoder handles a single frame per candidate. Neither path implements
-continuous carrier-frequency-offset or sample-frequency-offset tracking.
+Only a CRC-valid result is returned. The rolling scanner suppresses overlap
+with an emitted frame and continues to search for adjacent frames. Level 4
+handles one frame per energy candidate. Continuous carrier and sample-clock
+tracking remain open.
 
 \subsection{Index-mode transmit synthesis}
 The level-1/2/3 transmitter accepts a nonempty list of frames with exactly
@@ -608,6 +793,14 @@ trips, local two-role establishment, chunked streaming, and corruption
 rejection. Formatting and Clippy checks also passed. These are dated evidence,
 not a promise that subsequent source changes have identical results.
 
+On 10 November the fixture-enabled suite passed 68 tests on macOS
+with the audio feature enabled. The pilot acquisition regression
+covered consecutive frames in continuous interference, chunk independence,
+and duplicate suppression. Formatting and Clippy passed. The offline
+receive checks used the full demodulated recordings and supplied no burst
+boundaries. Capture settings, hashes, and reproduction commands are in the
+10 November entry of \path{lab-notes/lab-notes.tex}.
+
 The protocol notes and reference measurements are pinned to upstream revision
 \path{952f79245240132f4af209afbad1f4b2ba256613}; implementation details should
 be checked against the named Rust modules and \path{rust/docs/modem.md}.
@@ -618,17 +811,24 @@ in Reference~\ref{ref:modem-protocol}. Source-level traceability does not
 replace empirical qualification.
 
 \begin{longtable}{@{}p{0.24\textwidth}p{0.70\textwidth}@{}}
-\caption{Modem evidence gates and claims still excluded.}\label{tab:modem-evidence-gates}\\
+\caption{Modem evidence and remaining qualification gates.}\label{tab:modem-evidence-gates}\\
 \toprule
-\textbf{Gate} & \textbf{Evidence required beyond the current prototype}\\
+\textbf{Gate} & \textbf{Evidence and remaining checks}\\
 \midrule
 \endhead
 Codec correctness & Independent vectors for whitening, permutations, FEC tails,
 metric sign, frame fields and mode geometry; expand beyond self-generated
 round trips and the level-1/2 corpus.\\
-Receiver robustness & Record offset, fading, interference, clipping, sample
-clock error, false alarms, missed frames, CRC failures and processing latency
-with reproducible seeds and source audio.\\
+Off-air receive & One CRC-valid BW500 level-2 frame from the full Lake
+Merwin KiwiSDR recording on 7.105 MHz USB. The published off-air exchange
+yielded three CRC-valid frames (levels 2, 3, 2). Both replays reproduced
+previously verified wire-body hashes.\\
+Acquisition controls & Two stock-derived frames in recorded Kiwi noise
+decoded automatically at +6 dB. The Maui noise-only replay emitted zero
+frames. These checks cover the tested recordings.\\
+Receiver robustness & Measure live frame recovery on known transmissions.
+Characterize offset, fading, interference, clipping, sample-clock error,
+false alarms, and processing latency.\\
 Reference acceptance & Show an unmodified release accepts native requests,
 setup and DATA and that native RX accepts its replies; preserve both audio
 directions, command bytes, readbacks, timing and payload comparisons.\\

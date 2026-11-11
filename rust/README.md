@@ -22,6 +22,25 @@ Keep protocol and signal-processing code independent of operating-system
 audio and device APIs. Record evidence and compatibility decisions before
 turning the module boundaries into protocol assumptions.
 
+## Shared runtime simulation
+
+The portable session owner integrates establishment and ARQ with bounded
+queues, explicit byte accounting, capture continuity and token-bound simulated
+device execution. From this directory:
+
+```sh
+cargo run --locked --bin linkwise-modemd -- --simulate
+```
+
+This foreground scenario drives simulated protocol and device events with a
+monotonic clock. See the
+[runtime guide](docs/modem-runtime.md) for ownership, deadlines, cleanup,
+verification and the remaining operational integration.
+
+The [BW500 audio loopback](docs/modem-runtime.md#run-the-bw500-audio-loopback)
+exercises two-way audio transfer and loss recovery using a verified level-4
+profile and bench-only framing.
+
 ## Development
 
 Install the stable Rust toolchain, then run:

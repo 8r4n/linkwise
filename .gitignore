@@ -18,6 +18,8 @@ docs/whitepaper/build/
 docs/whitepaper/diagrams/build/
 docs/build/
 lab-notes/*.pdf
+# Keep the published lab notes alongside the LaTeX source.
+!lab-notes/lab-notes.pdf
 docs/whitepaper/*.aux
 docs/whitepaper/*.fdb_latexmk
 docs/whitepaper/*.fls

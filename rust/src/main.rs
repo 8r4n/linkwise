@@ -15,6 +15,7 @@ Usage:
   linkwise analyze-wav PATH  Report bench burst candidates as JSON
   linkwise decode-wav PATH   Decode BW500 DATA (level 4 requires measurement profile) from a 48 kHz mono WAV
   linkwise audio-inputs      List input devices (requires audio-device feature)
+  linkwise audio-outputs     List output devices (requires audio-device feature)
   linkwise receive-audio SECONDS  Receive BW500 DATA as JSON lines
   linkwise render-wav REQUEST_JSON OUTPUT_WAV  Render a file-only BW500 handshake stimulus
   linkwise --help
@@ -59,6 +60,16 @@ async fn main() {
         }
         (Some(arg), None, None) if arg == "--version" || arg == "-V" => {
             println!("linkwise {}", env!("CARGO_PKG_VERSION"));
+        }
+        #[cfg(feature = "audio-device")]
+        (Some(arg), None, None) if arg == "audio-outputs" => {
+            match linkwise::audio::playback::output_devices() {
+                Ok(devices) => println!("{}", serde_json::to_string_pretty(&devices).unwrap()),
+                Err(error) => {
+                    eprintln!("Audio enumeration failed: {error}");
+                    std::process::exit(1);
+                }
+            }
         }
         #[cfg(feature = "audio-device")]
         (Some(arg), None, None) if arg == "audio-inputs" => {

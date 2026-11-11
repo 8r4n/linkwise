@@ -2,16 +2,17 @@
 !theme plain
 skinparam backgroundColor #FFFFFF
 skinparam shadowing false
+skinparam Padding 8
 skinparam defaultFontName "Latin Modern Roman"
 skinparam defaultFontSize 10
 skinparam sequenceMessageAlign center
 skinparam ArrowColor #2A9D8F
 hide footbox
 participant "Session owner" as Session
-participant "DSP / playback" as DSP
-participant "PTT arbiter" as PTT
+participant "Audio / DSP" as DSP
+participant "Arbiter" as PTT
 participant "Watchdog" as WD
-participant "Device driver" as HW
+participant "Device" as HW
 Session -> DSP: encode burst
 DSP --> Session: samples / route / duration
 Session -> PTT: key-up(session, lease, config, budget)
@@ -19,16 +20,18 @@ PTT -> PTT: validate policy and interlocks
 PTT -> WD: arm expiry and airtime limit
 PTT -> HW: qualified assertion / observation
 PTT --> Session: permitted route / denial
-Session -> DSP: play owned sample buffer
+Session -> DSP: play(session, TX token, owned buffer)
 DSP -> HW: scheduled audio
 HW --> DSP: presentation complete / error
-DSP --> Session: actual completion
+DSP --> Session: presented(session, TX token)
 Session -> PTT: release
 PTT -> HW: release and readback
 PTT --> Session: observed release / unknown
-Session -> Session: advance TX token; arm RX deadline
+Session -> Session: validate current token + presentation\nand release/turnaround; arm RX deadline
 note over Session,HW
  Proposed integration: denial or playback failure aborts the normal path.
+ Cancellation invalidates the token; late callbacks cannot advance state.
+ Uncertain cancellation/release faults the session.
  The watchdog releases independently on controller loss or expiry.
  No model response or MCP call times this sequence.
 end note

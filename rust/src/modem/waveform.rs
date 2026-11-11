@@ -69,9 +69,13 @@ pub(super) struct Tone {
 
 impl Tone {
     pub(super) fn new(bin: usize, count: usize) -> Self {
+        Self::at_bin(bin as f64, count)
+    }
+
+    pub(super) fn at_bin(bin: f64, count: usize) -> Self {
         let quadrature = (0..count)
             .map(|i| {
-                let (sin, cos) = (TAU * (bin * i) as f64 / count as f64).sin_cos();
+                let (sin, cos) = (TAU * bin * i as f64 / count as f64).sin_cos();
                 (cos, sin)
             })
             .collect();

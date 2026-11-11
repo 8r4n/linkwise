@@ -53,7 +53,7 @@
 \title{Linkwise: Radio, Modem, and Link Management Research\\[0.4em]
 \large Lab notes and evidence ledger}
 \author{Engineering research log}
-\date{9 November 2026}
+\date{10 November 2026}
 
 \begin{document}
 \maketitle
@@ -64,8 +64,9 @@ implemented Rust modem intended to interoperate with VARA HF and be installable
 on macOS, Windows, and Linux. It distinguishes direct observations from
 hypotheses and local tests from reference-peer qualification. Native BW500
 codec, streaming receive, audio-handshake, DATA/ARQ, and host-stream components
-now exist; they do not yet form a qualified operational modem. The dated
-9 November entry records their implementation, validation, and remaining gates.
+now exist. The 9 November entry records their implementation and validation.
+The 10 November entry adds a shared session runtime, a clock-driven runner, and
+a two-way BW500 audio loopback. Operational interoperability remains open.
 \end{abstract}
 
 \tableofcontents
@@ -1095,17 +1096,18 @@ Use staged campaigns:
 \end{enumerate}
 
 \subsection{Storage, analysis, and corpus admission}
-The proposed repository layout is a dedicated \texttt{data/} tree with
-\texttt{public/vara\_hf} and \texttt{public/vara\_fm},
-\texttt{generated/clean}, \texttt{generated/bandwidth},
-\texttt{generated/data\_levels}, \texttt{generated/acknowledgments},
-\texttt{generated/sessions}, field-capture folders for clean/fading/
-interference/weak-signal cases, \texttt{derived/} folders for plots and
-measurements, and \texttt{reports/} for coverage and analyses. This is a
+{\raggedright
+The proposed repository layout is a dedicated \pathtext{data/} tree with
+\pathtext{public/vara_hf} and \pathtext{public/vara_fm},
+\pathtext{generated/clean}, \pathtext{generated/bandwidth},
+\pathtext{generated/data_levels}, \pathtext{generated/acknowledgments},
+\pathtext{generated/sessions}, field-capture folders for clean/fading/
+interference/weak-signal cases, \pathtext{derived/} folders for plots and
+measurements, and \pathtext{reports/} for coverage and analyses. This is a
 proposal, not a statement that these directories currently exist. Keep large
 or restricted files outside the public source tree where appropriate; retain
 a manifest and approved-storage references. Do not commit recordings without
-permission and redistribution rights.
+permission and redistribution rights.\par}
 
 For each candidate recording, validate the WAV header and calculate duration,
 RMS, peak, and clipping percentage. Produce waveform and spectrogram views;
@@ -1424,8 +1426,8 @@ The maintained implementation inventory is
 limits; 41 passing tests do not establish a complete interoperable modem.
 
 \subsection{Whitepaper build and overflow fixes}
-Rebuilt the architecture whitepaper and all PlantUML vector figures with
-\pathtext{tools/build-whitepaper.sh}. The initial build succeeded with
+Used \pathtext{tools/build-whitepaper.sh} to rebuild the architecture
+whitepaper and all PlantUML vector figures. The initial build succeeded with
 horizontal overflow warnings. Widened the requirements table's method column,
 made file paths breakable, allowed modest emergency line stretch, reworded one
 unbreakable reference phrase, and reduced the requirements table font so its
@@ -1434,6 +1436,181 @@ no overfull-box warnings; affected pages were rendered and visually inspected.
 This layout/build result is separate from modem implementation evidence.
 
 \endgroup
+
+\section{2026-11-10: Shared runtime and BW500 audio loopback}
+\label{sec:runtime-audio-2026-11-10}
+
+\subsection{Architecture and implementation}
+
+Updated the architecture whitepaper, sections 14.1--14.4, to define the shared
+Rust runtime, standalone and managed traditional-client admission, session
+ownership and device completion contracts, and staged exit criteria. Updated
+the session-start, runtime, keying and ARQ recovery diagrams. Rebuilt the paper
+and inspected the changed pages and diagrams.
+
+Implemented the shared session owner in \pathtext{rust/src/modem/runtime.rs}.
+It integrates the existing establishment and ARQ state machines at the
+validated protocol-event boundary. It bounds byte and event queues, tracks
+pending, outstanding, acknowledged, unresolved and discarded bytes, and
+preserves unresolved payload on ambiguous failure. Matching presentation and
+observed release are required before the protocol records a completed
+transmission. Capture gaps and changed epochs fault the session.
+
+Added the Tokio runner in \pathtext{rust/src/modem/runtime/runner.rs}. It polls
+the device and advances deadlines on a monotonic clock at 5 ms intervals.
+Device observations and aborts use a separate bounded priority queue. Dropping
+the last handle faults a live session and requests release while retaining
+unresolved payload. The join result reports whether release evidence arrived.
+Paused-clock tests covered watchdog expiry while a client was idle, abort
+ahead of a full normal command queue, and release after the last handle closed.
+
+\subsection{Simulated audio experiment}
+
+Added the audio loopback in \pathtext{rust/src/modem/runtime/audio_loopback.rs}.
+The foreground command uses \texttt{--simulate-audio}. Two Rust runtime
+instances completed the level-4 establishment handshake and exchanged
+CRC-protected frames through a simulated half-duplex audio channel at 48 kHz.
+The cable model applied attenuation, sample offset and turnaround. The bench
+advanced virtual time by the sample duration and compared both delivered
+streams byte for byte.
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Caller to responder.} Delivered 79 bytes in three DATA
+        attempts. Erasing the first acknowledgment caused a state query.
+        The receiver's positive reply retired the block without retransmission.
+  \item \textbf{Responder to caller.} Delivered 70 bytes in four DATA
+        attempts. Erasing the first DATA waveform caused a state query.
+        Its negative reply authorized one retransmission.
+  \item \textbf{Duplicate delivery.} Replaying one decoded DATA record per
+        direction caused no additional delivered bytes.
+\end{itemize}
+
+The bench uses the existing BW500 establishment and level-4 waveform codecs
+with a private payload format for sequence numbers, lengths, queries and
+answers. The waveform profile was generated from the pinned, checksum-verified
+measurements used by the 9 November tests. The published
+\href{https://github.com/sstjohn/hfmodem/blob/952f79245240132f4af209afbad1f4b2ba256613/docs/protocols/vara/04-frame-block-formats.md}{BW500 frame notes}
+describe role-dependent replies. The published
+\href{https://github.com/sstjohn/hfmodem/blob/952f79245240132f4af209afbad1f4b2ba256613/docs/protocols/vara/21-data-answer-recovery.md}{stock recovery evidence}
+covers wider bandwidths. The bench does not establish production BW500 DATA,
+reply, query or turn behavior against an independent peer.
+
+\subsection{Reproduction and results}
+
+Run from the repository root with Rust available on \pathtext{PATH}.
+
+\begin{lstlisting}
+python3 tools/test-modem.py
+cargo run --manifest-path rust/Cargo.toml --locked --bin linkwise-modemd -- --simulate
+profile=$(python3 tools/fetch-modem-profile.py)
+cargo run --manifest-path rust/Cargo.toml --locked --bin linkwise-modemd -- --simulate-audio "$profile"
+cargo fmt --manifest-path rust/Cargo.toml -- --check
+cargo clippy --manifest-path rust/Cargo.toml --locked --all-targets -- -D warnings
+\end{lstlisting}
+
+\statusverified{} on macOS ARM64 with Rust 1.88.0. The fixture-enabled suite
+passed 60 tests with zero failures or skips. The clock-driven protocol
+simulation acknowledged 256 bytes after one DATA attempt and a state query.
+The audio bench reported 79 and 70 exact bytes, three and four DATA attempts,
+two queries and two suppressed duplicates. Formatting and Clippy passed.
+The earlier shared-core build also passed compile checks for x86-64 Linux and
+Windows. Those checks did not exercise native device access.
+
+\statuspending{} Independent BW500 DATA sequencing, reply/query recovery and
+turn qualification. Native audio/PTT execution, paired TCP host access and a
+transfer with an unmodified VARA peer remain separate gates. The audio loopback
+used two Linkwise instances, simulated devices and virtual time.
+
+\section{2026-11-10: KiwiSDR receive evidence and pilot acquisition}
+\label{sec:kiwi-pilot-2026-11-10}
+
+\subsection{Host and platform work}
+
+Added a paired loopback TCP bench with a simulated peer. The macOS socket
+test transferred 1024 binary bytes across both attachment orders, rejected
+duplicate connections, and verified cleanup on loss of either channel.
+Added a bounded 48 kHz output primitive with a CPAL presentation estimate.
+macOS enumerated output devices. The audio feature cross-checked against
+Linux ALSA metadata and Windows MSVC, in that order. Hardware playback
+timing and PTT release remain unqualified. Three stock-derived BW500
+intermediate reply vectors matched the new encoder.
+
+\subsection{Live capture and first verified frame}
+
+The initial survey collected 17.5 receiver-minutes in 11 USB and IQ
+captures on 80, 40, and 20 meters. The follow-up recorded additional IQ in
+North America and Chile. Attempts in the UK, Australia, and New Zealand
+yielded no usable samples. The capture manifests record receivers, tuning,
+sample rates, UTC windows, sequence continuity, and source hashes.
+
+The first automatic replay recovered no CRC-valid frames. Noise kept six
+unscaled USB captures above the fixed 1\% RMS threshold long enough to
+exceed the 30-second candidate history. In a controlled replay, both
+stock-derived level-1 and level-2 frames mixed with Kiwi receiver noise
+decoded at +12 dB. At +6 dB the detector split the two signals into 27
+and 28 candidates. Supplying the intact boundaries recovered both
+frames byte for byte.
+
+Pilot matching then located a frame in the existing Lake Merwin,
+Washington KiwiSDR capture on 7.105 MHz USB. Capture began at about
+5:25 p.m. PST on 10 November (01:25 UTC on 11 November). The recorded
+IQ center was 7.1065 MHz, with a WAV header rate of 11999 Hz. The pilot
+score was 0.758. The decoder recovered one CRC-valid BW500 level-2
+frame with a 23-byte wire body, including control byte 0. Six replay
+filter widths from 290 to 420 Hz recovered the same body from that
+one frame. Its SHA-256 is
+\hashtext{d32af06df32522e1}{69366eedc5bb5e81}{8724265a84ef3104}{66c5fb728682b212}.
+
+A separate checksum-verified \href{https://github.com/sstjohn/hfmodem/tree/952f79245240132f4af209afbad1f4b2ba256613/packages/hfmodem/hfmodem/tests/contact/fixtures/varac-observed-pairs-1025}{published off-air VarAC exchange}
+yielded three CRC-valid frames in the documented level order 2, 3, 2
+when supplied with pilot-located windows. The third window used an
+11.71875 Hz frequency correction.
+
+\subsection{Acquisition change and verification}
+
+Implemented a bounded rolling pilot search for BW500 levels 1--3 in
+\pathtext{rust/src/modem/bw500/scan.rs}. The receive commands score
+pilot patterns every 128 samples against energy in the occupied band
+and guard bins, test 0 and $\pm$12 Hz, refine timing, and pass acquired
+frames to the existing CRC-gated decoder. Overlap suppression prevents
+repeated emission of the same frame. Level 4 retains energy-based
+acquisition. The WAV report now counts truncated energy candidates
+while returning independently recovered pilot frames.
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Full Lake Merwin recording.} Recovered the same live
+        frame once with both 330 Hz and 1200 Hz IQ low-pass widths.
+        Replay used the full demodulated recording without supplied
+        frame boundaries.
+  \item \textbf{Published off-air exchange.} Recovered the three frames
+        in order with matching body hashes and no supplied boundaries
+        or per-frame correction.
+  \item \textbf{Kiwi noise controls.} Automatically recovered both +6 dB
+        test frames byte for byte. The Maui receiver noise recording
+        emitted zero frames.
+\end{itemize}
+
+The fixture-enabled suite passed 68 tests on macOS with the audio
+feature enabled. Formatting and Clippy passed. The new regression
+exercised consecutive frames under continuous interference and checked
+chunk independence and duplicate suppression.
+
+\begin{lstlisting}
+python3 tools/test-modem.py --audio-device
+cargo clippy --locked --manifest-path rust/Cargo.toml --all-targets --features audio-device -- -D warnings
+\end{lstlisting}
+
+Local evidence directories:
+\begin{lstlisting}
+reference/vara/fixtures/kiwi-live-2026-11-11
+reference/vara/fixtures/kiwi-vara-followup-2026-11-11
+\end{lstlisting}
+The follow-up directory contains the live verification, published
+exchange, and automatic acquisition results as JSON.
+The evidence establishes receive-side decoding of one live Kiwi frame
+and three published off-air frames. Live frame error rate, sample-clock
+tracking, production link behavior, and two-way interoperability remain
+open.
 
 \section{Chronicle maintenance}
 
@@ -1486,11 +1663,11 @@ so the presentation and notes do not diverge.
   \item Microsoft Windows 11 ARM64 download:
         \url{https://www.microsoft.com/software-download/windows11arm64}.
   \item Wing, R., Gerding, M., Plane, J. M. C., et al.,
-        “Measurement of a lithium plume from the uncontrolled re-entry of a
-        Falcon 9 rocket,” \emph{Communications Earth \& Environment} 7, 161
+        ``Measurement of a lithium plume from the uncontrolled re-entry of a
+        Falcon 9 rocket,'' \emph{Communications Earth \& Environment} 7, 161
         (2026), published 19 February 2026,
         \url{https://doi.org/10.1038/s43247-025-03154-8}.
-  \item Linkwise project, “HF propagation toolbox,” research summary and
+  \item Linkwise project, ``HF propagation toolbox,'' research summary and
         experiment implications: \pathtext{reference/propagation-toolbox.md}.
   \item Saul St John (W9SSJ), \emph{hfmodem}, published VARA protocol
         notes, reference recordings, and measured waveform constants,

@@ -1,8 +1,6 @@
-//! Bounded, chunk-independent BW500 level 1–3 receive worker.
-//!
-//! This energy-gated bench receiver emits CRC-valid frames, not session or
-//! link-up events. Run it outside a real-time audio callback. Frequency offset,
-//! fading, AGC and level-4 reception are not implemented here.
+//! Bounded, chunk-independent BW500 receive worker.
+//! Pilot acquisition covers levels 1–3. The optional level-4 waveform uses
+//! the energy candidate path. Run DSP outside the audio callback.
 
 use std::{collections::VecDeque, ops::Range};
 
@@ -44,6 +42,7 @@ pub struct Receiver {
     position: u64,
     capacity: usize,
     level4: Option<Waveform>,
+    pilot_scan: Option<bw500::scan::Scan>,
 }
 
 impl Default for Receiver {
@@ -60,6 +59,7 @@ impl Receiver {
             position: 0,
             capacity: CAPACITY,
             level4: None,
+            pilot_scan: None,
         }
     }
 
@@ -68,6 +68,13 @@ impl Receiver {
             level4: Some(waveform),
             ..Self::new()
         }
+    }
+
+    /// Search continuously for level 1–3 pilot patterns. Level 4 retains
+    /// the burst detector while its separate acquisition path is qualified.
+    pub fn with_pilot_acquisition(mut self) -> Self {
+        self.pilot_scan = Some(bw500::scan::Scan::new());
+        self
     }
 
     pub fn push(
@@ -88,6 +95,16 @@ impl Receiver {
             self.audio.drain(..discard);
             self.audio.extend(block);
             self.position += block.len() as u64;
+            if let Some(scan) = &mut self.pilot_scan {
+                let base = self.position - self.audio.len() as u64;
+                scan.push(self.audio.make_contiguous(), base, |frame| {
+                    report(Reception {
+                        candidate: frame.samples.clone(),
+                        truncated: false,
+                        frames: vec![frame],
+                    });
+                });
+            }
             let mut candidates = Vec::new();
             self.detector.push(block, |range| candidates.push(range));
             for candidate in candidates {
@@ -113,16 +130,18 @@ impl Receiver {
             Vec::new()
         } else {
             let range = (candidate.start - base) as usize..(candidate.end - base) as usize;
-            let mut frames: Vec<_> =
+            let mut frames: Vec<_> = if self.pilot_scan.is_some() {
+                Vec::new()
+            } else {
                 bw500::decode_burst(self.audio.make_contiguous(), range.clone())
-                    .into_iter()
-                    .map(|decoded| ReceivedFrame {
-                        level: decoded.level.number(),
-                        samples: base + decoded.samples.start as u64
-                            ..base + decoded.samples.end as u64,
-                        frame: decoded.frame,
-                    })
-                    .collect();
+            }
+            .into_iter()
+            .map(|decoded| ReceivedFrame {
+                level: decoded.level.number(),
+                samples: base + decoded.samples.start as u64..base + decoded.samples.end as u64,
+                frame: decoded.frame,
+            })
+            .collect();
             if frames.is_empty()
                 && let Some(waveform) = &self.level4
                 && let Some(decoded) = waveform.decode(self.audio.make_contiguous(), range)

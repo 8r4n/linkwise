@@ -17,6 +17,8 @@ pub(crate) struct Report {
     burst_candidates: Vec<Range<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     bw500_data_frames: Option<Vec<FrameReport>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    truncated_energy_candidates: Option<usize>,
 }
 
 #[derive(Serialize)]
@@ -42,6 +44,7 @@ pub(crate) fn analyze(path: &Path, decode: bool) -> Result<Report, Box<dyn Error
         sample_count: wav.duration(),
         burst_candidates: Vec::new(),
         bw500_data_frames: None,
+        truncated_energy_candidates: None,
     };
     let mut detector = BurstDetector::new(spec.sample_rate);
     let samples: Box<dyn Iterator<Item = Result<f32, hound::Error>>> =
@@ -84,8 +87,9 @@ pub(crate) fn analyze(path: &Path, decode: bool) -> Result<Report, Box<dyn Error
     if let Some(mut receiver) = receiver {
         receiver.push(&block[..filled], |event| receptions.push(event))?;
         receiver.finish(|event| receptions.push(event));
-        if receptions.iter().any(|event| event.truncated) {
-            return Err("BW500 candidate exceeds the 30-second receive buffer".into());
+        let truncated = receptions.iter().filter(|event| event.truncated).count();
+        if truncated != 0 {
+            report.truncated_energy_candidates = Some(truncated);
         }
         report.bw500_data_frames = Some(
             receptions
@@ -110,12 +114,12 @@ pub(crate) fn analyze(path: &Path, decode: bool) -> Result<Report, Box<dyn Error
 
 pub(crate) fn configured_receiver() -> Result<Receiver, Box<dyn Error>> {
     match std::env::var_os("LINKWISE_BW500_PROFILE") {
-        None => Ok(Receiver::new()),
+        None => Ok(Receiver::new().with_pilot_acquisition()),
         Some(path) => {
             let json = std::fs::read_to_string(path)?;
             let waveform = linkwise::modem::bw500_waveform::Waveform::from_json(&json)
                 .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
-            Ok(Receiver::with_level4(waveform))
+            Ok(Receiver::with_level4(waveform).with_pilot_acquisition())
         }
     }
 }

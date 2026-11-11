@@ -51,3 +51,10 @@ sources distinguish implemented components from proposed runtime integration;
 all are rebuilt by the same build script. The additional
 `agent-session-start.puml` view separates asynchronous execution from
 preparation and authorization.
+
+The proposed standalone modem runtime and traditional-client integration are
+specified in the same modem chapter. It defines standalone/managed admission,
+exclusive TCP channel ownership, audio/PTT completion, byte accounting, and
+six shared-core implementation gates before OS packaging. The first milestone
+is a foreground session owner with virtual time and simulated audio/PTT;
+these additions are design contracts, not an implemented service.
