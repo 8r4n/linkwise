@@ -1,0 +1,356 @@
+\documentclass[11pt,letterpaper]{article}
+\usepackage{fontspec,amsmath,amssymb,microtype}
+\usepackage[margin=0.85in,headheight=17pt]{geometry}
+\usepackage{graphicx,pdflscape,caption,xcolor,tikz}
+\usetikzlibrary{arrows.meta,decorations.pathreplacing,positioning}
+\usepackage{booktabs,tabularx,longtable,array,xurl,fancyhdr}
+\usepackage[hidelinks,pdftitle={Linkwise Modem Implementation Reference}]{hyperref}
+\definecolor{ovnavy}{HTML}{16324F}
+\definecolor{ovblue}{HTML}{2E6F95}
+\definecolor{ovteal}{HTML}{2A9D8F}
+\definecolor{ovgold}{HTML}{E9C46A}
+\definecolor{ovpale}{HTML}{EFF5F8}
+\definecolor{ovgray}{HTML}{52606D}
+\definecolor{ovred}{HTML}{B23A48}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small LINKWISE \textbullet{} MODEM IMPLEMENTATION}
+\rhead{\small Revision 0.1}
+\cfoot{\thepage}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlength{\emergencystretch}{2em}
+\newcommand{\modemcite}[1]{\cite{#1}\enspace}
+\newcommand{\landscapediagram}[3]{%
+  \clearpage\begin{landscape}\thispagestyle{plain}\centering
+  #1\par\vspace{0.15in}
+  \captionsetup{width=0.94\linewidth}
+  \captionof{figure}{#2}\label{#3}
+  \end{landscape}\clearpage
+}
+\newcommand{\landscapeplantuml}[3]{%
+  \landscapediagram{\includegraphics[width=0.94\linewidth,height=0.76\textheight,keepaspectratio]{#1}}{#2}{#3}
+}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\title{\textbf{Linkwise Modem Implementation Reference}\\[0.5em]
+\large Waveforms, framing, and link recovery}
+\author{Linkwise Project}
+\date{Revision 0.1 \quad 12 November 2026}
+\begin{document}
+\maketitle
+\begin{abstract}
+This reference traces binary host input through frame assembly, 48 kHz
+waveform generation, acquisition, decoding, and acknowledgment. It covers
+BW500 and the wide index-modulated modes and works through a reproducible
+BW500 exchange and a captured BW2300 recovery. Communications literature
+supplies the theoretical models. Pinned Rust source, executable vectors,
+and stock-peer recordings supply implementation evidence.
+\end{abstract}
+\clearpage
+\tableofcontents
+\clearpage
+
+\section{Implementation boundaries}
+The source baseline is \path{dcf1aa549f6affb6818e33ceb0ade51cd48dacb1}.
+The wide sign-off used \texttt{70cf5ed}. The intervening commit records
+that result in documentation. This reference shares the implemented DSP
+treatment and audited BW500 exchange with the architecture white paper.
+Measured protocol references and bench captures supply stock VARA
+parameters \cite{stjohn,bench}.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}p{0.20\linewidth}YY@{}}
+\toprule
+Boundary & Rust owner & Interface and state \\
+\midrule
+Host TCP & \path{api.rs}, \path{host/tcp.rs} &
+Separate command and binary DATA streams. The DATA stream has no modem-frame boundaries. \\
+Waveform session & \path{bin/linkwise-modemd/virtual_host.rs} &
+Owns bench handshake, pending bytes, frame plan, turn, retries, and deadlines.
+Audio records carry a big-endian sample count followed by little-endian float32 at 48 kHz. \\
+Wire interpretation & \path{setup.rs}, \path{control.rs}, \path{data.rs} &
+Packs caller identity, matches keyed controls, and validates full and closing DATA. \\
+Signal processing & \path{receiver.rs}, \path{waveform.rs}, \path{bw500.rs},
+\path{bw500_waveform.rs}, \path{wide_level4.rs}, \path{coding.rs} &
+Acquires timing, produces soft decisions, and encodes and validates frames. \\
+Validated-event runtime & \path{runtime.rs}, \path{arq.rs}, \path{audio/} &
+Defines session, device presentation and release, and sender accounting contracts.\\
+\bottomrule
+\end{tabularx}
+\caption{Implementation ownership from the host sockets to validated events.}
+\end{table}
+
+Host payload excludes protocol overhead. The wire body includes control
+and any closing trailer and is followed by the CRC. The information block
+may add pad bits before whitening. The transmitted codeword adds parity
+and termination. Appendix~\ref{app:bw500-wire} gives the decoded byte
+geometry and distinguishes encoder and decoder variants.
+
+\section{BW500 digital signal processing}\label{sec:modem-dsp}
+\input{modem-dsp-core}
+
+\subsection{Max-log trellis metrics}
+BCJR uses forward and backward recursions to combine transition evidence.
+Turbo decoding exchanges soft information between two constituents.
+Robertson, Villebrun, and Hoeher compare the max-log approximation
+with log-MAP \cite{bcjr,berrou,robertson}. In \path{coding.rs}, let
+\(u,p\in\{0,1\}\) be the input and parity of transition \(s\to s'\) at
+index \(i\). The branch metric is
+\[
+ g_i(s,u)=(L_i^{\rm sys}+A_i)u+L_i^{\rm par}p .
+\]
+\(L_i^{\rm sys}\) and \(L_i^{\rm par}\) are unitless soft metrics, and
+\(A_i\) is prior information from the other constituent. A bit of zero
+adds no term. A bit of one adds its signed score. The recursions keep
+the strongest compatible paths:
+\begin{align}
+ \alpha_{i+1}(s')&=\max_{s,u:\,s\to s'}(\alpha_i(s)+g_i(s,u)),\\
+ \beta_i(s)&=\max_u(g_i(s,u)+\beta_{i+1}(s')),\\
+ M_i(b)&=\max_{s,u=b}(\alpha_i(s)+g_i(s,u)+\beta_{i+1}(s')),\\
+ E_i&=M_i(1)-M_i(0)-L_i^{\rm sys}-A_i.
+\end{align}
+The forward pass starts in state zero. The backward pass ends there.
+Other boundary states start at negative infinity. The extrinsic score
+compares the best paths for 1 and 0, then subtracts direct systematic
+evidence and the prior so those terms are not counted again. If the
+best scores are 8 and 3 and the systematic and prior scores are 2 and 1,
+the illustrative extrinsic score is \(8-3-2-1=2\), favoring 1.
+Appendix~\ref{app:bw500-wire} gives actual frame-1 demodulator values.
+
+\section{Wide index-modulated waveforms}
+\path{wide_level4.rs} implements BW2300 and BW2750 through a shared
+\path{IndexWaveform} pipeline. Level 4 uses 92 bytes, \(N=736\) information
+bits, and \(2N+12=1484\) coded bits. Level 3 uses 50 bytes plus two pad bits,
+giving \(N=402\) and 816 coded bits. Level 2 uses \(N=200\) and
+\(3N+12=612\) coded bits. Carrier allocations, pilot placement, and the
+keyed lead come from measured protocol work \cite{stjohn}. Correlation
+and tone hypotheses follow the signal-space framework in Proakis and
+Salehi, chapters 3--4 \cite{proakis}.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}rrrrrrll@{}}
+\toprule
+Level & Hop & Lead & Columns & Pilots & Bits/data col. & BW2300 bins & BW2750 bins \\
+\midrule
+2 & 1024 & 4 & 228 & 24 & 3 & 17--48 & 12--51 \\
+3 & 1024 & 6 & 228 & 24 & 4 & 17--48 & 12--51 \\
+4 & 512 & 12 & 395 & 24 & 4 & 9--24 & 6--25 \\
+\bottomrule
+\end{tabular}
+\caption{Wide geometry at 48 kHz. Hop is in samples. Lead and column counts
+are symbol periods. Columns include pilots.}
+\end{table}
+
+For allocation \(a_t\), Gray label \(G(\ell_t)\), stride \(d\), span \(S\),
+and first bin \(k_0\), the DATA tone is
+\[
+ k_t=k_0+\bigl((a_t+dG(\ell_t))\bmod S\bigr),\qquad f_t=k_t\,48000/H .
+\]
+Select the base position, move by the Gray-mapped data offset, and wrap
+within the available bins. \(H\) is samples per symbol and \(f_t\) is in
+hertz. A BW2300 level-4 column with allocation and label both zero would
+use bin 9, or 843.75 Hz. Lower modes use measured allocation arrays and
+stride two. Level 4 uses generated allocations and stride one. The keyed
+lead advances per emitted frame, including through the observed lower-rate
+retry. The receiver searches a bounded window within two symbol lengths
+of the energy candidate in 16-sample steps. Its timing score is the mean
+of 24 normalized pilot powers. It rejects scores below 0.55.
+
+For DATA bit position \(j\), let \(P_\ell\) be the correlation power of
+candidate label \(\ell\). The wide decoder uses
+\[
+ m_j=\frac{8\bigl(\max_{\ell:\,\ell_j=1}P_\ell
+               -\max_{\ell:\,\ell_j=0}P_\ell\bigr)}
+             {\max(\epsilon,\max_\ell P_\ell)}.
+\]
+The numerator compares the best tone for each bit value. The denominator
+scales the difference by the strongest tone in that column, with a floor
+for an empty or very weak column. A positive value favors 1. For powers
+of 9 and 3 in the two groups, the score is \(8(9-3)/9=5.33\).
+The receiver scatters these scores into the common FEC order.
+The setup frame uses level-4 geometry.
+
+\section{Session control and recovery}
+ARQ combines error detection with peer feedback and recovery \cite{lin}.
+The virtual host matches keyed controls against its current role and
+phase. The event-level sender consumes a validated answer for its
+outstanding transmission token. A positive reply retires covered bytes.
+A negative reply can retain the acknowledged prefix and repacketize the
+outstanding range. Missing feedback triggers a state query in supported
+contexts. A timeout can close the session with delivery unresolved.
+
+The worked BW500 receiver accumulates DATA until a valid closing frame
+completes the over. A repeated final query can elicit the stored closing
+ACK without another host delivery. The stock rate-down replay replaces a
+previously accepted 43-byte level-4 block with a level-3 block matching its
+34-byte prefix. Sender \texttt{BUFFER 0}, receiver-delivered bytes, and a
+Winlink mailbox record are distinct observations. \texttt{DISCONNECT}
+can wait for queued DATA to drain. \texttt{ABORT} resets the session.
+Protocol timeout can leave paired host sockets available for a fresh call.
+Device presentation, turnaround, and release require operational-route
+qualification.
+
+\landscapeplantuml{build/diagrams/Linkwise_Modem_Recovery}{Event-level sender recovery. The session owner validates the wire response before advancing byte accounting. Appendix B gives the captured waveform-session sequence.}{fig:implementation-recovery}
+
+\section{Verification and limits}
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}p{0.17\linewidth}p{0.24\linewidth}YY@{}}
+\toprule
+Concept & Literature & Rust implementation & Evidence \\
+\midrule
+Tone decisions & Proakis and Salehi, chs. 3--4 \cite{proakis}
+& \path{waveform::Tone}, \path{bw500::scan}, \path{wide_level4}
+& Published BW500 WAV replay and wide round trips. \\
+Synchronization & Meyr et al., Part D \cite{meyr}
+& \path{bw500_waveform::Waveform::decode}
+& Measured-profile setup and PRBS9 DATA round trips. \\
+CRC & Koopman and Chakravarty \cite{koopman}
+& \path{coding::crc}, \path{data::decode}
+& GENIBUS check vector and worked frame CRCs. \\
+Iterative FEC & BCJR, turbo codes, max-log comparison \cite{bcjr,berrou,robertson}
+& \path{coding::encode}, \path{coding::extrinsic}
+& Corrupted systematic metrics recovered at both code rates. \\
+ARQ & Lin et al. \cite{lin}, stock measurements \cite{stjohn}
+& \path{arq::Sender}, \path{virtual_host}
+& Withheld ACK, stock rejection, same-socket reconnect. \\
+HF performance & F.1487, Annexes 1 and 3 \cite{itu}
+& Controlled waveform fixtures and RF campaign plan
+& Fixed echo tested. Calibrated fading sweeps pending. \\
+\bottomrule
+\end{tabularx}
+\caption{Traceability from theory to Rust implementation and verification.}
+\label{tab:modem-evidence-gates}
+\end{table}
+
+BW500 levels 1--3 recovered PRBS9, PRBS15, alternating bits, and constant
+patterns through a fixed echo. Level 4 recovered the 64-byte PRBS9 demo
+attachment across full and closing frames. The fixture uses the polynomial
+\(x^9+x^7+x^6+x^4+1\) from MIL-STD-188-110C Appendix B \cite{mil}.
+The manifest fixes register phase and byte packing. Winlink Express
+exchanged both fixture files with stock VARA HF 4.9.1 in both caller roles
+on virtual audio, with byte-exact and SHA-256 checks.
+
+The wide DATA matrix met three consecutive live passes per tested
+sender and receiver role at both bandwidths \cite{bench}. Remaining
+gates include BW500 ACK-loss and mixed Pat repeats on the merged build,
+native audio and PTT timing, and conducted and radiated tests. F.1487
+supplies a Gaussian scatter model and test conditions for future fading
+measurements, following the HF channel work of Watterson, Juroshek, and
+Bensema \cite{watterson,itu}. In complex baseband, a tapped channel model
+forms \(y(t)=\sum_i g_i(t)x(t-\tau_i)+n(t)\). Each path contributes a
+delayed copy with a time-varying complex gain. The fixed-echo regression
+uses a constant gain and one fixed delay, so it exercises a specific
+receive case. Raw BER requires aligned decisions and declared
+treatment of acquisition failures. Exact attachment delivery measures
+the outcome after ARQ.
+
+\appendix
+\input{modem-wire-example}
+
+\section{Worked BW2300 recovery against stock VARA}
+Trial \path{tx-2300-02} used Linkwise as caller and stock VARA HF 4.9.1
+on a Windows UTM guest \cite{bench}. The table uses the runner's relative
+monotonic time. The Linkwise binary SHA-256 was
+\path{f1218fa26fb7904265dd3953ad333972af6a94b48fefb4f1f0922d9ad058eb02}.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}rp{0.27\linewidth}Y@{}}
+\toprule
+Time (s) & Event & Byte accounting \\
+\midrule
+23.823 & Delivery queued & 203 bytes, \texttt{00} through \texttt{ca}.\\
+34.154 & First level-4 DATA & 89 bytes, \texttt{00}--\texttt{58}. Next \texttt{BUFFER} is 114.\\
+34.486 & Guarded substitution & Next waveform replaced after its original SHA-256 matches.\\
+46.490 & Linkwise state query & A stock reply precedes the lower-rate retry.\\
+54.994 & Level-2 retry & 22 bytes, \texttt{59}--\texttt{6e}. 92 remain.\\
+60.418 & Level-4 DATA & 89 bytes, \texttt{6f}--\texttt{c7}. Three remain.\\
+65.852 & First delivery exact & Level-4 close carries \texttt{c8 c9 ca}. Total \(89+22+89+3=203\) bytes.\\
+77.733 / 95.746 & Further deliveries & Exact six-byte reply and exact 203-byte reverse-ordered payload.\\
+98.161 & First close & Both peers reported disconnect.\\
+122.229 & Reconnect and close & Same sockets delivered an exact 12-byte probe. Both peers disconnected again.\\
+\bottomrule
+\end{tabularx}
+\caption{Selected BW2300 recovery events. The pass covers 412 application
+bytes plus the reconnect probe.}
+\end{table}
+
+Received role zero contains \texttt{F> 79} followed by carriage return.
+Role one contains the ascending sequence, its reversal, and
+\texttt{fresh link} followed by \texttt{00 ff}. The replacement PCM
+SHA-256 is \path{5945af37ba584b8bf15de2db4569a09bdd4826077e48d425b9e1ec2eb6dff420}.
+BW2750 sender runs used a stronger replacement and verified level-3
+fallback. Both wide receiver rows observed a stock level-3 retry \cite{bench}.
+
+\section{Reproduction}
+Run from the checkout root. The profile helper validates pinned upstream inputs.
+\begin{verbatim}
+cargo test --locked --manifest-path rust/Cargo.toml --lib documented
+cargo test --locked --manifest-path rust/Cargo.toml --lib wide
+cargo test --locked --manifest-path rust/Cargo.toml --lib parity_repairs
+profile=$(python3 tools/fetch-modem-profile.py)
+LINKWISE_BW500_PROFILE="$profile" cargo test --locked \
+  --manifest-path rust/Cargo.toml --test bw500_waveform -- --include-ignored
+cargo build --locked --release --manifest-path rust/Cargo.toml \
+  --bin linkwise-modemd
+python3 tools/test-virtual-bw500.py rust/target/release/linkwise-modemd \
+  "$profile" --wide
+\end{verbatim}
+With the local wide evidence set, run its saved \path{verify-evidence.py}
+against that directory to check bytes and sign-off counts. A fresh live
+trial requires the mixed bench procedure, stock VARA 4.9.1, and the
+archived replacement stimulus.
+
+\clearpage
+\begin{thebibliography}{12}
+\bibitem{proakis} J. G. Proakis and M. Salehi, \emph{Digital Communications},
+5th ed., McGraw-Hill, 2008, chs. 3--5, 8, 11, and 13.
+\href{https://glencoe.mheducation.com/sites/0072957166/information_center_view0/table_of_contents.html}{Publisher contents}.
+\bibitem{meyr} H. Meyr, M. Moeneclaey, and S. A. Fechtel,
+\emph{Digital Communication Receivers: Synchronization, Channel Estimation,
+and Signal Processing}, Wiley, 1998, Part D.
+\href{https://doi.org/10.1002/0471200573}{doi:10.1002/0471200573}.
+\bibitem{bcjr} L. R. Bahl, J. Cocke, F. Jelinek, and J. Raviv,
+Optimal decoding of linear codes for minimizing symbol error rate.
+\emph{IEEE Trans. Inf. Theory}, 20(2), pp. 284--287, 1974.
+\href{https://doi.org/10.1109/TIT.1974.1055186}{doi:10.1109/TIT.1974.1055186}.
+\bibitem{berrou} C. Berrou, A. Glavieux, and P. Thitimajshima,
+Near Shannon limit error-correcting coding and decoding: Turbo-codes.
+\emph{Proc. IEEE ICC}, pp. 1064--1070, 1993.
+\href{https://doi.org/10.1109/ICC.1993.397441}{doi:10.1109/ICC.1993.397441}.
+\bibitem{robertson} P. Robertson, E. Villebrun, and P. Hoeher,
+A comparison of optimal and sub-optimal MAP decoding algorithms operating
+in the log domain. \emph{Proc. IEEE ICC}, pp. 1009--1013, 1995.
+\href{https://elib.dlr.de/34203/}{DLR publication record}.
+\bibitem{koopman} P. Koopman and T. Chakravarty,
+Cyclic redundancy code (CRC) polynomial selection for embedded networks.
+\emph{Proc. DSN}, 2004.
+\href{https://users.ece.cmu.edu/~koopman/roses/dsn04/koopman04_crc_poly_embedded.pdf}{Author manuscript}.
+\bibitem{lin} S. Lin, D. J. Costello Jr., and M. J. Miller,
+Automatic-repeat-request error-control schemes.
+\emph{IEEE Commun. Mag.}, 22(12), pp. 5--17, 1984.
+\href{https://doi.org/10.1109/MCOM.1984.1091865}{doi:10.1109/MCOM.1984.1091865}.
+\bibitem{itu} ITU-R, Recommendation F.1487-0,
+\emph{Testing of HF modems with bandwidths of up to about 12 kHz using
+ionospheric channel simulators}, 2000, Annexes 1 and 3.
+\href{https://www.itu.int/rec/R-REC-F.1487-0-200005-I/en}{ITU publication}.
+\bibitem{watterson} C. C. Watterson, J. R. Juroshek, and W. D. Bensema,
+Experimental confirmation of an HF channel model.
+\emph{IEEE Trans. Commun. Technol.}, 18(6), pp. 792--803, 1970.
+\href{https://doi.org/10.1109/TCOM.1970.1090438}{doi:10.1109/TCOM.1970.1090438}.
+\bibitem{mil} U.S. Department of Defense, MIL-STD-188-110C,
+\emph{Interoperability and Performance Standards for Data Modems},
+Appendix B, \S B.5.4.3.
+\href{https://quicksearch.dla.mil/qsDocDetails.aspx?ident_number=35569}{DLA revision record}.
+\bibitem{stjohn} S. St John (W9SSJ), \emph{hfmodem}, published VARA HF
+protocol measurements, fixtures, and waveform constants, revision
+\path{952f79245240132f4af209afbad1f4b2ba256613}.
+\href{https://github.com/sstjohn/hfmodem/tree/952f79245240132f4af209afbad1f4b2ba256613/docs/protocols/vara}{Pinned measurement notes}.
+\bibitem{bench} Linkwise Project, \emph{VARA HF interoperability bench},
+November 12 wide DATA recovery sign-off.
+\href{https://github.com/8r4n/linkwise/blob/dcf1aa549f6affb6818e33ceb0ade51cd48dacb1/docs/testing/vara-interoperability.md\#november-12-wide-data-recovery-sign-off}{Pinned sign-off record}.
+\end{thebibliography}
+\end{document}

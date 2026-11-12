@@ -266,11 +266,12 @@ Full frames carry payload in every byte before control. A keyed closing
 frame uses a marker, caller key, optional zero fill, and rate byte before
 control. The decoder also accepts measured BW500 closing variants.
 The keyed forms use \texttt{42} or \texttt{82}, with \texttt{02} accepted
-at level 4. A 41-byte level-4 close can use \texttt{14} followed directly
-by the rate and \texttt{82}. An unpadded \texttt{83} close carries 33
-bytes at level 3 or 42 at level 4, followed by the rate and control.
-The current encoder emits the keyed form by default, plus the two
-level-4 exceptions at 41 and 42 payload bytes.
+at level 4. A 32-byte level-3 or 41-byte level-4 close can use
+\texttt{14} followed directly by the rate and \texttt{82}. An unpadded
+\texttt{83} close carries 33 bytes at level 3 or 42 at level 4, followed
+by the rate and control. The encoder emits the keyed form by default.
+It also emits the two delimiter-only forms and the 42-byte unpadded
+level-4 form.
 
 \begin{table}[htbp]
 \centering\small
