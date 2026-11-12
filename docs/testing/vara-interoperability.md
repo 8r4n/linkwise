@@ -181,3 +181,35 @@ The frozen build still needs complete repeat sequences for mixed Pat,
 the BW500 ACK-loss rows, and wide DATA recovery. One BW500 setup failure
 reached a CRC-valid stock setup requesting level 3 with control `0x42`.
 Other attempts stayed in stock's control queries before an accepted setup.
+
+### November 12 wide DATA recovery sign-off
+
+On merged main commit `70cf5ed`, all four mixed wide DATA recovery rows
+met the three-consecutive-live-pass gate against stock VARA HF 4.9.1.
+Each counted trial injected corruption after an acknowledged 89-byte
+prefix, observed a lower-rate retry, and delivered the exact 203, 6,
+and 203-byte streams without duplication. Both peers reported disconnect.
+On the same host sockets, a fresh session delivered an exact 12-byte
+probe and both peers disconnected again.
+
+| Bandwidth | Linkwise role in impaired delivery | Consecutive trials | Observed retry |
+| --- | --- | --- | --- |
+| BW2300 | Caller sending DATA | `tx-2300-02` through `04` | Level 2 |
+| BW2300 | Responder receiving DATA | `rx-2300-07` through `09` | Level 3 |
+| BW2750 | Caller sending DATA | `tx-2750-03` through `05` | Level 3 |
+| BW2750 | Responder receiving DATA | `rx-2750-02` through `04` | Level 3 |
+
+The transmit trials used stock VARA in the MacBook Windows UTM guest.
+The receive trials used stock VARA in the Mac mini Windows UTM guest,
+with the bridge ports forwarded over the Thunderbolt link. Earlier
+attempts with missed injection, no observed fallback, or incomplete
+sessions were excluded. One BW2300 receive attempt lost 2,400 samples
+from a captured stock turn grant and timed out before reverse delivery.
+A separate attempt timed out during setup.
+
+The local evidence directory is
+`reference/vara/fixtures/wide-recovery-2026-11-12/`. It contains the modem
+hash, per-trial audio and transcripts, fixture inputs, exact received
+bytes, and an independently checked summary. The virtual wide suite
+and captured BW2750 NAK replay also passed. This sign-off covers
+radio-free DATA recovery for these role and bandwidth combinations.
