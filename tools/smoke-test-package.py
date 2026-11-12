@@ -54,7 +54,9 @@ def smoke(package, version, station):
         binaries = Path("/usr/bin")
         docs = Path("/usr/share/doc") / PACKAGE
         query = ("rpm", "-q", PACKAGE)
-        install = ("sudo", "-n", "dnf", "-y", "install", package)
+        # Fedora container images may set tsflags=nodocs. The smoke test
+        # needs the packaged %doc files to exercise the full installation.
+        install = ("sudo", "-n", "dnf", "-y", "--setopt=tsflags=", "install", package)
         uninstall = ("sudo", "-n", "dnf", "-y", "remove", PACKAGE)
     elif system == "Windows" and suffix == ".exe":
         binaries = Path(os.environ["LOCALAPPDATA"]) / "Programs" / "Linkwise Modem"
