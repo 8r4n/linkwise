@@ -33,7 +33,13 @@ def waveform(stream):
     return header + read_exact(stream, samples * 4)
 
 
-def attach(stack, modem, profile, callsign, bandwidth):
+def corrupt_waveform(data):
+    count = struct.unpack(">I", data[:4])[0]
+    pairs, tail = divmod(count, 2)
+    return data[:4] + struct.pack("<ff", 0.2, -0.2) * pairs + struct.pack("<f", 0.2) * tail
+
+
+def start_station(stack, modem, profile, callsign, bandwidth):
     mode, setting = (
         ("--serve-virtual-bw500", profile)
         if bandwidth == 500 else ("--serve-virtual-wide", str(bandwidth))
@@ -57,23 +63,174 @@ def attach(stack, modem, profile, callsign, bandwidth):
     ports = re.findall(r"127\.0\.0\.1:(\d+)", process.stdout.readline())
     if len(ports) != 3:
         raise RuntimeError("the virtual modem did not advertise all three ports")
+    return [int(port) for port in ports]
+
+
+def connect_station(stack, ports):
     return [
-        stack.enter_context(socket.create_connection(("127.0.0.1", int(port)), timeout=8))
+        stack.enter_context(socket.create_connection(("127.0.0.1", port), timeout=8))
         for port in ports
     ]
+
+
+def attach(stack, modem, profile, callsign, bandwidth):
+    return connect_station(stack, start_station(stack, modem, profile, callsign, bandwidth))
+
+
+def establish_bw500(caller, peer, peer_call="W1AW"):
+    caller_cmd, _, caller_audio = caller
+    peer_cmd, _, peer_audio = peer
+    peer_cmd.sendall(b"LISTEN ON\r")
+    assert read_line(peer_cmd) == b"OK\r"
+    caller_cmd.sendall(f"CONNECT KN6MQS {peer_call}\r".encode())
+    assert read_line(caller_cmd) == b"OK\r"
+    for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 3:
+        destination.sendall(waveform(source))
+    assert read_line(caller_cmd) == read_line(peer_cmd) == f"CONNECTED KN6MQS {peer_call} 500\r".encode()
+
+
+def reconnect_after_channel_loss(modem, profile):
+    for lost in range(3):
+        with contextlib.ExitStack() as stack:
+            ports = start_station(stack, modem, profile, "KN6MQS", 500)
+            with contextlib.ExitStack() as old_session:
+                old = connect_station(old_session, ports)
+                peer = attach(old_session, modem, profile, "W1AW", 500)
+                establish_bw500(old, peer)
+                old[1].sendall(b"old session")
+                assert read_line(old[0]) == b"BUFFER 11\r"
+                old[lost].shutdown(socket.SHUT_RDWR)
+                for channel, stream in enumerate(old):
+                    if channel != lost:
+                        while chunk := stream.recv(4096):
+                            assert channel != 1, f"stale host DATA: {chunk!r}"
+
+            caller_cmd, caller_data, caller_audio = fresh = connect_station(stack, ports)
+            peer = attach(stack, modem, profile, "W1AW", 500)
+            _, peer_data, peer_audio = peer
+            establish_bw500(fresh, peer)
+            payload = b"fresh session"
+            caller_data.sendall(payload)
+            assert read_line(caller_cmd) == b"BUFFER 13\r"
+            for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 3:
+                destination.sendall(waveform(source))
+            assert read_exact(peer_data, len(payload)) == payload
+            assert read_line(caller_cmd) == b"BUFFER 0\r"
+    print("Command, DATA, and audio loss each allowed a fresh session without stale bytes.")
+
+
+def disconnect_after_drain(modem, profile):
+    with contextlib.ExitStack() as stack:
+        caller_cmd, caller_data, caller_audio = caller = attach(stack, modem, profile, "KN6MQS", 500)
+        peer_cmd, peer_data, peer_audio = peer = attach(stack, modem, profile, "W1AW", 500)
+        establish_bw500(caller, peer)
+        caller_data.sendall(b"FQ\r")
+        assert read_line(caller_cmd) == b"BUFFER 3\r"
+        caller_cmd.sendall(b"DISCONNECT\r")
+        assert read_line(caller_cmd) == b"OK\r"
+        for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 3:
+            destination.sendall(waveform(source))
+        assert read_exact(peer_data, 3) == b"FQ\r"
+        assert read_line(caller_cmd) == b"BUFFER 0\r"
+        peer_audio.sendall(waveform(caller_audio))
+        assert read_line(caller_cmd) == read_line(peer_cmd) == b"DISCONNECTED\r"
+    print("Disconnect drained queued DATA and closed at both ends.")
+
+
+def replay_stock_query_missing_data(modem, profile, capture):
+    with contextlib.ExitStack() as stack:
+        caller_cmd, caller_data, caller_audio = caller = attach(stack, modem, profile, "KN6MQS", 500)
+        _, peer_data, peer_audio = peer = attach(stack, modem, profile, "W1A", 500)
+        establish_bw500(caller, peer, "W1A")
+        payload = bytes(range(203))
+        caller_data.sendall(payload)
+        assert read_line(caller_cmd) == b"BUFFER 203\r"
+        for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 2:
+            destination.sendall(waveform(source))
+        for remaining in (160, 117):
+            peer_audio.sendall(waveform(caller_audio))
+            caller_audio.sendall(waveform(peer_audio))
+            assert read_line(caller_cmd) == f"BUFFER {remaining}\r".encode()
+        discarded = waveform(caller_audio)
+        assert len(waveform(caller_audio)) < len(discarded)
+        samples = capture.read_bytes()
+        caller_audio.sendall(struct.pack(">I", len(samples) // 4) + samples)
+        for remaining in (83, 49, 15, 0):
+            peer_audio.sendall(waveform(caller_audio))
+            caller_audio.sendall(waveform(peer_audio))
+            assert read_line(caller_cmd) == f"BUFFER {remaining}\r".encode()
+        assert read_exact(peer_data, len(payload)) == payload
+    print("BW500 recovered the missing suffix after 86 acknowledged bytes.")
+
+
+def replay_crossed_stock_turn(modem, profile, captures):
+    with contextlib.ExitStack() as stack:
+        caller_cmd, caller_data, caller_audio = caller = attach(stack, modem, profile, "KN6MQS", 500)
+        peer_cmd, peer_data, peer_audio = peer = attach(stack, modem, profile, "W1A", 500)
+        establish_bw500(caller, peer, "W1A")
+        caller_data.sendall(b"probe")
+        assert read_line(caller_cmd) == b"BUFFER 5\r"
+        for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 3:
+            destination.sendall(waveform(source))
+        assert read_exact(peer_data, 5) == b"probe"
+        assert read_line(caller_cmd) == b"BUFFER 0\r"
+
+        peer_data.sendall(b"continuation")
+        assert read_line(peer_cmd) == b"BUFFER 12\r"
+        responder_request = waveform(peer_audio)
+        caller_audio.sendall(responder_request)
+        caller_grant = waveform(caller_audio)
+        request, idle, handback, data_nak = (capture.read_bytes() for capture in captures)
+        request = struct.pack(">I", len(request) // 4) + request
+        peer_audio.sendall(request)
+        peer_audio.sendall(request)
+        assert len(waveform(peer_audio)) == len(caller_grant)
+        peer_audio.sendall(struct.pack(">I", len(idle) // 4) + idle)
+        assert waveform(peer_audio) == responder_request
+        peer_audio.sendall(struct.pack(">I", len(handback) // 4) + handback)
+        first_over = waveform(peer_audio)
+        peer_audio.sendall(struct.pack(">I", len(data_nak) // 4) + data_nak)
+        retry = waveform(peer_audio)
+        assert len(retry) > len(first_over)
+        caller_audio.sendall(retry)
+        assert read_exact(caller_data, 12) == b"continuation"
+        peer_audio.sendall(waveform(caller_audio))
+        assert read_line(peer_cmd) == b"BUFFER 0\r"
+        waveform(peer_audio)  # Responder releases the turn after its first delivery.
+        continuation = b"\x04\xf0"
+        peer_data.sendall(continuation)
+        assert read_line(peer_cmd) == b"BUFFER 2\r"
+        peer_audio.sendall(struct.pack(">I", len(idle) // 4) + idle)
+        next_request = waveform(peer_audio)
+        assert next_request == responder_request
+        caller_audio.sendall(next_request)
+        assert waveform(caller_audio) == caller_grant
+        peer_audio.sendall(struct.pack(">I", len(handback) // 4) + handback)
+        closing_over = waveform(peer_audio)
+        assert len(closing_over) == len(retry), "short responder continuation should retain level 3"
+        caller_audio.sendall(closing_over)
+        assert read_exact(caller_data, 2) == continuation
+        peer_audio.sendall(waveform(caller_audio))
+        assert read_line(peer_cmd) == b"BUFFER 0\r"
+    print("BW500 responder preserved queued DATA through crossed stock turn requests and a DATA rejection.")
 
 
 def exercise(
     modem, profile, payload, full_frames, corrupt_first=False,
     query_after_loss=False, bandwidth=500, crossed_turns=False, stock_over_nak=None,
-    stock_turn_release=None, stock_frame_nak=None,
+    stock_turn_release=None, stock_frame_nak=None, stock_rate_increase=None,
+    stock_intermediate_query_ack=None, turn_after_lost_ack=False, corrupt_after_prefix=False,
+    query_intermediate=False, stock_wide_nak=None, stock_short_turn_request=None,
+    late_write=False,
 ):
     with contextlib.ExitStack() as stack:
+        keyed_capture = stock_rate_increase or stock_intermediate_query_ack or stock_wide_nak or stock_short_turn_request
+        peer_call = "W1A" if keyed_capture else "W1AW"
         caller_cmd, caller_data, caller_audio = attach(stack, modem, profile, "KN6MQS", bandwidth)
-        peer_cmd, peer_data, peer_audio = attach(stack, modem, profile, "W1AW", bandwidth)
+        peer_cmd, peer_data, peer_audio = attach(stack, modem, profile, peer_call, bandwidth)
         peer_cmd.sendall(b"LISTEN ON\r")
         assert read_line(peer_cmd) == b"OK\r"
-        caller_cmd.sendall(b"CONNECT KN6MQS W1AW\r")
+        caller_cmd.sendall(f"CONNECT KN6MQS {peer_call}\r".encode())
         assert read_line(caller_cmd) == b"OK\r"
 
         request = waveform(caller_audio)
@@ -84,34 +241,56 @@ def exercise(
         for source, destination in [(peer_audio, caller_audio), (caller_audio, peer_audio)] * 2:
             destination.sendall(waveform(source))
         caller_audio.sendall(waveform(peer_audio))
-        assert read_line(caller_cmd) == read_line(peer_cmd) == f"CONNECTED KN6MQS W1AW {bandwidth}\r".encode()
+        assert read_line(caller_cmd) == read_line(peer_cmd) == f"CONNECTED KN6MQS {peer_call} {bandwidth}\r".encode()
 
         caller_data.sendall(payload[:4])
         assert read_line(caller_cmd) == b"BUFFER 4\r"
         caller_data.sendall(payload[4:])
         assert read_line(caller_cmd) == f"BUFFER {len(payload)}\r".encode()
-        for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 2:
+        for index, (source, destination) in enumerate([(caller_audio, peer_audio), (peer_audio, caller_audio)] * 2):
             exchange = waveform(source)
             destination.sendall(exchange)
+            if index == 1:
+                poll_ack = exchange
         caller_grant = exchange
 
         data = waveform(caller_audio)
-        block_bytes = 43
+        block_bytes = 43 if bandwidth == 500 else 89
         if corrupt_first:
-            count = struct.unpack(">I", data[:4])[0]
-            corrupted = struct.pack("<ff", 0.2, -0.2) * (count // 2)
-            if count % 2:
-                corrupted += struct.pack("<f", 0.2)
-            peer_audio.sendall(data[:4] + corrupted)
+            peer_audio.sendall(corrupt_waveform(data))
             caller_audio.sendall(waveform(peer_audio))
             retry = waveform(caller_audio)
             assert len(retry) != len(data), "expected a lower-level retry"
             data = retry
             block_bytes = 34
+        remaining = len(payload)
         for frame in range(full_frames):
+            if frame == 1 and corrupt_after_prefix:
+                peer_audio.sendall(corrupt_waveform(data))
+                caller_audio.sendall(waveform(peer_audio))
+                retry = waveform(caller_audio)
+                assert len(retry) != len(data), "expected a lower-level retry after the prefix"
+                data = retry
+                block_bytes = 34
             peer_audio.sendall(data)
-            caller_audio.sendall(waveform(peer_audio))
-            remaining = len(payload) - (frame + 1) * block_bytes
+            ack = waveform(peer_audio)
+            remaining -= block_bytes
+            if frame == int(corrupt_after_prefix) and stock_rate_increase:
+                samples = stock_rate_increase.read_bytes()
+                ack = struct.pack(">I", len(samples) // 4) + samples
+                block_bytes = 43
+            if frame == 0 and stock_intermediate_query_ack:
+                assert len(waveform(caller_audio)) < len(data), "expected a short recovery query"
+                samples = stock_intermediate_query_ack.read_bytes()
+                ack = struct.pack(">I", len(samples) // 4) + samples
+            if frame == 0 and query_intermediate:
+                query = waveform(caller_audio)
+                assert len(query) < len(data), "expected a short recovery query"
+                peer_audio.sendall(query)
+                reply = waveform(peer_audio)
+                assert reply != ack, "expected an intermediate state reply"
+                ack = reply
+            caller_audio.sendall(ack)
             assert read_line(caller_cmd) == f"BUFFER {remaining}\r".encode()
             data = waveform(caller_audio)
 
@@ -119,6 +298,12 @@ def exercise(
             samples = stock_frame_nak.read_bytes()
             caller_audio.sendall(struct.pack(">I", len(samples) // 4) + samples)
             assert waveform(caller_audio) == data, "retry must keep the acknowledged prefix"
+        if stock_wide_nak:
+            samples = stock_wide_nak.read_bytes()
+            caller_audio.sendall(struct.pack(">I", len(samples) // 4) + samples)
+            retry = waveform(caller_audio)
+            assert len(retry) > len(data), "expected the outstanding closing frame at level 3"
+            data = retry
 
         if stock_over_nak:
             # The peer misses the complete first over. Answer the caller's
@@ -137,6 +322,19 @@ def exercise(
         if query_after_loss:
             query = waveform(caller_audio)
             assert query != data, "missing ACK must solicit state before repeating DATA"
+            if turn_after_lost_ack:
+                reply = b"F> 79\r"
+                peer_data.sendall(reply)
+                assert read_line(peer_cmd) == b"BUFFER 6\r"
+                caller_audio.sendall(waveform(peer_audio))
+                assert read_line(caller_cmd) == b"BUFFER 0\r"
+                peer_audio.sendall(waveform(caller_audio))
+                caller_audio.sendall(waveform(peer_audio))
+                assert read_exact(caller_data, len(reply)) == reply
+                peer_audio.sendall(waveform(caller_audio))
+                assert read_line(peer_cmd) == b"BUFFER 0\r"
+                print("BW500 caller accepted direct DATA after a turn request answered its final query.")
+                return
             peer_audio.sendall(query)
         else:
             # An exact repeated closing frame may be acknowledged again.
@@ -153,10 +351,28 @@ def exercise(
         caller_audio.sendall(recovered_ack)
         assert read_line(caller_cmd) == b"BUFFER 0\r"
 
+        if late_write:
+            continuation = b"\x01\x00"
+            caller_data.sendall(continuation)
+            assert read_line(caller_cmd) == b"BUFFER 2\r"
+            peer_audio.sendall(waveform(caller_audio))
+            caller_audio.sendall(waveform(peer_audio))
+            burst = waveform(caller_audio)
+            assert len(burst) == 4 + 235_520 * 4, "short continuation should retain BW500 level 3"
+            peer_data.settimeout(8)
+            peer_audio.sendall(burst)
+            assert read_exact(peer_data, len(continuation)) == continuation
+            caller_audio.sendall(waveform(peer_audio))
+            assert read_line(caller_cmd) == b"BUFFER 0\r"
+
         if stock_turn_release:
             samples = stock_turn_release.read_bytes()
             peer_audio.sendall(struct.pack(">I", len(samples) // 4) + samples)
-            waveform(peer_audio)  # Receiver hands the empty turn back to the caller.
+            assert waveform(peer_audio) == poll_ack
+            if stock_short_turn_request:
+                samples = stock_short_turn_request.read_bytes()
+                peer_audio.sendall(struct.pack(">I", len(samples) // 4) + samples)
+                assert waveform(peer_audio) == caller_grant
             next_payload = b"direct DATA after handback"
             caller_data.sendall(next_payload)
             assert read_line(caller_cmd) == f"BUFFER {len(next_payload)}\r".encode()
@@ -175,8 +391,23 @@ def exercise(
             destination.sendall(waveform(source))
         assert read_exact(caller_data, len(response)) == response
         assert read_line(peer_cmd) == b"BUFFER 0\r"
+        if bandwidth == 500:
+            release = waveform(peer_audio)
+            caller_audio.sendall(release)
+            waveform(caller_audio)  # Empty caller acknowledges the returned turn.
 
         if crossed_turns:
+            direct = b"DATA on the returned turn"
+            caller_data.sendall(direct)
+            assert read_line(caller_cmd) == f"BUFFER {len(direct)}\r".encode()
+            waveform(caller_audio)  # Stock caller can skip the request after release.
+            caller_audio.sendall(caller_grant)
+            peer_data.settimeout(8)
+            peer_audio.sendall(waveform(caller_audio))
+            assert read_exact(peer_data, len(direct)) == direct
+            caller_audio.sendall(waveform(peer_audio))
+            assert read_line(caller_cmd) == b"BUFFER 0\r"
+
             caller_data.sendall(b"caller")
             peer_data.sendall(b"peer")
             assert read_line(caller_cmd) == b"BUFFER 6\r"
@@ -189,6 +420,7 @@ def exercise(
             assert read_exact(caller_data, 4) == b"peer"
             peer_audio.sendall(waveform(caller_audio))
             assert read_line(peer_cmd) == b"BUFFER 0\r"
+            waveform(peer_audio)  # The responder releases the turn after its ACK.
             for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 2:
                 destination.sendall(waveform(source))
             assert read_exact(peer_data, 6) == b"caller"
@@ -200,13 +432,13 @@ def exercise(
     print(f"BW{bandwidth} bidirectional delivery, split TCP input, and closing-frame recovery passed.")
 
 
-def replay_stock_greeting(modem, profile, captures):
+def replay_stock_greeting(modem, profile, captures, peer_call="W1AW"):
     with contextlib.ExitStack() as stack:
         caller_cmd, caller_data, caller_audio = attach(stack, modem, profile, "KN6MQS", 500)
-        peer_cmd, _, peer_audio = attach(stack, modem, profile, "W1AW", 500)
+        peer_cmd, _, peer_audio = attach(stack, modem, profile, peer_call, 500)
         peer_cmd.sendall(b"LISTEN ON\r")
         assert read_line(peer_cmd) == b"OK\r"
-        caller_cmd.sendall(b"CONNECT KN6MQS W1AW\r")
+        caller_cmd.sendall(f"CONNECT KN6MQS {peer_call}\r".encode())
         assert read_line(caller_cmd) == b"OK\r"
         for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 2:
             destination.sendall(waveform(source))
@@ -216,8 +448,8 @@ def replay_stock_greeting(modem, profile, captures):
             samples = Path(capture).read_bytes()
             caller_audio.sendall(struct.pack(">I", len(samples) // 4) + samples)
             waveform(caller_audio)
-        assert read_line(caller_cmd) == b"CONNECTED KN6MQS W1AW 500\r"
-        greeting = b";FW: W1AW\r[Pat-1.0.1-B2FHMG$]\r; KN6MQS DE W1AW ()>\r"
+        assert read_line(caller_cmd) == f"CONNECTED KN6MQS {peer_call} 500\r".encode()
+        greeting = f";FW: {peer_call}\r[Pat-1.0.1-B2FHMG$]\r; KN6MQS DE {peer_call} ()>\r".encode()
         assert read_exact(caller_data, len(greeting)) == greeting
     print("Stock BW500 greeting before the confirmation ACK replayed exactly.")
 
@@ -282,6 +514,10 @@ def recover_intermediate_ack(modem, profile, stock_over_nak):
         assert len(waveform(caller_audio)) < len(data)
         assert len(waveform(caller_audio)) < len(data)
         assert caller_audio.recv(1) == b"", "silence must not trigger DATA retransmission"
+        notices = bytearray()
+        while chunk := caller_cmd.recv(4096):
+            notices.extend(chunk)
+        assert b"BUFFER 0\r" not in notices, "silence must leave delivery unconfirmed"
     print("Consecutive BW500 deliveries recovered an intermediate ACK without duplicate bytes.")
 
 
@@ -291,10 +527,20 @@ if __name__ == "__main__":
     parser.add_argument("profile", help="path to the measured BW500 level-4 profile")
     parser.add_argument("--wide", action="store_true", help="also check BW2300 and BW2750")
     parser.add_argument("--stock-greeting", nargs=2, metavar="F32", help="replay the captured full and closing greeting frames")
+    parser.add_argument("--stock-greeting-call", default="W1AW", help="called station in the captured greeting")
     parser.add_argument("--stock-over-nak", type=Path, metavar="F32", help="replay the captured stock over rejection")
     parser.add_argument("--stock-turn-release", type=Path, metavar="F32", help="replay the captured stock caller release")
+    parser.add_argument("--stock-short-turn-request", type=Path, metavar="F32", help="replay KN6MQS's short turn request to W1A")
     parser.add_argument("--stock-frame-nak", type=Path, metavar="F32", help="replay the captured stock frame rejection")
+    parser.add_argument("--stock-rate-increase", type=Path, metavar="F32", help="replay W1A's captured rate-increase acknowledgment")
+    parser.add_argument("--stock-intermediate-query-ack", type=Path, metavar="F32", help="replay W1A's response to a short intermediate query")
+    parser.add_argument("--stock-query-missing-data", type=Path, metavar="F32", help="replay W1A's BW500 query response for a missing intermediate frame")
+    parser.add_argument("--stock-crossed-turn", nargs=4, type=Path, metavar="F32",
+                        help="replay the stock caller's request, idle, handback, and DATA rejection")
+    parser.add_argument("--stock-wide-nak", type=Path, metavar="F32", help="replay W1A's BW2750 negative acknowledgment")
     args = parser.parse_args()
+    if args.stock_short_turn_request and not args.stock_turn_release:
+        parser.error("--stock-short-turn-request requires --stock-turn-release")
     exercise(
         args.modem, args.profile, b"\x00\xff\x01Linkwise modem\x14\x00", 0,
         corrupt_first=True, query_after_loss=True,
@@ -302,15 +548,49 @@ if __name__ == "__main__":
     exercise(args.modem, args.profile, bytes(range(200)), 4, crossed_turns=True)
     exercise(args.modem, args.profile, bytes(range(84)), 1)
     exercise(args.modem, args.profile, bytes(range(200)), 5, corrupt_first=True)
+    exercise(
+        args.modem, args.profile, b"first over", 0,
+        query_after_loss=True, turn_after_lost_ack=True,
+    )
+    exercise(args.modem, args.profile, bytes(range(200)), 4, query_intermediate=True, late_write=True)
     recover_intermediate_ack(args.modem, args.profile, args.stock_over_nak)
+    reconnect_after_channel_loss(args.modem, args.profile)
+    disconnect_after_drain(args.modem, args.profile)
     if args.wide:
         for bandwidth in (2300, 2750):
             exercise(args.modem, args.profile, bytes(range(86)), 0, bandwidth=bandwidth)
+            exercise(args.modem, args.profile, bytes(range(203)), 2, bandwidth=bandwidth)
     if args.stock_greeting:
-        replay_stock_greeting(args.modem, args.profile, args.stock_greeting)
+        replay_stock_greeting(args.modem, args.profile, args.stock_greeting, args.stock_greeting_call)
     if args.stock_over_nak:
         exercise(args.modem, args.profile, b"retry the whole over", 0, stock_over_nak=args.stock_over_nak)
     if args.stock_turn_release:
-        exercise(args.modem, args.profile, b"first over", 0, stock_turn_release=args.stock_turn_release)
+        exercise(
+            args.modem, args.profile, b"first over", 0, stock_turn_release=args.stock_turn_release,
+            stock_short_turn_request=args.stock_short_turn_request,
+        )
     if args.stock_frame_nak:
         exercise(args.modem, args.profile, bytes(range(84)), 1, stock_frame_nak=args.stock_frame_nak)
+    if args.stock_rate_increase:
+        exercise(
+            args.modem, args.profile, bytes(range(200)), 4,
+            corrupt_first=True, stock_rate_increase=args.stock_rate_increase,
+        )
+        exercise(
+            args.modem, args.profile, bytes(range(200)), 4,
+            corrupt_after_prefix=True, stock_rate_increase=args.stock_rate_increase,
+        )
+    if args.stock_intermediate_query_ack:
+        exercise(
+            args.modem, args.profile, bytes(range(200)), 4,
+            stock_intermediate_query_ack=args.stock_intermediate_query_ack,
+        )
+    if args.stock_query_missing_data:
+        replay_stock_query_missing_data(args.modem, args.profile, args.stock_query_missing_data)
+    if args.stock_crossed_turn:
+        replay_crossed_stock_turn(args.modem, args.profile, args.stock_crossed_turn)
+    if args.stock_wide_nak:
+        exercise(
+            args.modem, args.profile, bytes(range(203)), 2,
+            bandwidth=2750, stock_wide_nak=args.stock_wide_nak,
+        )

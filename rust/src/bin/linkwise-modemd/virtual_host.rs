@@ -26,7 +26,7 @@ use tokio::{
 };
 
 const PHASE_TIMEOUT: Duration = Duration::from_secs(12);
-const FINAL_ACK_WAIT: Duration = Duration::from_secs(2);
+const FINAL_ACK_WAIT: Duration = Duration::from_secs(3);
 const FINAL_QUERY_DELAY: Duration = Duration::from_millis(3200);
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_AUDIO: usize = 48_000 * 6;
@@ -90,6 +90,7 @@ enum Phase {
     Responder,
     Receiving,
     Sent,
+    TurnReleased,
     Received,
 }
 
@@ -145,10 +146,15 @@ struct Engine<'a> {
     local: &'a str,
     mode: &'a Mode,
     wide_lead: Option<wide_level4::Lead>,
+    wide_level3: Option<wide_level4::LowerWaveform>,
+    wide_level2: Option<wide_level4::RobustWaveform>,
+    wide_rate: u8,
+    wide_outstanding: Vec<f32>,
     handshake: AudioHandshake,
     session: Option<Established>,
     phase: Phase,
     listen: bool,
+    disconnect_pending: bool,
     pending: Vec<u8>,
     plan: Option<data::TransmitPlan>,
     delivery_len: usize,
@@ -157,7 +163,9 @@ struct Engine<'a> {
     retried_data: bool,
     retry_on_confirm: bool,
     returned_turn: bool,
+    caller_requested_turn: bool,
     initial_poll: bool,
+    closed_at_level3: bool,
     rejected_over: bool,
     receive_bytes: Vec<u8>,
     last_received: Option<(u8, bw500::Frame)>,
@@ -171,9 +179,12 @@ impl Engine<'_> {
     fn reset(&mut self) -> io::Result<()> {
         self.handshake = self.mode.handshake(self.local, self.listen)?;
         self.wide_lead = None;
+        self.wide_rate = 4;
+        self.wide_outstanding.clear();
         self.session = None;
         self.phase = Phase::Handshake;
         self.deadline = None;
+        self.disconnect_pending = false;
         self.pending.clear();
         self.plan = None;
         self.delivery_len = 0;
@@ -182,7 +193,9 @@ impl Engine<'_> {
         self.retried_data = false;
         self.retry_on_confirm = false;
         self.returned_turn = false;
+        self.caller_requested_turn = false;
         self.initial_poll = false;
+        self.closed_at_level3 = false;
         self.rejected_over = false;
         self.receive_bytes.clear();
         self.last_received = None;
@@ -206,6 +219,21 @@ impl Engine<'_> {
             link.called,
             self.mode.width()
         ))
+    }
+
+    async fn disconnect(&mut self, cable: &mut Cable) -> io::Result<()> {
+        if let Some(link) = &self.session {
+            cable
+                .send(
+                    Message::SessionDisconnect {
+                        responder: link.called == self.local,
+                    }
+                    .synthesize_on(&link.called, self.mode.bandwidth()),
+                )
+                .await?;
+        }
+        self.reset()?;
+        self.notify("DISCONNECTED\r".into())
     }
 
     fn transition(&mut self, phase: Phase) {
@@ -303,7 +331,15 @@ impl Engine<'_> {
                 self.establish(action, cable).await?;
                 Ok(Reply::Ok)
             }
-            Command::Abort | Command::Disconnect => {
+            Command::Disconnect => {
+                if self.session.is_some() && !self.pending.is_empty() {
+                    self.disconnect_pending = true;
+                } else {
+                    self.disconnect(cable).await?;
+                }
+                Ok(Reply::Ok)
+            }
+            Command::Abort => {
                 self.reset()?;
                 self.notify("DISCONNECTED\r".into())?;
                 Ok(Reply::Ok)
@@ -320,7 +356,11 @@ impl Engine<'_> {
             ));
         }
         match self.phase {
-            Phase::CallerReady | Phase::Responder | Phase::Sent | Phase::Received => {
+            Phase::CallerReady
+            | Phase::Responder
+            | Phase::Sent
+            | Phase::TurnReleased
+            | Phase::Received => {
                 self.initial_poll = self.phase == Phase::CallerReady;
                 self.phase = Phase::Collecting;
                 self.deadline = Some(Instant::now() + HOST_BATCH_WINDOW);
@@ -350,18 +390,33 @@ impl Engine<'_> {
         let acknowledged = self
             .plan
             .as_ref()
-            .map_or(0, |plan| self.send_index * plan.full_payload_bytes());
+            .map_or(self.send_index * self.wide_block_bytes(), |plan| {
+                self.send_index * plan.full_payload_bytes()
+            });
         let remaining = self.pending.len() - acknowledged;
         self.notify(format!("BUFFER {remaining}\r"))
     }
 
     fn plan_delivery(&mut self) -> io::Result<()> {
         if let Mode::Wide { .. } = self.mode {
-            self.delivery_len = self.pending.len().min(data::WIDE_SHORT_BYTES);
+            self.wide_rate = 4;
+            self.wide_lead
+                .as_mut()
+                .expect("wide link has a lead stream")
+                .begin_delivery();
+            self.delivery_len = data::wide_delivery_prefix(self.pending.len());
             self.plan = None;
         } else {
-            let (length, plan) = data::TransmitPlan::prefix(self.pending.len())
-                .ok_or_else(|| io::Error::other("could not plan nonempty BW500 delivery"))?;
+            // Stock BW500 retains level 3 for a short continuation
+            // after a level-3 close, even when that close advertises level 4.
+            let prefix = if self.closed_at_level3 && self.pending.len() <= 31 {
+                data::TransmitPlan::level3_retry(self.pending.len())
+                    .map(|plan| (self.pending.len(), plan))
+            } else {
+                data::TransmitPlan::prefix(self.pending.len())
+            };
+            let (length, plan) =
+                prefix.ok_or_else(|| io::Error::other("could not plan nonempty BW500 delivery"))?;
             self.delivery_len = length;
             self.plan = Some(plan);
         }
@@ -371,8 +426,17 @@ impl Engine<'_> {
         Ok(())
     }
 
+    fn wide_block_bytes(&self) -> usize {
+        match self.wide_rate {
+            2 => data::WIDE_ROBUST_FULL_BYTES,
+            3 => data::WIDE_LOWER_FULL_BYTES,
+            _ => data::WIDE_FULL_BYTES,
+        }
+    }
+
     async fn start_delivery(&mut self, cable: &mut Cable) -> io::Result<()> {
         self.plan_delivery()?;
+        self.caller_requested_turn = false;
         let link = self.session.as_ref().expect("sending requires a session");
         if self.initial_poll {
             cable
@@ -395,18 +459,43 @@ impl Engine<'_> {
     }
 
     async fn acknowledge_delivery(&mut self, cable: &mut Cable) -> io::Result<()> {
+        self.closed_at_level3 = self
+            .plan
+            .as_ref()
+            .is_some_and(data::TransmitPlan::closes_at_level3);
         self.pending.drain(..self.delivery_len);
         self.send_index = 0;
         self.delivery_len = 0;
         self.plan = None;
+        self.wide_outstanding.clear();
         self.report_buffer()?;
         if self.pending.is_empty() {
+            if self.disconnect_pending {
+                return self.disconnect(cable).await;
+            }
             self.phase = Phase::Sent;
             self.deadline = None;
+            let link = self
+                .session
+                .as_ref()
+                .expect("acknowledging an active delivery");
+            if self.mode.bandwidth() == Hz500 && link.called == self.local {
+                cable
+                    .send(Message::Bw500ResponderTurnRelease.synthesize(&link.called))
+                    .await?;
+                self.await_handed_back_data();
+            }
         } else {
             self.start_delivery(cable).await?;
         }
         Ok(())
+    }
+
+    fn await_handed_back_data(&mut self) {
+        self.receive_bytes.clear();
+        self.last_received = None;
+        self.rejected_over = false;
+        self.phase = Phase::TurnReleased;
     }
 
     fn is_final_caller_frame(&self) -> bool {
@@ -441,6 +530,22 @@ impl Engine<'_> {
             || self.phase == Phase::Received && !self.pending.is_empty()
         {
             return self.start_delivery(cable).await;
+        }
+        if self.phase == Phase::DataAck
+            && self.mode.bandwidth() != Hz500
+            && let Some(link) = &self.session
+            && link.caller == self.local
+        {
+            let query = if self.send_index.is_multiple_of(2) {
+                Message::Bw500FinalQuery
+            } else {
+                Message::Bw500AlternateQuery
+            };
+            cable
+                .send(query.synthesize_on(&link.called, self.mode.bandwidth()))
+                .await?;
+            self.transition(Phase::IntermediateQueryLong);
+            return Ok(());
         }
         if matches!(self.phase, Phase::DataAck | Phase::FinalQueryShort)
             && self.is_final_caller_frame()
@@ -525,6 +630,16 @@ impl Engine<'_> {
             let matches = |message: Message, key: &str| {
                 message.find_on(key, samples, start, bandwidth).is_some()
             };
+            if matches(
+                Message::SessionDisconnect {
+                    responder: local_caller,
+                },
+                &link.called,
+            ) || !local_caller && matches(Message::SessionDisconnectShort, &link.called)
+            {
+                self.reset()?;
+                return self.notify("DISCONNECTED\r".into());
+            }
             let (peer_release, own_release) = if local_caller {
                 (
                     Message::Bw500ResponderTurnRelease,
@@ -562,17 +677,27 @@ impl Engine<'_> {
                     self.transition(Phase::TurnGrant);
                 }
                 Phase::TurnGrant => {
-                    if local_caller && matches(Message::Bw500ResponderTurnRequest, &link.caller) {
-                        // When requests cross, let the responder send first.
-                        // The caller's queued bytes remain owned by this session.
+                    let responder_requested =
+                        local_caller && matches(Message::Bw500ResponderTurnRequest, &link.caller);
+                    let caller_requested = bandwidth == Hz500
+                        && !local_caller
+                        && (matches(Message::Bw500CallerTurnRequest, &link.caller)
+                            || matches(Message::Bw500CallerTurnRequestShort, &link.caller));
+                    // Give the responder the first opportunity when requests cross.
+                    // A stock caller can repeat its request instead of granting it.
+                    if responder_requested || caller_requested && self.caller_requested_turn {
                         cable
-                            .send(control::turn_grant(bandwidth, &link.called, false))
+                            .send(control::turn_grant(bandwidth, &link.called, !local_caller))
                             .await?;
                         self.receive_bytes.clear();
                         self.last_received = None;
                         self.rejected_over = false;
                         self.transition(Phase::Receiving);
                         return Ok(());
+                    }
+                    if caller_requested {
+                        self.caller_requested_turn = true;
+                        self.deadline = Some(Instant::now() + PHASE_TIMEOUT);
                     }
                     let grant = control::find_turn_grant(
                         bandwidth,
@@ -586,14 +711,87 @@ impl Engine<'_> {
                     } else {
                         Message::Bw500Drained
                     };
-                    let handed_over = bandwidth == Hz500
-                        && (matches(drained, &link.called) || matches(peer_release, &link.called));
+                    let handed_over =
+                        matches(peer_release, &link.called) || matches(drained, &link.called);
                     if grant.is_none() && !handed_over {
                         continue;
                     }
                     self.send_over(cable).await?;
                 }
-                Phase::DataAck if bandwidth != Hz500 => {
+                Phase::DataAck | Phase::IntermediateQueryLong if bandwidth != Hz500 => {
+                    let wide_reply = |reply: Bw500IntermediateReply| {
+                        reply
+                            .find_on(&link.called, local_caller, samples, start, bandwidth)
+                            .is_some()
+                    };
+                    let queried = self.phase == Phase::IntermediateQueryLong;
+                    let missing = queried && matches(Message::QueryMissingData, &link.called);
+                    let nak = missing
+                        || wide_reply(Bw500IntermediateReply::NotDelivered)
+                        || matches(Message::WideSetupNak(bandwidth), &link.called);
+                    let full = self.send_index < self.delivery_len / self.wide_block_bytes();
+                    let decrease = !nak && full && wide_reply(Bw500IntermediateReply::DecreaseOne);
+                    let increase = !nak
+                        && full
+                        && self.wide_rate == 2
+                        && wide_reply(Bw500IntermediateReply::IncreaseTwo);
+                    let next_rate = if increase {
+                        4
+                    } else if missing {
+                        2
+                    } else {
+                        3
+                    };
+                    if ((nak || decrease) && self.wide_rate == 4) || increase {
+                        let acknowledged = (self.send_index + usize::from(decrease || increase))
+                            * self.wide_block_bytes();
+                        let remaining = self.delivery_len - acknowledged;
+                        let fits = match next_rate {
+                            2 => {
+                                data::wide_lower_fits(remaining, data::WIDE_ROBUST_FULL_BYTES)
+                                    || remaining
+                                        >= data::WIDE_ROBUST_FULL_BYTES + data::WIDE_FULL_BYTES
+                            }
+                            3 => data::wide_lower_fits(remaining, data::WIDE_LOWER_FULL_BYTES),
+                            _ => data::wide_delivery_prefix(remaining) == remaining,
+                        };
+                        if fits {
+                            self.pending.drain(..acknowledged);
+                            self.delivery_len = remaining;
+                            self.send_index = 0;
+                            self.wide_rate = next_rate;
+                            self.retried_data = nak;
+                            if decrease || increase {
+                                self.report_buffer()?;
+                            }
+                            self.send_over(cable).await?;
+                            return Ok(());
+                        }
+                    }
+                    if nak {
+                        if self.retried_data {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "peer rejected the wide DATA retry",
+                            ));
+                        }
+                        self.retried_data = true;
+                        cable.write(&self.wide_outstanding).await?;
+                        self.transition(Phase::DataAck);
+                        return Ok(());
+                    }
+                    if full {
+                        if !(wide_reply(Bw500IntermediateReply::SameLevel)
+                            || queried && matches(Message::Bw500IntermediateQueryAck, &link.called))
+                        {
+                            continue;
+                        }
+                        self.send_index += 1;
+                        self.retried_data = false;
+                        self.report_buffer()?;
+                        self.send_over(cable).await?;
+                        return Ok(());
+                    }
                     if !ack() {
                         continue;
                     }
@@ -618,6 +816,15 @@ impl Engine<'_> {
                             .is_some();
                     if matches(Bw500IntermediateReply::NotDelivered)
                         || over_nak
+                        || !local_caller
+                            && Message::Bw500CallerDataNak
+                                .find(&link.called, samples, start)
+                                .is_some()
+                        || querying
+                            && local_caller
+                            && [Message::QueryMissingData, Message::Bw500DataNakQuery]
+                                .into_iter()
+                                .any(|message| message.find(&link.called, samples, start).is_some())
                         || local_caller
                             && Message::Bw500SetupNak
                                 .find(&link.called, samples, start)
@@ -630,6 +837,15 @@ impl Engine<'_> {
                                 && let Some(retry) =
                                     data::TransmitPlan::level3_retry(self.delivery_len)
                             {
+                                self.plan = Some(retry);
+                            } else if local_caller
+                                && !over_nak
+                                && let Some((acknowledged, retry)) = plan
+                                    .level3_retry_after_prefix(self.send_index, self.delivery_len)
+                            {
+                                self.pending.drain(..acknowledged);
+                                self.delivery_len -= acknowledged;
+                                self.send_index = 0;
                                 self.plan = Some(retry);
                             }
                             // Once a prefix is acknowledged, retry only the
@@ -649,8 +865,23 @@ impl Engine<'_> {
                         self.retry_on_confirm = false;
                         self.acknowledge_delivery(cable).await?;
                     } else {
+                        if local_caller
+                            && let Some((acknowledged, continuation)) =
+                                plan.level4_retry_continuation(self.send_index, self.delivery_len)
+                            && matches(Bw500IntermediateReply::IncreaseOne)
+                        {
+                            self.pending.drain(..acknowledged);
+                            self.delivery_len -= acknowledged;
+                            self.send_index = 0;
+                            self.plan = Some(continuation);
+                            self.retry_on_confirm = false;
+                            self.retried_data = false;
+                            self.report_buffer()?;
+                            self.send_over(cable).await?;
+                            return Ok(());
+                        }
                         let last_full = self.send_index + 1 == plan.full_frames();
-                        let query_ack = self.phase == Phase::IntermediateQueryLong
+                        let query_ack = querying
                             && Message::Bw500IntermediateQueryAck
                                 .find(&link.called, samples, start)
                                 .is_some();
@@ -671,6 +902,26 @@ impl Engine<'_> {
                     if ack() {
                         self.acknowledge_delivery(cable).await?;
                     } else if !self.retried_data
+                        && (matches(Message::QueryMissingData, &link.called)
+                            || matches(Message::Bw500DataNakQuery, &link.called))
+                    {
+                        let retry = if self.send_index == 0 {
+                            data::TransmitPlan::level3_retry(self.delivery_len)
+                                .map(|plan| (0, plan))
+                        } else {
+                            self.plan.as_ref().and_then(|plan| {
+                                plan.level3_retry_after_prefix(self.send_index, self.delivery_len)
+                            })
+                        };
+                        if let Some((acknowledged, plan)) = retry {
+                            self.retried_data = true;
+                            self.pending.drain(..acknowledged);
+                            self.delivery_len -= acknowledged;
+                            self.send_index = 0;
+                            self.plan = Some(plan);
+                            self.send_over(cable).await?;
+                        }
+                    } else if !self.retried_data
                         && matches(Message::Bw500ResponderOverNak, &link.called)
                         && let Some(retry) = data::TransmitPlan::level3_retry(self.delivery_len)
                     {
@@ -685,6 +936,7 @@ impl Engine<'_> {
                             .send(Message::Bw500Drained.synthesize(&link.called))
                             .await?;
                         self.acknowledge_delivery(cable).await?;
+                        self.await_handed_back_data();
                     } else {
                         continue;
                     }
@@ -708,27 +960,39 @@ impl Engine<'_> {
                         .await?;
                 }
                 Phase::Received | Phase::Collecting
-                    if bandwidth == Hz500
-                        && !self.returned_turn
+                    if !self.returned_turn
                         && self.last_received.is_some()
-                        && matches(peer_release, &link.called) =>
+                        && (matches(peer_release, &link.called)
+                            || !local_caller && matches(Message::Bw500Drained, &link.called)) =>
                 {
                     self.returned_turn = true;
                     if self.pending.is_empty() {
-                        cable.send(own_release.synthesize(&link.called)).await?;
+                        let reply = if local_caller {
+                            own_release.synthesize_on(&link.called, bandwidth)
+                        } else {
+                            control::poll_ack(bandwidth, &link.caller)
+                        };
+                        cable.send(reply).await?;
                     } else {
                         self.plan_delivery()?;
                         self.send_over(cable).await?;
                     }
                 }
-                Phase::CallerReady | Phase::Responder | Phase::Sent | Phase::Received => {
+                Phase::CallerReady
+                | Phase::Responder
+                | Phase::Sent
+                | Phase::TurnReleased
+                | Phase::Received => {
                     let request = if local_caller {
                         Message::Bw500ResponderTurnRequest
                     } else {
                         Message::Bw500CallerTurnRequest
                     };
-                    if !matches(request, &link.caller) {
-                        if self.phase == Phase::Received
+                    let short_request = bandwidth == Hz500
+                        && !local_caller
+                        && matches(Message::Bw500CallerTurnRequestShort, &link.caller);
+                    if !matches(request, &link.caller) && !short_request {
+                        if matches!(self.phase, Phase::Received | Phase::TurnReleased)
                             && let Some(reply) =
                                 self.receive_data(samples, start..range.end as usize)?
                         {
@@ -745,6 +1009,55 @@ impl Engine<'_> {
                 }
                 Phase::Receiving => {
                     if bandwidth == Hz500
+                        && !local_caller
+                        && self.last_received.is_none()
+                        && !self.pending.is_empty()
+                        && matches(Message::Bw500CallerTurnIdle, &link.caller)
+                    {
+                        self.start_delivery(cable).await?;
+                        return Ok(());
+                    }
+                    if bandwidth == Hz500
+                        && !local_caller
+                        && self.last_received.is_none()
+                        && !self.pending.is_empty()
+                        && (matches(peer_release, &link.called)
+                            || matches(Message::Bw500Drained, &link.called))
+                    {
+                        self.plan_delivery()?;
+                        self.send_over(cable).await?;
+                        return Ok(());
+                    }
+                    if bandwidth != Hz500
+                        && !local_caller
+                        && (matches(Message::Bw500FinalQuery, &link.called)
+                            || matches(Message::Bw500AlternateQuery, &link.called))
+                        && (self.rejected_over || self.last_received.is_some())
+                    {
+                        let reply = if self.rejected_over {
+                            Message::QueryMissingData
+                        } else {
+                            Message::Bw500IntermediateQueryAck
+                        };
+                        cable
+                            .send(reply.synthesize_on(&link.called, bandwidth))
+                            .await?;
+                        self.transition(Phase::Receiving);
+                        return Ok(());
+                    }
+                    if bandwidth == Hz500
+                        && !local_caller
+                        && self.last_received.is_some()
+                        && (matches(Message::Bw500FinalQueryShort, &link.called)
+                            || matches(Message::Bw500FinalQuery, &link.called))
+                    {
+                        cable
+                            .send(Message::Bw500IntermediateQueryAck.synthesize(&link.called))
+                            .await?;
+                        self.transition(Phase::Receiving);
+                        return Ok(());
+                    }
+                    if bandwidth == Hz500
                         && local_caller
                         && self.last_received.is_none()
                         && !self.pending.is_empty()
@@ -758,7 +1071,12 @@ impl Engine<'_> {
                     } else {
                         Message::Bw500CallerTurnRequest
                     };
-                    if self.last_received.is_none() && matches(request, &link.caller) {
+                    let short_request = bandwidth == Hz500
+                        && !local_caller
+                        && matches(Message::Bw500CallerTurnRequestShort, &link.caller);
+                    if self.last_received.is_none()
+                        && (matches(request, &link.caller) || short_request)
+                    {
                         cable
                             .send(control::turn_grant(bandwidth, &link.called, !local_caller))
                             .await?;
@@ -785,10 +1103,17 @@ impl Engine<'_> {
                 .wide_lead
                 .as_mut()
                 .expect("wide link has a lead stream");
-            let frame = data::wide_short(&self.pending[..self.delivery_len], &link.caller)
-                .ok_or_else(|| io::Error::other("could not encode wide DATA"))?;
-            lead.begin_delivery();
-            cable.send(waveform.synthesize(&frame, lead)).await?;
+            let payload = &self.pending[..self.delivery_len];
+            self.wide_outstanding = match self.wide_rate {
+                2 => data::wide_lower_delivery_frame(self.send_index, payload, &link.caller)
+                    .and_then(|frame| self.wide_level2.as_ref()?.synthesize(&frame, lead)),
+                3 => data::wide_lower_delivery_frame(self.send_index, payload, &link.caller)
+                    .and_then(|frame| self.wide_level3.as_ref()?.synthesize(&frame, lead)),
+                _ => data::wide_delivery_frame(self.send_index, payload, &link.caller)
+                    .and_then(|frame| waveform.synthesize(&frame, lead)),
+            }
+            .ok_or_else(|| io::Error::other("could not render wide DATA"))?;
+            cable.write(&self.wide_outstanding).await?;
             self.transition(Phase::DataAck);
             return Ok(());
         }
@@ -843,16 +1168,50 @@ impl Engine<'_> {
         let bandwidth = self.mode.bandwidth();
         let decoded = match self.mode {
             Mode::Wide { waveform, .. } => {
-                let Some(frame) = waveform.decode(samples, candidate) else {
+                if let Some(frame) = waveform.decode(samples, candidate.clone()) {
+                    (
+                        4,
+                        bw500::Frame {
+                            payload: frame[..data::WIDE_FULL_BYTES].to_vec(),
+                            control: frame[data::WIDE_FULL_BYTES],
+                        },
+                    )
+                } else if let Some(frame) = self
+                    .wide_level3
+                    .as_ref()
+                    .and_then(|codec| codec.decode(samples, candidate.clone()))
+                {
+                    (
+                        3,
+                        bw500::Frame {
+                            payload: frame[..data::WIDE_LOWER_FULL_BYTES].to_vec(),
+                            control: frame[data::WIDE_LOWER_FULL_BYTES],
+                        },
+                    )
+                } else if let Some(frame) = self
+                    .wide_level2
+                    .as_ref()
+                    .and_then(|codec| codec.decode(samples, candidate))
+                {
+                    (
+                        2,
+                        bw500::Frame {
+                            payload: frame[..data::WIDE_ROBUST_FULL_BYTES].to_vec(),
+                            control: frame[data::WIDE_ROBUST_FULL_BYTES],
+                        },
+                    )
+                } else {
+                    if self.phase == Phase::Receiving
+                        && !self.rejected_over
+                        && link.called == self.local
+                    {
+                        let reply = Message::WideSetupNak(bandwidth).synthesize(&link.called);
+                        self.rejected_over = true;
+                        self.transition(Phase::Receiving);
+                        return Ok(reply);
+                    }
                     return Ok(None);
-                };
-                (
-                    4,
-                    bw500::Frame {
-                        payload: frame[..89].to_vec(),
-                        control: frame[89],
-                    },
-                )
+                }
             }
             Mode::Bw500 { waveform, .. } => {
                 if let Some(frame) = waveform.decode(samples, candidate.clone()) {
@@ -905,7 +1264,6 @@ impl Engine<'_> {
             data::decode_received(decoded.0, &decoded.1, &link.caller)
         } else {
             data::decode_wide_received(&decoded.1.payload, decoded.1.control, &link.caller)
-                .filter(|frame| frame.next_receive_level.is_some())
         };
         let Some(frame) = frame else {
             return Ok(None);
@@ -916,6 +1274,21 @@ impl Engine<'_> {
                 "ambiguous intermediate DATA replay",
             ));
         }
+        if bandwidth == Hz500
+            && self.phase == Phase::Receiving
+            && responder_sends
+            && decoded.0 == 3
+            && frame.field == 0x95
+            && let Some((4, previous)) = &self.last_received
+            && matches!(previous.control, 0x8d | 0x91)
+            && previous.payload.starts_with(&frame.payload)
+        {
+            // Stock can miss the same-rate ACK and replace this frame with
+            // the start of a level-3 continuation. Only the closing frame
+            // commits the buffered bytes to the host.
+            self.receive_bytes
+                .truncate(self.receive_bytes.len() - previous.payload.len());
+        }
         if frame.payload.len() > MAX_RECEIVE - self.receive_bytes.len() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -924,22 +1297,29 @@ impl Engine<'_> {
         }
         if self.phase == Phase::ConfirmAck {
             if frame.next_receive_level.is_none()
-                && (decoded.0 != 4 || !matches!(frame.field, 0x81 | 0x8d | 0x91 | 0x95))
+                && (decoded.0 != 4 || !matches!(frame.field, 0x41 | 0x81 | 0x8d | 0x91 | 0x95))
             {
                 return Ok(None);
             }
             self.connected()?;
         }
         self.receive_bytes.extend(frame.payload);
+        self.rejected_over = false;
         let decoded_level = decoded.0;
         self.last_received = Some(decoded);
         if frame.next_receive_level.is_none() {
-            let reply = if !responder_sends && decoded_level == 4 && frame.field == 0x81 {
+            let reply = if bandwidth != Hz500 && decoded_level == 2 && frame.field == 0x95 {
+                Bw500IntermediateReply::IncreaseTwo
+            } else if bandwidth == Hz500
+                && !responder_sends
+                && decoded_level == 4
+                && frame.field == 0x81
+            {
                 Bw500IntermediateReply::DecreaseOne
             } else {
                 Bw500IntermediateReply::SameLevel
             }
-            .synthesize(&link.called, responder_sends);
+            .synthesize_on(&link.called, responder_sends, bandwidth);
             self.transition(Phase::Receiving);
             return Ok(reply);
         }
@@ -949,6 +1329,7 @@ impl Engine<'_> {
                 .try_send(std::mem::take(&mut self.receive_bytes))
                 .map_err(io::Error::other)?;
         }
+        self.closed_at_level3 = false;
         self.phase = Phase::Received;
         self.returned_turn = false;
         self.deadline = (!self.pending.is_empty()).then(|| Instant::now() + HOST_BATCH_WINDOW);
@@ -1099,10 +1480,15 @@ pub async fn serve(args: &[String], wide: bool) -> Result<(), Box<dyn std::error
             local: &local,
             mode: &mode,
             wide_lead: None,
+            wide_level3: wide_level4::LowerWaveform::new_level3(mode.bandwidth()),
+            wide_level2: wide_level4::RobustWaveform::new_level2(mode.bandwidth()),
+            wide_rate: 4,
+            wide_outstanding: Vec::new(),
             handshake: mode.handshake(&local, false)?,
             session: None,
             phase: Phase::Handshake,
             listen: false,
+            disconnect_pending: false,
             pending: Vec::new(),
             plan: None,
             delivery_len: 0,
@@ -1111,7 +1497,9 @@ pub async fn serve(args: &[String], wide: bool) -> Result<(), Box<dyn std::error
             retried_data: false,
             retry_on_confirm: false,
             returned_turn: false,
+            caller_requested_turn: false,
             initial_poll: false,
+            closed_at_level3: false,
             rejected_over: false,
             receive_bytes: Vec::new(),
             last_received: None,

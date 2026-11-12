@@ -118,17 +118,13 @@ releases a delivery to its host after the closing frame. The stations
 can hand over the transmit turn within one connection.
 
 A repeated closing frame is acknowledged again without redelivering its
-bytes. A rejection of the first DATA frame can trigger one lower-rate
-retry using a measured layout. This covers short deliveries of up to
-31 bytes and deliveries that fit five full level-3 frames and a close.
-The five-frame retry delivered 200 bytes between Linkwise daemons. In
-the stock VARA test, VARA rejected the first level-3 retry.
-Ambiguous intermediate repeats fail the session. If the caller loses a
-closing acknowledgment, it sends bounded state queries and retains the
-bytes until the peer confirms delivery.
-An unanswered query or missing intermediate acknowledgment ends the
-connection with delivery unconfirmed. `ABORT` and `DISCONNECT` reset
-the local state.
+bytes. The caller can send bounded keyed state queries after a missing
+intermediate or closing acknowledgment. A negative response can trigger
+a level-3 retry of the outstanding DATA using a measured layout. The
+retry preserves any acknowledged prefix. Ambiguous replies and exhausted
+query budgets can end the connection with delivery unconfirmed.
+`DISCONNECT` waits for queued DATA to drain before sending the disconnect
+waveform. `ABORT` resets the session immediately.
 
 Run the socket and waveform regression from the repository root:
 
@@ -142,10 +138,11 @@ two Linkwise daemons over both the socket cable and Ubuntu's native ALSA
 loopback. Stock VARA HF 4.9.1 transferred 200-byte test streams in both
 connection roles in separate sessions. A shorter test exchanged 13 bytes
 from Linkwise and nine from VARA within a single connection.
-Winlink Express 1.8.6.0 also received and displayed a B2F peer-to-peer
-test message from Pat through two Linkwise daemons over the socket cable.
-The stock VARA bench verified caller recovery after dropping a closing
-acknowledgment.
+Mixed BW500 Pat and Winlink Express 1.8.6.0 peer-to-peer transfers verified
+the attachment SHA-256 in both recipient mailboxes. The Pat-to-Express
+sender-side close remains unverified. See the
+[interoperability bench](../../docs/testing/vara-interoperability.md) for
+build-specific results and ACK-loss repeats.
 
 ## Serve a wide-mode bench session
 
@@ -156,12 +153,13 @@ linkwise-modemd --serve-virtual-wide W1AW 2300 8300 8301 8302
 ```
 
 Use `2300` or `2750`. The same command, DATA, and audio socket protocol
-applies. The wide modes use level-4 setup and uncompressed closing DATA
-frames carrying up to 86 bytes each. Longer host writes are split across
-deliveries. Stock VARA HF 4.9.1 exchanged exact 13-byte payloads in both
-connection roles at each bandwidth. Wide adaptive rates and multi-frame
-deliveries require additional session support. Add `--wide` to the socket
-regression command to exercise both wide modes between Linkwise peers.
+applies. The wide modes use level-4 setup. A level-4 DATA delivery can
+carry two 89-byte full frames and an uncompressed closing frame of up to
+86 bytes. Longer writes are split across deliveries. The bench supports
+level-3 and level-2 retries for measured layouts. Stock VARA HF 4.9.1 passed
+multi-frame DATA and guarded recovery runs at both bandwidths, with
+intermittent retry failures on repeat. Add `--wide` to the socket regression
+command to exercise both wide modes between Linkwise peers.
 
 ## Native output primitive
 
@@ -266,7 +264,8 @@ waveform peers. It exercises separate sessions with each modem as caller.
 The multi-frame fixtures cover level-4 DATA, a level-3 closing frame on
 the Linkwise transmit path, and stock VARA's level fallback after a
 negative acknowledgment. The DATA parser accepts the observed
-`0x42` and `0x82` short closing fields after CRC validation.
+`0x42` and `0x82` short closing fields and the observed BW500 level-4
+`0x02` form after CRC and trailer validation.
 
 Replay the local capture set from `rust/`:
 
@@ -295,8 +294,8 @@ cargo test --locked --test modem_runtime
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Remaining work includes native waveform/device integration,
-production DATA packetization and wire reply/query qualification, host receive delivery and
-on-air duplicate suppression, turn/rate/keepalive/disconnect behavior, an operational backend for the paired TCP
-listener, station admission/grants, durable operation records,
-reference-peer/client interoperability, and OS-specific adapters/packaging.
+Remaining work includes integrating the bench waveform and host paths with
+the operational session owner, qualifying DATA and control behavior across
+the repeat matrix, and validating native playback, turnaround, and PTT
+release. Station admission, durable operation records, and native platform
+qualification also remain open.

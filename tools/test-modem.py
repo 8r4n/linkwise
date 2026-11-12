@@ -52,10 +52,13 @@ def main():
     command = ["cargo", "test", "--locked"]
     if args.audio_device:
         command += ["--features", "audio-device"]
-    subprocess.run(
-        command + ["--", "--include-ignored"],
-        cwd=ROOT / "rust", env=environment, check=True,
-    )
+    # Only opt into replays whose inputs this helper prepares.
+    for selection in (
+        [],
+        ["--test", "bw500_replay", "--", "--ignored", "--exact", "decodes_published_bw500_payloads"],
+        ["--test", "bw500_waveform", "--", "--ignored"],
+    ):
+        subprocess.run(command + selection, cwd=ROOT / "rust", env=environment, check=True)
 
 
 if __name__ == "__main__":

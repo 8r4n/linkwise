@@ -125,10 +125,10 @@ float WAV. The setup waveform has no synthesized random acquisition lead.
 | Stage | Status | Remaining gate |
 | --- | --- | --- |
 | Level-4 waveform | Native single-frame encoder/receiver implemented; local audio tests pass | Independent stock recordings, acquisition lead and multi-frame behavior |
-| Audio handshake | Two local instances establish through decoded audio | Device playback, turnaround, PTT ownership and live reference-peer acceptance |
-| DATA / ARQ | Container codec and bounded event-driven sender implemented | Wire field sequencing, reply/query codecs, duplicate handling, rate/turn/keepalive/disconnect integration |
-| Host interface | Command codec and command/data stream transports implemented | Socket ownership/pairing and connection to an operational session engine |
-| Qualification | Reference level 1/2 replay and synthetic level 1–4 tests pass | Bidirectional unmodified-VARA transfers, impaired-link tests and native OS/device qualification |
+| Audio handshake | Linkwise and stock VARA HF 4.9.1 have established radio-free sessions at BW500, BW2300, and BW2750 | Setup repeatability, device playback, turnaround, and PTT ownership |
+| DATA / ARQ | The virtual host supports measured frame layouts, keyed ACK-loss recovery, selected rate changes, turn handoff, and disconnect | Repeat qualification for recovery and integration with the native station runtime |
+| Host interface | The radio-free bench exposes paired command and DATA sockets and a separate PCM connection | Managed station admission, device ownership, and operational session integration |
+| Qualification | Exact mixed stock DATA transfers and bidirectional P2P mailbox delivery passed in the [interop bench](../../docs/testing/vara-interoperability.md) | Three consecutive passes per required case on one build and native OS, device, and RF qualification |
 
 These stages are not all complete. In particular, parsing host commands or
 returning a synthesized waveform must not produce an operational-modem claim.

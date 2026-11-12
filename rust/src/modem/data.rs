@@ -52,7 +52,10 @@ fn short_body(
     next_receive_level: u8,
 ) -> Option<Vec<u8>> {
     let delimiter_only = size == 44 && payload.len() == 41;
-    if (payload.len() > size - 4 && !delimiter_only) || !(1..=4).contains(&next_receive_level) {
+    let unpadded = size == 44 && payload.len() == 42;
+    if (payload.len() > size - 4 && !delimiter_only && !unpadded)
+        || !(1..=4).contains(&next_receive_level)
+    {
         return None;
     }
     // Validate the callsign through the same packed identity contract as setup.
@@ -62,6 +65,11 @@ fn short_body(
         requested_level: 4,
     }
     .encode(super::setup::Profile::Bw500)?;
+    if unpadded {
+        let mut body = payload.to_vec();
+        body.extend([next_receive_level, 0x83]);
+        return Some(checksum(body));
+    }
     if delimiter_only {
         let mut body = payload.to_vec();
         body.extend([0x14, next_receive_level, 0x82]);
@@ -97,6 +105,67 @@ pub fn wide_full(payload: &[u8], field: u8) -> Option<[u8; super::wide_level4::F
 /// Maximum uncompressed payload in a wide level-4 closing frame.
 pub const WIDE_SHORT_BYTES: usize = super::wide_level4::FRAME_BYTES - 6;
 
+pub const WIDE_FULL_BYTES: usize = super::wide_level4::FRAME_BYTES - 3;
+pub const WIDE_LOWER_FULL_BYTES: usize = super::wide_level4::LOWER_FRAME_BYTES - 3;
+
+pub const WIDE_ROBUST_FULL_BYTES: usize = super::wide_level4::ROBUST_FRAME_BYTES - 3;
+
+pub fn wide_lower_delivery_frame<const FRAME_BYTES: usize>(
+    index: usize,
+    bytes: &[u8],
+    caller: &str,
+) -> Option<[u8; FRAME_BYTES]> {
+    let size = FRAME_BYTES - 2;
+    let block = size - 1;
+    let start = index.checked_mul(block)?;
+    let remainder = bytes.get(start..)?;
+    if remainder.len() >= block {
+        let field = if block == WIDE_ROBUST_FULL_BYTES && remainder.len() >= block + WIDE_FULL_BYTES
+        {
+            0x95
+        } else {
+            0x89
+        };
+        full_body(size, &remainder[..block], field)?
+    } else {
+        short_body(size, remainder, caller, 4)?
+    }
+    .try_into()
+    .ok()
+}
+
+pub fn wide_lower_fits(length: usize, block: usize) -> bool {
+    length % block <= block - 3
+}
+
+/// Limit a fixed-level over to two full blocks and one closing block.
+pub fn wide_delivery_prefix(length: usize) -> usize {
+    let length = length.min(2 * WIDE_FULL_BYTES + WIDE_SHORT_BYTES);
+    let blocks = length / WIDE_FULL_BYTES;
+    blocks * WIDE_FULL_BYTES + (length % WIDE_FULL_BYTES).min(WIDE_SHORT_BYTES)
+}
+
+pub fn wide_delivery_frame(
+    index: usize,
+    bytes: &[u8],
+    caller: &str,
+) -> Option<[u8; super::wide_level4::FRAME_BYTES]> {
+    let fields: &[u8] = match bytes.len() / WIDE_FULL_BYTES {
+        0 => &[],
+        1 => &[0x89],
+        2 => &[0x8d, 0x89],
+        _ => return None,
+    };
+    let start = index.checked_mul(WIDE_FULL_BYTES)?;
+    if let Some(&field) = fields.get(index) {
+        return wide_full(bytes.get(start..start + WIDE_FULL_BYTES)?, field);
+    }
+    if index == fields.len() {
+        return wide_short(bytes.get(start..)?, caller);
+    }
+    None
+}
+
 /// Build a closing wide level-4 frame carrying up to 86 payload bytes.
 pub fn wide_short(payload: &[u8], caller: &str) -> Option<[u8; super::wide_level4::FRAME_BYTES]> {
     short_body(super::wide_level4::FRAME_BYTES - 2, payload, caller, 4)?
@@ -111,7 +180,10 @@ pub fn decode_wide(bytes: &[u8; super::wide_level4::FRAME_BYTES], caller: &str) 
 
 /// Interpret a wide frame body after the waveform decoder verifies the CRC.
 pub fn decode_wide_received(body: &[u8], field: u8, caller: &str) -> Option<Frame> {
-    if body.len() != super::wide_level4::FRAME_BYTES - 3 {
+    if !matches!(
+        body.len(),
+        WIDE_FULL_BYTES | WIDE_LOWER_FULL_BYTES | WIDE_ROBUST_FULL_BYTES
+    ) {
         return None;
     }
     decode_body(body, field, caller)
@@ -135,16 +207,19 @@ fn decode_body(body: &[u8], field: u8, caller: &str) -> Option<Frame> {
         });
     }
     let (&next_receive_level, payload) = body.split_last()?;
-    // Stock BW500 level 4 can use all 42 payload bytes and the
-    // following rate byte without the padded close's callsign marker.
-    if field == 0x83 && payload.len() == 42 && (1..=4).contains(&next_receive_level) {
+    // Stock BW500 can fill the closing block at levels 3 and 4,
+    // leaving only the rate byte before the 0x83 control.
+    if field == 0x83 && matches!(payload.len(), 33 | 42) && (1..=4).contains(&next_receive_level) {
         return Some(Frame {
             payload: payload.to_vec(),
             field,
             next_receive_level: Some(next_receive_level),
         });
     }
-    if !matches!(field, 0x42 | 0x82) || !(1..=4).contains(&next_receive_level) {
+    let stock_bw500_close = field == 0x02 && body.len() == 43;
+    if !(stock_bw500_close || matches!(field, 0x42 | 0x82))
+        || !(1..=4).contains(&next_receive_level)
+    {
         return None;
     }
     let key = coding::crc(caller.to_ascii_uppercase().as_bytes()).to_be_bytes()[0];
@@ -183,16 +258,23 @@ pub struct TransmitPlan {
 
 impl TransmitPlan {
     pub fn new(length: usize) -> Option<Self> {
-        if (1..=40).contains(&length) {
+        if (1..=42).contains(&length) {
             return Some(Self {
                 full_fields: &[],
                 full_level: 4,
                 closing_level: 4,
             });
         }
-        if length == 84 {
+        if (75..=85).contains(&length) {
             return Some(Self {
                 full_fields: &[0x89],
+                full_level: 4,
+                closing_level: 4,
+            });
+        }
+        if length == MAX_PLANNED_BYTES {
+            return Some(Self {
+                full_fields: &[0x95, 0x91, 0x8d, 0x89],
                 full_level: 4,
                 closing_level: 4,
             });
@@ -229,6 +311,10 @@ impl TransmitPlan {
     pub fn level3_retry(length: usize) -> Option<Self> {
         let full_fields: &'static [u8] = match length {
             1..=31 => &[],
+            34..=65 => &[0x89],
+            68..=99 => &[0x8d, 0x89],
+            102..=133 => &[0x91, 0x8d, 0x89],
+            136..=167 => &[0x95, 0x91, 0x8d, 0x89],
             170..=201 => &[0x99, 0x99, 0x95, 0x91, 0x89],
             _ => return None,
         };
@@ -239,12 +325,64 @@ impl TransmitPlan {
         })
     }
 
+    /// Retry only bytes beyond the acknowledged level-4 prefix.
+    pub fn level3_retry_after_prefix(&self, index: usize, length: usize) -> Option<(usize, Self)> {
+        if self.full_level != 4 || index == 0 {
+            return None;
+        }
+        let acknowledged = index.checked_mul(self.full_payload_bytes())?;
+        if index != 1 || length != 200 {
+            return Some((
+                acknowledged,
+                Self::level3_retry(length.checked_sub(acknowledged)?)?,
+            ));
+        }
+        Some((
+            acknowledged,
+            Self {
+                full_fields: &[0x95, 0x91, 0x91, 0x81],
+                full_level: 3,
+                closing_level: 3,
+            },
+        ))
+    }
+
+    /// Resume at level 4 after a rate-increase acknowledgment of the
+    /// first level-3 retry block.
+    pub fn level4_retry_continuation(&self, index: usize, length: usize) -> Option<(usize, Self)> {
+        if self.full_level != 3 || index != 0 {
+            return None;
+        }
+        let full_fields: &'static [u8] = match length {
+            200 => &[0x91, 0x8d, 0x89],
+            157 => &[0x8d, 0x89],
+            _ => {
+                return Some((
+                    self.full_payload_bytes(),
+                    Self::new(length.checked_sub(self.full_payload_bytes())?)?,
+                ));
+            }
+        };
+        Some((
+            self.full_payload_bytes(),
+            Self {
+                full_fields,
+                full_level: 4,
+                closing_level: 4,
+            },
+        ))
+    }
+
     pub fn full_payload_bytes(&self) -> usize {
         body_size(self.full_level).expect("known DATA record") - 1
     }
 
     pub fn full_frames(&self) -> usize {
         self.full_fields.len()
+    }
+
+    pub fn closes_at_level3(&self) -> bool {
+        self.closing_level == 3
     }
 
     pub fn encode(&self, index: usize, bytes: &[u8], caller: &str) -> Option<(u8, Vec<u8>)> {
@@ -269,11 +407,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn wide_level4_delivery_preserves_bytes_across_frame_boundaries() {
+        for length in [1, 85, 86, 87, 88, 89, 90, 175, 176, 177, 178, 203, 264, 265] {
+            let payload: Vec<_> = (0..length).map(|index| index as u8).collect();
+            let mut pending = payload.as_slice();
+            let mut received = Vec::new();
+            while !pending.is_empty() {
+                let size = wide_delivery_prefix(pending.len());
+                let frames = size / WIDE_FULL_BYTES;
+                for index in 0..=frames {
+                    let wire = wide_delivery_frame(index, &pending[..size], "KN6MQS").unwrap();
+                    let frame = decode_wide(&wire, "KN6MQS").unwrap();
+                    assert_eq!(frame.next_receive_level, (index == frames).then_some(4));
+                    received.extend(frame.payload);
+                }
+                pending = &pending[size..];
+            }
+            assert_eq!(received, payload, "payload length {length}");
+        }
+    }
+
+    #[test]
     fn decodes_stock_bw500_level4_unpadded_close() {
         let payload = b"N6MQS ()\rFD EM YB4CEFWBEHGH 21307 21037 0\r";
         let mut body = payload.to_vec();
         body.extend([4, 0x83]);
         let frame = decode(4, &checksum(body), "KN6MQS").unwrap();
+        assert_eq!(frame.payload, payload);
+        assert_eq!(frame.next_receive_level, Some(4));
+    }
+
+    #[test]
+    fn decodes_stock_bw500_level3_unpadded_close() {
+        let payload = [
+            0xb9, 0x7b, 0xef, 0xfe, 0x83, 0x87, 0xec, 0xd1, 0x63, 0xfe, 0xe4, 0xe9, 0xb3, 0xe7,
+            0x2f, 0x5e, 0xbe, 0x7a, 0xfd, 0xe6, 0x2d, 0x67, 0x7f, 0x06, 0, 0xb5, 0x55, 0x10, 0x10,
+            0xb8, 0x01, 0, 0,
+        ];
+        let mut body = payload.to_vec();
+        body.extend([4, 0x83]);
+        let frame = decode(3, &checksum(body), "KN6MQS").unwrap();
         assert_eq!(frame.payload, payload);
         assert_eq!(frame.next_receive_level, Some(4));
     }
@@ -291,10 +464,12 @@ mod tests {
 
     #[test]
     fn transmit_plan_preserves_exact_payload_and_rejects_unqualified_lengths() {
-        for len in [0, 41, 42, 75, 85, 204, 215] {
+        for len in [0, 204, 215] {
             assert!(TransmitPlan::new(len).is_none(), "{len}");
         }
-        for len in [1, 40, 43, 74, 84, 86, 93, 129, 172, 200, 203] {
+        for len in [
+            1, 40, 41, 42, 43, 74, 75, 80, 84, 85, 86, 93, 129, 172, 200, 203,
+        ] {
             let payload: Vec<_> = (0..len as u8).collect();
             let plan = TransmitPlan::new(len).unwrap();
             let mut received = Vec::new();
@@ -322,6 +497,22 @@ mod tests {
         assert_eq!(decoded.payload, payload);
         assert_eq!(decoded.field, 0x42);
         assert_eq!(decoded.next_receive_level, Some(4));
+    }
+
+    #[test]
+    fn accepts_stock_bw500_express_end_of_proposals() {
+        // The stock caller sent this after Express stored the P2P message.
+        let mut payload = vec![0; 43];
+        payload[..5].copy_from_slice(&[b'F', b'F', b'\r', 0x14, 0x85]);
+        payload[42] = 4;
+        let frame = bw500::Frame {
+            payload,
+            control: 0x02,
+        };
+        let decoded = decode_received(4, &frame, "KN6MQS").unwrap();
+        assert_eq!(decoded.payload, b"FF\r");
+        assert_eq!(decoded.next_receive_level, Some(4));
+        assert!(decode_received(4, &frame, "W1A").is_none());
     }
 
     #[test]
@@ -359,7 +550,7 @@ mod tests {
         assert!(decode(4, &wire, "W1AW").is_none());
         wire[0] ^= 1;
         assert!(decode(4, &wire, "W9SSJ").is_none());
-        assert!(short(4, &[0; 42], "W9SSJ", 4).is_none());
+        assert!(short(4, &[0; 43], "W9SSJ", 4).is_none());
         assert!(full(4, &[0; 43], 0x82).is_none());
         assert!(short(4, b"x", "not_a_call", 4).is_none());
     }

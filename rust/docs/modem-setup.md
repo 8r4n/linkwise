@@ -66,7 +66,11 @@ The three ports are the command, DATA, and audio endpoints. Use separate
 ports for each station when both run on one computer. Attach the audio
 endpoint to your virtual capture and playback devices with
 `linkwise-modemd --virtual-audio-device 8302 "Virtual input" "Virtual output"`.
-These sessions use level-4 frames and a peer-to-peer host connection.
+These sessions use level-4 setup and a peer-to-peer host connection. The
+bench uses level-4 DATA by default and supports level-2 and level-3
+recovery for measured frame layouts. See the
+[runtime guide](modem-runtime.md#serve-a-wide-mode-bench-session) for
+payload limits and regression commands.
 
 ## Troubleshooting
 

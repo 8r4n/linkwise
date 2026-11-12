@@ -317,7 +317,9 @@ receive candidates; \path{modem::waveform} supplies energy detection and tone
 correlation; \path{modem::bw500} implements index-modulated levels 1--3;
 \path{modem::bw500_level4} handles level-4 channel coding;
 \path{modem::bw500_waveform} adds measured-reference two-band synthesis and
-reception; \path{modem::wide_level4} supplies level-4 setup and DATA waveforms for BW2300 and BW2750; \path{modem::coding} implements whitening, CRC, interleavers, and
+reception; \path{modem::wide_level4} supplies level-4 setup and level-2 through
+level-4 DATA waveforms for BW2300 and BW2750, using the carrier allocations
+in \path{modem::wide_allocations}. \path{modem::coding} implements whitening, CRC, interleavers, and
 FEC. \path{modem::control}, \path{modem::setup}, \path{modem::handshake}, and
 \path{modem::audio_handshake} cover keyed control, caller setup, and
 establishment. \path{modem::data} and \path{modem::arq} are frame/container
@@ -327,9 +329,13 @@ host stream boundaries.
 The clock-driven \path{modem::runtime} combines establishment and ARQ at
 the validated-event boundary. The virtual host in \path{linkwise-modemd}
 owns its bench handshake, transmit turn, pending DATA, and deadlines.
-In BW500 it queues up to 4,096 bytes and segments the stream into measured
-uncompressed deliveries of up to 203 bytes. The wide modes use uncompressed
-closing frames of up to 86 bytes and split longer writes across deliveries.
+The host keeps command and binary DATA streams on paired TCP sockets. A
+separate virtual audio connection carries a big-endian sample count followed
+by little-endian 32-bit floating-point samples at 48 kHz. The host queues
+up to 4,096 bytes and segments BW500 writes into measured uncompressed
+deliveries of up to 203 bytes. A wide level-4 delivery can carry two 89-byte
+full frames and a closing frame of up to 86 bytes. Wide level-3 and level-2
+full frames carry 47 and 22 bytes, respectively.
 The optional CPAL bridge provides native capture and playback for isolated
 audio routes. Station integration still needs qualified hardware playback
 completion, PTT release, and the station admission and ownership contracts.
@@ -737,6 +743,12 @@ or ambiguous forms are rejected. The implemented short builder reserves four
 body bytes for this trailer; additional published short/compressed forms are
 not silently treated as supported.
 
+The BW500 decoder also accepts the measured level-4 \texttt{0x02}
+control form. In setup, it validates the CRC, caller identity and
+requested level. In DATA, it requires the caller-keyed trailer and valid
+padding and rate fields. Stock Winlink Express used this form to send
+the B2F end-of-proposals bytes after storing the received message.
+
 Tests reconstruct the documented 200-byte delivery from four level-4 payloads
 of 43 bytes and one closing level-3 payload of 28 bytes, using the documented
 full fields \texttt{95}, \texttt{91}, \texttt{8d}, and \texttt{81}. This verifies
@@ -764,12 +776,23 @@ accounting. The sender's queue currently holds supplied blocks; its byte count
 must not be exposed as Winlink delivery progress or raw-host \texttt{BUFFER}
 semantics without that integration.
 
-The BW500 bench implements a bounded query after a missing caller closing
-acknowledgment. Stock VARA answered with a turn request and Linkwise sent
-the drained control before reporting \texttt{BUFFER 0}. A 200-byte
-level-3 retry passed between Linkwise peers. Stock VARA rejected the first
-retry frame in the invalid-CRC experiment. Missing intermediate answers
-and general repacketization remain open.
+The virtual host issues keyed state queries after missing BW500
+intermediate and closing acknowledgments. A positive answer retires the
+acknowledged bytes. A negative answer can trigger a level-3 retry of the
+outstanding DATA, preserving any acknowledged prefix. With crossed turn
+requests, Linkwise can grant a repeated stock caller request and resume
+queued DATA after the caller hands back the turn. A short continuation
+can retain level 3 after a level-3 close. A host \texttt{DISCONNECT}
+received while DATA is queued waits for the queue to drain before
+sending the disconnect waveform.
+
+For the wide modes, the virtual host tracks the outstanding waveform and
+the byte offset at the active rate. It can retry the unacknowledged suffix
+at level 3 after a keyed rejection, use level 2 after a missing-DATA query
+response, and return to level 4 when the peer requests the supported
+increase. These transitions cover measured frame layouts. General rate
+negotiation and repeatable recovery across the qualification matrix
+remain open.
 
 \landscapeplantuml{build/diagrams/Linkwise_Modem_Recovery}{Implemented event-level ARQ sender behavior and remaining wire integration. Missing answers request state; only a validated negative reply permits DATA retransmission.}{fig:modem-recovery}
 
@@ -842,20 +865,23 @@ frames. These checks cover the tested recordings.\\
 Receiver robustness & Measure live frame recovery on known transmissions.
 Characterize offset, fading, interference, clipping, sample-clock error,
 false alarms, and processing latency.\\
-Reference acceptance & Stock VARA HF 4.9.1 and Linkwise exchanged exact
-13-byte payloads in both connection roles at BW2300 and BW2750 level 4.
-Six saved wide setup recordings replayed with valid CRCs. Wide adaptive
-rates and multi-frame deliveries remain open.\\
-Session reliability & Deliberately lose DATA and answers, duplicate replies,
-interrupt playback, restart the owner, exhaust budgets and change rates;
-prove byte preservation and distinguish unresolved from acknowledged bytes.\\
+Reference acceptance & With stock VARA HF 4.9.1, the 11 November frozen
+build \texttt{6a4dc89e} passed one BW2300 and two BW2750 sender-recovery
+runs with 412 exact bytes, two-ended disconnect and a same-socket
+reconnect. Other runs stalled during setup or retry. The three-pass gate
+remains open.\\
+Session reliability & The frozen build passed two final-ACK-loss runs and
+one intermediate-ACK-loss run at BW500, with 406 exact bytes and two-ended
+disconnect in each pass. Setup and DATA timeouts interrupted the sequences.
+The earlier three-pass results apply to their recorded builds.\\
 Station safety & Qualify actual device presentation, turnaround, exclusive
 lease, permit expiry, duty limits, watchdog release and independent stop on
 an inhibited or conducted setup before operational RF use.\\
-Host and Winlink & Pat 1.0.1 sent a B2F peer-to-peer message through two
-Linkwise BW500 daemons to Winlink Express 1.8.6.0. The Express inbox
-displayed the exact body. Express outbound delivery and gateway/CMS
-qualification remain open.\\
+Host and Winlink & Mixed BW500 Pat runs passed in both directions with a
+matching attachment SHA-256, exit status zero and two-ended disconnect.
+Mixed Winlink Express 1.8.6.0 and Pat 1.0.1 peer-to-peer transfers stored
+attachments with matching SHA-256 in both recipient mailboxes. The
+Pat-to-Express sender-side close and gateway/CMS qualification remain open.\\
 \bottomrule
 \end{longtable}
 
@@ -865,4 +891,6 @@ attach error. The later Windows UTM bench provided a working stock peer.
 The November 11 lab chronicle records the stock Windows UTM runs, the
 Express message export, and installer checks. Its evidence manifest links
 the measured results to the captured audio and command transcripts.
+The repeat counts, build hashes, and failure captures are indexed in
+\path{docs/testing/vara-interoperability.md}.
 Physical transmit control and operational RF qualification remain open.

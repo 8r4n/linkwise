@@ -149,9 +149,12 @@ Linkwise is in the research and foundation stage.
   sender and host-command/data stream transports are implemented. Level 4 uses an external
   measurement profile. Five
   published reference WAV excerpts decode to the expected payloads. Optional
-  CPAL input capture is available; complete live modem sessions, payload ARQ,
-  and bidirectional stock-VARA interoperability remain unqualified. See
-  [modem implementation status](rust/docs/modem.md).
+  CPAL input capture is available. The radio-free bench has passed mixed
+  stock VARA HF 4.9.1 DATA exchanges at BW500, BW2300, and BW2750 and
+  verified P2P attachment delivery in both mixed Pat and Winlink Express
+  directions. Repeat qualification on one build and physical RF
+  qualification remain open. See the [modem implementation status](rust/docs/modem.md)
+  and [bench results](docs/testing/vara-interoperability.md).
 - Compilation does not constitute an interoperability claim.
 
 The authoritative research record is

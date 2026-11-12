@@ -27,6 +27,8 @@ pub enum Message {
     Bw500Confirm,
     WideConfirm(Bandwidth),
     WideSetupNak(Bandwidth),
+    QueryMissingData,
+    Bw500DataNakQuery,
     /// Called-station-keyed rejection of a link-setup burst.
     Bw500SetupNak,
     /// First BW500 poll sent by the caller after confirmation.
@@ -35,6 +37,8 @@ pub enum Message {
     Bw500KeepaliveB,
     /// Caller-keyed request for the transmit turn.
     Bw500CallerTurnRequest,
+    /// Short caller-keyed turn request following an acknowledged release.
+    Bw500CallerTurnRequestShort,
     /// Caller-keyed request sent by the responder.
     Bw500ResponderTurnRequest,
     Bw500FinalQueryShort,
@@ -45,9 +49,15 @@ pub enum Message {
     Bw500Drained,
     Bw500ResponderDrained,
     Bw500ResponderOverNak,
+    Bw500CallerDataNak,
+    Bw500CallerTurnIdle,
     Bw500ResponderTurnIdle,
     Bw500CallerTurnRelease,
     Bw500ResponderTurnRelease,
+    SessionDisconnect {
+        responder: bool,
+    },
+    SessionDisconnectShort,
 }
 
 impl Message {
@@ -82,21 +92,39 @@ impl Message {
             Self::Bw500FinalQuery => (&[74][..], 31, 60, 683, 50, 2, false),
             Self::Bw500AlternateQueryShort => (&[62][..], 15, 61, 361, 50, 2, false),
             Self::Bw500AlternateQuery => (&[74][..], 31, 60, 745, 50, 2, false),
+            Self::QueryMissingData => (&[62][..], 15, 289, 541, 50, 2, false),
+            Self::Bw500DataNakQuery => (&[74][..], 31, 288, 63, 50, 2, false),
             Self::Bw500IntermediateQueryAck => (&[74][..], 31, 288, 1, 50, 2, false),
             Self::Bw500Drained => (&[74][..], 31, 60, 807, 50, 2, false),
             Self::Bw500ResponderDrained => (&[74][..], 31, 288, 807, 50, 2, false),
             Self::Bw500ResponderOverNak => (&[74][..], 31, 288, 1117, 50, 2, false),
+            Self::Bw500CallerDataNak => (&[74][..], 31, 60, 63, 50, 2, false),
+            Self::Bw500CallerTurnIdle => (&[74][..], 31, 850, 63, 50, 2, false),
             Self::Bw500ResponderTurnIdle => (&[74][..], 31, 1078, 63, 50, 2, false),
             Self::Bw500CallerTurnRelease => (&[62, 67][..], 15, 61, 391, 50, 2, false),
             Self::Bw500ResponderTurnRelease => (&[62, 67][..], 15, 289, 391, 50, 2, false),
             Self::Bw500ResponderTurnRequest => (&[74][..], 31, 1078, 1, 50, 2, false),
             Self::Bw500CallerTurnRequest => (&[74][..], 31, 850, 1, 50, 2, false),
+            Self::Bw500CallerTurnRequestShort => (&[62, 67][..], 15, 851, 1, 50, 2, false),
+            Self::SessionDisconnect { responder: true } => (&[74][..], 31, 578, 311, 50, 2, false),
+            Self::SessionDisconnect { responder: false } => (&[74][..], 31, 60, 125, 50, 2, false),
+            Self::SessionDisconnectShort => (&[62][..], 15, 61, 61, 50, 2, false),
         };
         let (base, coarse_bins, alternate) = match self {
             Self::Bw500KeepaliveA
             | Self::Bw500KeepaliveB
             | Self::Bw500CallerTurnRequest
-            | Self::Bw500ResponderTurnRequest => {
+            | Self::Bw500ResponderTurnRequest
+            | Self::Bw500CallerTurnRelease
+            | Self::Bw500ResponderTurnRelease
+            | Self::QueryMissingData
+            | Self::Bw500FinalQuery
+            | Self::Bw500AlternateQuery
+            | Self::Bw500IntermediateQueryAck
+            | Self::Bw500Drained
+            | Self::Bw500ResponderDrained
+            | Self::SessionDisconnectShort
+            | Self::SessionDisconnect { .. } => {
                 let (base, bins, alternate) = answer_geometry(bandwidth);
                 (base as u32, bins as u32, alternate)
             }
@@ -288,6 +316,15 @@ impl Bw500IntermediateReply {
     /// Called-station keyed intermediate answer. The role identifies the
     /// station sending the answer, independently of which station sent DATA.
     pub fn tones(self, called: &str, responder_sends: bool) -> Option<[[u8; 2]; 8]> {
+        self.tones_on(called, responder_sends, Bandwidth::Hz500)
+    }
+
+    fn tones_on(
+        self,
+        called: &str,
+        responder_sends: bool,
+        bandwidth: Bandwidth,
+    ) -> Option<[[u8; 2]; 8]> {
         let frame = match self {
             Self::SameLevel => 0,
             Self::IncreaseOne => 6,
@@ -298,14 +335,23 @@ impl Bw500IntermediateReply {
             Self::NotDelivered => 1,
         };
         let seed = if responder_sends { 290 } else { 62 };
-        let tail = answer_tail(Bandwidth::Hz500, called, seed, frame)?;
+        let tail = answer_tail(bandwidth, called, seed, frame)?;
         let mut pairs = [[64, 67]; 8];
         pairs[1..].copy_from_slice(&tail);
         Some(pairs)
     }
 
     pub fn synthesize(self, called: &str, responder_sends: bool) -> Option<Vec<f32>> {
-        Some(render(self.tones(called, responder_sends)?))
+        self.synthesize_on(called, responder_sends, Bandwidth::Hz500)
+    }
+
+    pub fn synthesize_on(
+        self,
+        called: &str,
+        responder_sends: bool,
+        bandwidth: Bandwidth,
+    ) -> Option<Vec<f32>> {
+        Some(render(self.tones_on(called, responder_sends, bandwidth)?))
     }
 
     /// Match an expected reply in a caller-supplied receive window.
@@ -316,8 +362,25 @@ impl Bw500IntermediateReply {
         audio: &[f32],
         estimated_start: usize,
     ) -> Option<usize> {
+        self.find_on(
+            called,
+            responder_sends,
+            audio,
+            estimated_start,
+            Bandwidth::Hz500,
+        )
+    }
+
+    pub fn find_on(
+        self,
+        called: &str,
+        responder_sends: bool,
+        audio: &[f32],
+        estimated_start: usize,
+        bandwidth: Bandwidth,
+    ) -> Option<usize> {
         find_pairs(
-            &self.tones(called, responder_sends)?,
+            &self.tones_on(called, responder_sends, bandwidth)?,
             audio,
             estimated_start,
         )
@@ -635,6 +698,63 @@ mod tests {
             assert_eq!(pairs[4..], tail);
             let audio = synthesize_connected_ack(Bandwidth::Hz500, caller).unwrap();
             assert_eq!(audio.len(), 11 * SYMBOL_SAMPLES + 32);
+        }
+    }
+
+    #[test]
+    fn matches_stock_bw2300_intermediate_acknowledgment() {
+        assert_eq!(
+            Bw500IntermediateReply::SameLevel
+                .tones_on("W1A", true, Bandwidth::Hz2300)
+                .unwrap(),
+            [
+                [64, 67],
+                [82, 88],
+                [49, 95],
+                [60, 80],
+                [81, 87],
+                [84, 94],
+                [51, 93],
+                [42, 84],
+            ],
+        );
+    }
+
+    #[test]
+    fn matches_stock_wide_turn_releases() {
+        use Bandwidth::{Hz2300, Hz2750};
+        use Message::{Bw500CallerTurnRelease, Bw500ResponderTurnRelease};
+        for (message, bandwidth, tones) in [
+            (
+                Bw500ResponderTurnRelease,
+                Hz2300,
+                [
+                    62, 67, 32, 31, 42, 93, 42, 97, 44, 93, 66, 75, 32, 47, 66, 95, 76,
+                ],
+            ),
+            (
+                Bw500ResponderTurnRelease,
+                Hz2750,
+                [
+                    62, 67, 25, 24, 35, 100, 35, 90, 37, 86, 59, 82, 25, 54, 73, 88, 69,
+                ],
+            ),
+            (
+                Bw500CallerTurnRelease,
+                Hz2300,
+                [
+                    62, 67, 88, 95, 70, 47, 32, 39, 54, 39, 50, 71, 80, 73, 96, 83, 46,
+                ],
+            ),
+            (
+                Bw500CallerTurnRelease,
+                Hz2750,
+                [
+                    62, 67, 81, 88, 77, 40, 25, 32, 61, 32, 43, 64, 87, 66, 103, 90, 53,
+                ],
+            ),
+        ] {
+            assert_eq!(message.tones_on("W1A", bandwidth).unwrap(), tones);
         }
     }
 

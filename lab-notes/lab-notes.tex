@@ -2027,6 +2027,319 @@ detectable copy of the probe. These controls did not qualify the
 Windows receive path. The original VARA device assignments and
 both bridge scripts were restored after testing.
 
+\section{11 November 2026: two-Mac bench baseline}
+
+On the MacBook, the audio-enabled Rust suite passed 74 regular
+tests. The downloaded reference WAVs and level-4 measurement
+sources were hash-checked. Five additional replay and waveform
+tests passed.
+The first run of \pathtext{tools/test-modem.py} also tried the local
+stock replay and stopped because its capture directory was unset.
+The helper now opts in to the five tests for which it prepares
+inputs. Stock captures and native audio loopback have separate
+fixture and device requirements.
+
+The same-host virtual cable passed the BW500, BW2300 and BW2750
+socket tests, including bidirectional byte preservation and BW500
+recovery of consecutive deliveries after an intermediate answer
+was withheld. The run also exercised bounded timeout on silence.
+These trials used virtual PCM sockets.
+
+SSH authentication to the Mac mini was restored. Both Macs used
+the same binary from revision \texttt{3e9d39b} and the same measured
+profile, verified by SHA-256. With one daemon on each host and the
+Mac mini's loopback sockets forwarded over SSH, all seven virtual
+socket cases passed with each host as caller. The cases covered
+BW500, BW2300 and BW2750.
+
+\subsection{Windows guest receive calibration}
+
+The MacBook UTM console resumed displaying Windows after a clean
+guest stop and a restart of the UTM application. Both Windows guests
+had active interactive sessions for audio testing. Each guest played
+a previously captured stock BW500 acquisition burst, quantized to
+48~kHz stereo PCM16, via shared WASAPI to VB-CABLE and recorded its
+capture endpoint as stereo float32. Both local file trials yielded
+correlation of 1.00000000 on both channels.
+
+The same 367,400-byte WAV was then sent from the MacBook to both
+guests over TCP, using an SSH reverse tunnel to reach the Mac mini's
+guest-facing host port. Each guest buffered the complete WAV before
+playback. After aligning the recordings, all 91,839 frames in each
+channel of both guests matched the PCM16 stimulus converted to
+float32 exactly. This qualifies the buffered receive route for this
+fixture. Live VARA transmit capture, streaming continuity and
+round-trip turnaround remain to be measured before using a
+stock-to-stock exchange as protocol evidence.
+
+\subsection{Stock VARA BW500 exchange across both Macs}
+
+Both Windows guests reported VARA HF v4.9.1. The MacBook called
+as \texttt{KN6MQS} and the Mac mini listened as \texttt{W1A}.
+The bridge captured each guest's Speakers loopback and played the
+other guest's audio into VB-CABLE using shared WASAPI. The Mac mini
+bridge used SSH reverse forwards for command, DATA and audio.
+
+With full-burst forwarding, the listener keyed 2.183~s after the
+caller unkeyed, 370~ms into its retry. The 35-second connect window
+expired. With a 250~ms streaming prebuffer, the listener keyed
+423~ms after caller unkeying. During the first two
+keyed windows in each direction, capture delivered about
+46,700--48,900 samples per wall-clock second with a largest observed
+gap of 69~ms between received chunks. These timings use host-observed
+socket events. Both modems reported \texttt{CONNECTED} at BW500
+within 12.364~s of the host's connect command.
+
+The listener received the first 203-byte fixture exactly in four
+43-byte deliveries at level~4 (88~bps) and one 31-byte closing
+delivery at level~3 (61~bps). The caller received the six-byte
+\texttt{F> 79} reply exactly, including its trailing carriage
+return. After this turn reversal, the listener received the second
+203-byte fixture with the same block sizes and rates. The caller's
+two payloads took 35.753~s and 31.000~s from submission to exact
+receipt, respectively. The six-byte reverse transfer took 7.657~s.
+The caller accepted the disconnect command. The recorder stopped
+before observing a disconnect event from both modems.
+
+The evidence retains both transmit PCM streams, chunk arrival
+times and command logs. Receive taps were unavailable for this run.
+
+\subsection{Receive taps and mixed-modem comparison}
+
+A second stock run retained both VB-CABLE receive taps and again
+delivered 203, six and 203 bytes exactly. After alignment and the
+bridge's PCM16 conversion, four selected acquisition, response
+and DATA excerpts matched their taps sample for sample. The first
+203-byte delivery used blocks of 34, 43, 43, 43 and 40 bytes.
+The second used four 43-byte blocks and a 31-byte closing block.
+
+Linkwise revision \texttt{3e9d39b} replaced each stock endpoint in
+turn. The remaining VARA guest used the same shared WASAPI
+playback and 250~ms prebuffer. The adapter paced Linkwise's
+waveforms into 20~ms records for Windows and grouped captured
+Windows audio into finite records for Linkwise. Both mixed runs
+delivered all 412 bytes exactly.
+
+The stock reference identified a caller DATA acknowledgment
+followed by the responder turn release, keyed to \texttt{W1A}.
+That release was also present when stock VARA was the responder
+to Linkwise. When Linkwise was the responder, it recognized
+the caller's acknowledgment of the six-byte reply and reported
+\texttt{BUFFER 0}. It sent no turn release. The stock caller
+sent a fresh caller turn request 4.435~s after unkeying its
+acknowledgment, then resumed DATA. From acknowledgment unkeying
+to the next DATA transmission, the stock reference took
+1.661~s and the mixed run took 7.000~s. The timings are from
+host-observed command and audio records.
+
+The observed Linkwise behavior agrees with
+\pathtext{acknowledge_delivery}: an empty queue enters
+\pathtext{Phase::Sent} with no deadline and no release waveform.
+This identifies a specific handback difference in a successful
+mixed run. The earlier permanent stall did not recur in this
+fixture.
+
+\subsection{BW500 responder turn release}
+
+The virtual modem now sends the called-station-keyed responder
+turn release after the final acknowledgment of a BW500 delivery
+when the responder's send queue is empty. It accepts the next
+caller DATA frame directly after the release. The socket regression
+exercises this path as well as a later turn request.
+
+In the live retest, the MacBook's stock VARA caller acknowledged
+the six-byte reply and unkeyed at host time 63.687~s. Linkwise
+reported \texttt{BUFFER 0} and emitted the responder release at
+63.914~s. The captured 34,848-sample burst matched
+\texttt{Bw500ResponderTurnRelease} keyed to \texttt{W1A}. Stock
+VARA began the next level-4 DATA burst at 65.080~s, with no
+intervening turn request. The acknowledgment-to-DATA interval
+was 1.393~s, compared with 7.000~s in the preceding mixed run
+and 1.661~s in the tapped stock reference.
+
+The live retest delivered all 412 bytes exactly. The audio-enabled
+Rust run passed 79 tests, and the virtual socket suite passed
+BW500, BW2300 and BW2750, including the new direct DATA case.
+These results cover the tested BW500 handback fixture.
+
+\subsection{Interoperability qualification runs}
+
+The qualification runner records exact host bytes, command timing,
+transmit PCM, paced playback, fixture hashes and the result of
+each impairment. The stock BW500 control again delivered
+203, six and 203 bytes exactly.
+
+With an invalid CRC substituted for Linkwise's first DATA frame,
+stock VARA accepted the 34-byte level-3 retry block and requested
+an increase to level~4. Linkwise originally ignored that reply.
+A stock-sender comparison confirmed the continuation as three
+43-byte blocks and a 37-byte close. The patched sender preserved
+the acknowledged 34 bytes and passed the 200, six and 200-byte
+fixture. Stock VARA also passed as sender with a corrupted first
+frame or a corrupted frame after an acknowledged 43-byte prefix.
+The observed stock prefix-retry layout informed a Linkwise sender
+patch. The Mac mini power interruption aborted the first retest
+before fault injection. After the bridge was restored, stock
+accepted the original 43-byte prefix, the 34-byte level-3 retry,
+and a level-4 continuation of 43, 43 and 37 bytes. The live
+retest delivered all 406 bytes exactly.
+
+With the first intermediate ACK withheld, stock VARA replied to
+Linkwise's short query. Linkwise now accepts that keyed reply in
+either intermediate query phase. With the final ACK withheld,
+stock VARA answered with a responder turn request. Linkwise
+confirmed the first delivery and now accepts the following DATA
+after returning the drained control. Both loss retests delivered
+all 406 bytes exactly with Linkwise as caller.
+
+Both wide modes passed 13, six and 13-byte exchanges with each
+modem as caller after using the negotiated tone bins for turn
+release. The BW2300 stock control sent two 89-byte level-4 blocks
+and a 25-byte level-3 close. Linkwise's wide receive path now
+accepts intermediate DATA and returns the captured same-rate ACK.
+The mixed BW2300 and BW2750 retests each delivered 203, six and
+203 bytes with the stock sender staying at level~4.
+
+A Pat attachment test with stock VARA calling Linkwise exchanged
+greetings and began the B2F proposal. Stock VARA still reported
+six proposal bytes buffered after the turn release and later
+disconnected. No message reached the recipient.
+
+\subsection{Qualification after Mac mini restart}
+
+Linkwise passed three consecutive BW500 prefix-retry exchanges on the
+same binary. With stock VARA sending, Linkwise originally ignored the
+keyed query after an intermediate ACK was withheld. The receiving
+state now returns the query ACK. Both Linkwise ACK-loss positions
+delivered 406 bytes exactly in separate runs. Another intermediate-loss
+run recovered the first delivery and then failed when the reverse DATA
+overlapped a stock turn reply.
+
+Both wide modes passed Linkwise level-4 transmit as caller and as
+responder. The 203-byte delivery used two 89-byte frames and a
+25-byte close. A BW2750 closing-frame NAK led to a bounded retry of
+the outstanding waveform. Captured-NAK replay and a live corrupted
+frame both exercised the exact-waveform retransmission. Stock
+accepted the moderately impaired frame on its first attempt.
+The stronger impairment triggered a NAK, and stock VARA did not
+acknowledge the retry before Linkwise timed out.
+
+The BW2750 stock-to-stock control delivered all 412 bytes with
+level-3 and level-4 frames. The sender drained its queue, and both
+stock modems reported disconnect.
+The strict mixed BW2750 test delivered 13, six and 13 bytes exactly
+and drained the caller queue. Linkwise reported disconnect locally.
+Stock VARA continued transmitting turn requests through the
+15-second observation window.
+
+The two-Mac stock BW500 Pat control delivered the B2F message and
+its 24-byte attachment. The extracted attachment matched the source
+SHA-256. The stock caller cleared the six late proposal bytes through
+the turn exchange. The mixed trace ended after the caller release
+and Linkwise's responder release, with the six bytes still queued.
+Tone matching identified the stock poll ACK after the caller release
+and the grant after the short caller turn request. The patched
+Linkwise responder used both replies, and stock sent the six-byte
+checksum and drained its proposal queue in the live mixed retest.
+Later in that transfer stock repeated an accepted 43-byte
+level-4 frame as the start of a level-3 continuation. Linkwise had
+buffered both. Removing the superseded frame restored the captured
+390-byte B2F stream and the original gzip payload. The receiver
+now replaces the buffered frame for both observed rate-down layouts
+when the payload prefix matches. Capture replay delivered the 390
+and 391-byte streams exactly. The final live capture also contained
+the original 24-byte attachment, verified by SHA-256 after decoding
+the audio. The stock modem queued the two-byte B2F end marker, then
+sent an unanswered drained control. Pat timed out without a message
+in the recipient mailbox. The reverse mixed Pat trial received a
+stock setup NAK and timed out during establishment.
+
+The socket regression dropped command, DATA, and audio independently
+with DATA queued. Every fresh session delivered its own payload
+exactly. Repeat sign-off, wide adaptive rates and recovery,
+orderly mixed disconnect, client transfers, and RF remain open.
+
+\subsection{End marker, disconnect, and wide-rate recovery}
+
+In the stock BW500 late-write fixture, the caller drained a 200-byte
+delivery, then received a two-byte host write. Stock answered the
+drained control with a caller-keyed poll ACK. The caller requested the
+turn and delivered the two bytes. Linkwise now returns that poll ACK
+in the same receive state. The mixed Pat run stored the B2F message
+and verified the original 24-byte attachment by SHA-256.
+
+The accepted and rejected Linkwise BW500 setup transmissions used
+byte-identical PCM. The reverse Pat bench succeeded at establishment
+after configuring the stock listener for private P2P. Subsequent
+trials passed the proposal and began the attachment. A stock NAK
+after the proposal close motivated a lower-rate retry that retains
+the acknowledged prefix. A subsequent run delivered the compressed
+attachment DATA, but the stock receiver did not accept the separate
+two-byte B2F end marker. A 200-byte transfer followed by a two-byte
+write reproduced the stalled handoff after crossed turn controls.
+The reverse Pat recipient mailbox remained empty.
+
+Stock caller disconnect captures exposed the called-station-keyed
+32-symbol signal, and a later capture contained the short form.
+Linkwise sends and recognizes disconnect controls on the negotiated
+bandwidth. Mixed BW2750 passed Linkwise-initiated disconnect in each
+role, with an exact same-socket reconnect after a responder-initiated
+close. The stock responder also initiated two successful BW2300
+disconnects around an exact fresh transfer on the same sockets.
+
+Corrupted stock BW2300 and BW2750 controls each accepted the first
+89 bytes, retried 22 at level~2, and returned to level~4. We
+recovered the level-2 and level-3 tone allocations from the stock
+audio and checked the resulting decoders against the captured
+DATA. The mixed BW2750 sender passed a level-3 retry and disconnect.
+The mixed BW2300 sender passed a queried level-2 retry and return
+to level~4 after preserving the training stream across the rate
+change. Both peer reports and an exact same-socket reconnect
+were observed in that BW2300 run.
+The BW2300 and BW2750 receiver cases also passed forced rejection,
+with stock sending the remainder at level~3. Both ends disconnected
+and passed a fresh transfer on the same sockets in each bandwidth.
+
+\subsection{BW500 caller continuation and Pat delivery}
+
+The successful stock late-write trace sent the two-byte continuation
+at level~3 after a level-3 close whose rate field advertised level~4.
+Linkwise had opened its next short delivery at level~4. It now
+retains level~3 for a short caller delivery after an acknowledged
+level-3 close. Stock accepted both bytes after the 200-byte fixture
+and accepted Pat's two-byte B2F end marker on the first DATA attempt.
+The receiving Pat mailbox contained the message, and the extracted
+24-byte attachment matched the source SHA-256.
+The reduced fixture delivered 202 exact bytes and disconnected at both
+ends when the continuation was queued before the final ACK and when it
+was queued one second after the caller reported \texttt{BUFFER 0}.
+
+The opposite-direction regression exposed an unpadded 33-byte stock
+level-3 close with control \texttt{0x83}. It passed the waveform CRC
+but was rejected by the DATA parser. The parser now accepts the
+observed rate-byte trailer. Socket replay delivered the complete
+393-byte B2F stream exactly. A later stock-to-Linkwise run also
+stored the message with a SHA-256-verified attachment. The
+successful Linkwise-to-stock run reached the sender's fixture
+timeout after recipient delivery. A follow-up run stalled earlier
+in attachment DATA, leaving repeat qualification open.
+
+\subsection{Mixed-client and recovery sign-off retests}
+
+Build \texttt{d7d1e04b} passed mixed BW500 Pat transfers in both
+directions with exact 24-byte attachments, Pat exit status zero, and
+\texttt{DISCONNECTED} at both modems. Repeats encountered DATA and
+buffer-drain timeouts. In the mixed Winlink Express and Pat P2P runs,
+both recipient mailboxes stored attachments matching the source SHA-256.
+The Pat-to-Express sender-side close remains unverified.
+
+On the frozen build \texttt{6a4dc89e}, BW500 final-ACK loss passed twice
+and intermediate-ACK loss passed once. Wide recovery as sender passed
+once at BW2300 and twice at BW2750 with exact DATA, two-ended disconnect,
+and a same-socket reconnect probe. Setup and retry failures interrupted
+the repeat sequences. The build-specific results and failure captures
+are indexed in \pathtext{docs/testing/vara-interoperability.md}.
+
 \section{Chronicle maintenance}
 
 Update this log during the work, not only when milestones are complete. Add
@@ -2040,12 +2353,10 @@ so the presentation and notes do not diverge.
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]
-  \item Qualify Winlink Express as the B2F message sender and exercise
+  \item Verify the Pat-to-Express sender-side close and exercise
         native CoreAudio capture with an available input endpoint.
-  \item Extend wide-mode DATA qualification to adaptive rates, multi-frame
-        deliveries, and loss recovery.
-  \item Qualify state queries for missing intermediate answers and
-        repacketization after rejection later in a BW500 delivery.
+  \item Complete the three-pass repeat sequences on one build for mixed Pat,
+        BW500 ACK loss, and BW2300/BW2750 DATA recovery.
   \item Connect the host command/data transports to one operational session
         owner with explicit socket pairing, buffering, backpressure, and
         channel-loss cleanup. Parsing a command is not session acceptance.
@@ -2058,6 +2369,7 @@ so the presentation and notes do not diverge.
         an operational cross-platform modem or Winlink compatibility.
 \end{enumerate}
 
+\clearpage
 \section{References}
 \begin{enumerate}[leftmargin=*]
   \item Supplied Ghidra beginner guide:

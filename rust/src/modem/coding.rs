@@ -40,8 +40,9 @@ pub(super) fn encode_frame<const BYTES: usize, const CELLS: usize>(
         .iter()
         .flat_map(|byte| (0..8).rev().map(move |shift| (byte >> shift) & 1))
         .collect();
+    information.resize(turbo.len(), 0);
     whiten(&mut information);
-    let coded = encode(&information, turbo, false);
+    let coded = encode(&information, turbo, CELLS == 3 * turbo.len() + 12);
     Some(std::array::from_fn(|position| coded[channel[position]]))
 }
 
@@ -57,7 +58,7 @@ pub(super) fn decode_frame<const BYTES: usize, const CELLS: usize>(
     for (position, &cell) in channel.iter().zip(cells) {
         coded[*position] = cell;
     }
-    decode(&coded, turbo, false, |bits| {
+    decode(&coded, turbo, CELLS == 3 * turbo.len() + 12, |bits| {
         let mut information = bits.to_vec();
         whiten(&mut information);
         let mut frame = [0; BYTES];
