@@ -12,5 +12,6 @@ pub mod handshake;
 pub mod receiver;
 pub mod setup;
 pub mod waveform;
+pub mod wide_level4;
 
 pub mod runtime;

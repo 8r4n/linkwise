@@ -17,46 +17,18 @@ fn permutations() -> (Vec<usize>, Vec<usize>) {
     (channel, turbo)
 }
 
-fn unpack(bits: &[u8]) -> Option<[u8; FRAME_BYTES]> {
-    let mut information = bits.to_vec();
-    coding::whiten(&mut information);
-    let mut frame = [0; FRAME_BYTES];
-    for (byte, bits) in frame.iter_mut().zip(information.as_chunks::<8>().0) {
-        *byte = bits.iter().fold(0, |value, bit| (value << 1) | bit);
-    }
-    let (body, checksum) = frame.split_at(FRAME_BYTES - 2);
-    (coding::crc(body).to_be_bytes() == checksum).then_some(frame)
-}
-
 /// Whitens a complete frame and returns its rate-1/2 turbo-coded bits in
 /// channel order. Returns `None` when the supplied frame CRC is invalid.
 pub fn encode(frame: &[u8; FRAME_BYTES]) -> Option<[u8; CODED_CELLS]> {
-    let (body, checksum) = frame.split_at(FRAME_BYTES - 2);
-    if coding::crc(body).to_be_bytes() != checksum {
-        return None;
-    }
     let (channel, turbo) = permutations();
-    let mut information: Vec<_> = frame
-        .iter()
-        .flat_map(|byte| (0..8).rev().map(move |shift| (byte >> shift) & 1))
-        .collect();
-    coding::whiten(&mut information);
-    let coded = coding::encode(&information, &turbo, false);
-    Some(std::array::from_fn(|position| coded[channel[position]]))
+    coding::encode_frame(frame, &channel, &turbo)
 }
 
 /// Reconstructs and checks a frame from channel-order soft decisions.
 /// Positive metrics favor 1 and zero denotes an erasure.
 pub fn decode(cells: &[f64; CODED_CELLS]) -> Option<[u8; FRAME_BYTES]> {
-    if cells.iter().any(|cell| !cell.is_finite()) {
-        return None;
-    }
     let (channel, turbo) = permutations();
-    let mut coded = [0.0; CODED_CELLS];
-    for (position, &cell) in channel.iter().zip(cells) {
-        coded[*position] = cell;
-    }
-    coding::decode(&coded, &turbo, false, unpack)
+    coding::decode_frame(cells, &channel, &turbo)
 }
 
 #[cfg(test)]

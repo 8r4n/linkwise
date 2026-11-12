@@ -1,0 +1,46 @@
+\begin{tikzpicture}[x=1.02cm,y=1cm,font=\small,
+  axis/.style={ovgray,-{Stealth[length=2mm]}},
+  data/.style={ovblue,fill=ovblue},
+  pilot/.style={ovgold!60!black,fill=ovgold},
+  reference/.style={ovteal!70!black,fill=ovteal}]
+  \node[anchor=west,font=\bfseries] at (-2.7,6.15) {BW500 level-4 symbol centers};
+  \node[anchor=west] at (-2.7,5.55) {$n_{b,j}=4608+512j+256b$, with band index $b\in\{0,1\}$ and column $0\le j\le392$};
+  \foreach \x in {0,1,...,17}
+    \draw[ovgray!20] (\x,1.05) -- (\x,4.95);
+
+  \draw[axis] (0,3.9) -- (17.65,3.9);
+  \draw[axis] (0,2.45) -- (17.65,2.45);
+  \node[align=right,anchor=east] at (-0.35,3.9) {Lower band\\1,350 Hz};
+  \node[align=right,anchor=east] at (-0.35,2.45) {Upper band\\1,650 Hz};
+  \draw[reference] (-0.09,3.81) rectangle ++(0.18,0.18);
+  \draw[reference] (0.91,2.36) rectangle ++(0.18,0.18);
+  \foreach \j in {1,...,8} {
+    \fill[data] ({2*\j},3.9) circle[radius=2.4pt];
+    \ifnum\j=7
+      \draw[pilot] (15,2.59) -- (15.14,2.45) -- (15,2.31) -- (14.86,2.45) -- cycle;
+    \else
+      \fill[data] ({2*\j+1},2.45) circle[radius=2.4pt];
+    \fi
+  }
+  \node[above,font=\scriptsize] at (0,4.11) {$j=0$};
+  \node[above,font=\scriptsize] at (2,4.11) {$j=1$};
+  \node[above,font=\scriptsize] at (15,2.59) {$j=7$, first upper pilot};
+  \draw[ovblue,{Stealth[length=1.4mm]}-{Stealth[length=1.4mm]}]
+    (0,4.7) -- (2,4.7) node[midway,above,font=\scriptsize] {512-sample hop};
+  \draw[ovteal!70!black,{Stealth[length=1.4mm]}-{Stealth[length=1.4mm]}]
+    (0,3.15) -- (1,3.15) node[midway,above,font=\scriptsize] {256};
+
+  \draw[axis] (0,1.05) -- (17.65,1.05);
+  \foreach \x/\sample in {0/0,2/512,4/1024,6/1536,8/2048,10/2560,12/3072,14/3584,16/4096}
+    \draw[ovgray] (\x,1.05) -- ++(0,-0.11) node[below,font=\scriptsize] {\sample};
+  \node[anchor=west] at (0,0.34) {Samples relative to the lower-band reference, $n-4608$};
+
+  \draw[reference] (0,-0.55) rectangle ++(0.18,0.18);
+  \node[anchor=west] at (0.32,-0.46) {Reference};
+  \fill[data] (3.05,-0.46) circle[radius=2.4pt];
+  \node[anchor=west] at (3.27,-0.46) {Data};
+  \draw[pilot] (5.1,-0.32) -- (5.24,-0.46) -- (5.1,-0.60) -- (4.96,-0.46) -- cycle;
+  \node[anchor=west] at (5.34,-0.46) {Pilot};
+  \node[anchor=west,font=\scriptsize] at (7.0,-0.46)
+    {18 pilots per band. The first lower-band pilot is at $j=24$.};
+\end{tikzpicture}

@@ -24,7 +24,7 @@ impl Profile {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinkSetup {
     pub caller: String,
     pub high_speed: bool,
@@ -82,6 +82,8 @@ impl LinkSetup {
             return None;
         }
         let (body, crc) = frame.split_at(body_len);
+        let control = body[body_len - 1];
+        let stock_bw500_control = profile == Profile::Bw500 && control == 0x02;
         if coding::crc(body).to_be_bytes() != crc
             || body[4] & 0x0f != 0
             || body[5] > 15
@@ -89,7 +91,7 @@ impl LinkSetup {
             || !matches!(body[7], 0x80 | 0x81)
             || body[8] != 0x14
             || body[10..body_len - 2].contains(&0x14)
-            || body[body_len - 1] != CONTROL
+            || !(control == CONTROL || stock_bw500_control)
         {
             return None;
         }
@@ -175,6 +177,22 @@ mod tests {
             frame[9] ^= 1;
             assert_eq!(LinkSetup::decode(profile, &frame), None);
         }
+    }
+
+    #[test]
+    fn accepts_stock_bw500_setup_with_0x02_control() {
+        let setup = LinkSetup {
+            caller: "KN6MQS".into(),
+            high_speed: false,
+            requested_level: 4,
+        };
+        let mut frame = setup.encode(Profile::Bw500).unwrap();
+        frame[43] = 0x02;
+        let crc = coding::crc(&frame[..44]).to_be_bytes();
+        frame[44..].copy_from_slice(&crc);
+        assert_eq!(LinkSetup::decode(Profile::Bw500, &frame), Some(setup));
+        frame[9] ^= 1;
+        assert!(LinkSetup::decode(Profile::Bw500, &frame).is_none());
     }
 
     #[test]

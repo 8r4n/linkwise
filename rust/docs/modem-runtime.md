@@ -5,6 +5,9 @@ existing level-4 establishment controller and stop-and-wait ARQ sender at the
 **validated protocol-event boundary**. It is the first shared-core milestone,
 not an operational VARA or Winlink modem.
 
+Use the [station setup guide](modem-setup.md) to check configuration,
+native audio access, and local modem port availability.
+
 ## Run the foreground simulation
 
 From `rust/`:
@@ -64,12 +67,99 @@ socket first. Both sockets must arrive within five seconds of the first.
 An additional connection cannot replace either socket while a pair is active.
 A stalled socket write has a five-second deadline. Losing either channel
 closes the other and awaits session cleanup.
+The paired command socket sends `IAMALIVE` every 60 seconds.
 
 `VERSION` identifies the simulated bench. `CONNECT W9SSJ W1AW` runs a
 simulated handshake, and the peer echoes each acknowledged binary block.
 `ABORT` and `DISCONNECT` end the simulated session. The callsign supplied on
 the command line is the allowed local identity. The two sockets carry no
 pairing credential, so deploy this harness only on a trusted loopback host.
+
+`P2P SESSION` is accepted while idle for the simulated peer. The bench
+returns `WRONG` for gateway sessions, incoming listen requests, public
+mode and CWID settings, enabled compression, and wider bandwidths.
+
+## Serve a radio-free BW500 session
+
+`--serve-virtual-bw500` connects the paired host sockets to Linkwise's BW500
+handshake, transmit-turn control, and uncompressed DATA waveforms. It uses
+the same measured level-4 profile as the audio bench. Start it from `rust/`:
+
+```sh
+profile=$(python3 ../tools/fetch-modem-profile.py)
+cargo run --locked --features audio-device --bin linkwise-modemd -- \
+  --serve-virtual-bw500 W1AW "$profile" 8300 8301 8302
+```
+
+The command, DATA, and audio sockets bind to IPv4 loopback. Attach an audio
+peer and the two host sockets before calling or enabling `LISTEN ON`.
+Only one paired host and one cable connection are served at a time. The
+audio socket carries one burst per record. Each record is a four-byte
+big-endian sample count followed by that many little-endian IEEE float
+samples at 48 kHz mono. The limit is 288,000 samples per record. Route each
+burst to the peer before returning its response. Use a trusted isolated
+test environment for the unauthenticated sockets.
+
+With the audio feature, a second process can attach the cable to a pair of
+named virtual audio devices:
+
+```sh
+linkwise-modemd --virtual-audio-device 8302 'Virtual input' 'Virtual output'
+```
+
+Use dedicated loopback devices with the input and output on independent
+paths. The bridge plays and captures channel 0. The service does not
+manage radio PTT.
+
+Either station can queue up to 4,096 bytes. The sender coalesces TCP reads
+for up to 100 ms and splits the stream into uncompressed deliveries of
+up to 203 bytes using the measured BW500 frame layouts. The receiver
+releases a delivery to its host after the closing frame. The stations
+can hand over the transmit turn within one connection.
+
+A repeated closing frame is acknowledged again without redelivering its
+bytes. The caller can send bounded keyed state queries after a missing
+intermediate or closing acknowledgment. A negative response can trigger
+a level-3 retry of the outstanding DATA using a measured layout. The
+retry preserves any acknowledged prefix. Ambiguous replies and exhausted
+query budgets can end the connection with delivery unconfirmed.
+`DISCONNECT` waits for queued DATA to drain before sending the disconnect
+waveform. `ABORT` resets the session immediately.
+
+Run the socket and waveform regression from the repository root:
+
+```sh
+python3 tools/test-virtual-bw500.py rust/target/debug/linkwise-modemd \
+  reference/vara/fixtures/level4/bw500-level4.json
+```
+
+Pat 1.0.1 completed a Winlink B2F peer-to-peer message transfer between
+two Linkwise daemons over both the socket cable and Ubuntu's native ALSA
+loopback. Stock VARA HF 4.9.1 transferred 200-byte test streams in both
+connection roles in separate sessions. A shorter test exchanged 13 bytes
+from Linkwise and nine from VARA within a single connection.
+Mixed BW500 Pat and Winlink Express 1.8.6.0 peer-to-peer transfers verified
+the attachment SHA-256 in both recipient mailboxes. The Pat-to-Express
+sender-side close remains unverified. See the
+[interoperability bench](../../docs/testing/vara-interoperability.md) for
+build-specific results and ACK-loss repeats.
+
+## Serve a wide-mode bench session
+
+Use one fixed bandwidth at each end of the isolated audio cable:
+
+```sh
+linkwise-modemd --serve-virtual-wide W1AW 2300 8300 8301 8302
+```
+
+Use `2300` or `2750`. The same command, DATA, and audio socket protocol
+applies. The wide modes use level-4 setup. A level-4 DATA delivery can
+carry two 89-byte full frames and an uncompressed closing frame of up to
+86 bytes. Longer writes are split across deliveries. The bench supports
+level-3 and level-2 retries for measured layouts. Stock VARA HF 4.9.1 passed
+multi-frame DATA and guarded recovery runs at both bandwidths, with
+intermittent retry failures on repeat. Add `--wide` to the socket regression
+command to exercise both wide modes between Linkwise peers.
 
 ## Native output primitive
 
@@ -167,6 +257,30 @@ The paired TCP bench calls it during channel-loss cleanup.
 An uncertain release keeps admission blocked until matching release/watchdog
 evidence arrives. A new session never adopts old retained payload.
 
+## Stock VARA BW500 delivery tests
+
+The Windows VARA HF 4.9.1 bench uses a virtual cable and native Linkwise
+waveform peers. It exercises separate sessions with each modem as caller.
+The multi-frame fixtures cover level-4 DATA, a level-3 closing frame on
+the Linkwise transmit path, and stock VARA's level fallback after a
+negative acknowledgment. The DATA parser accepts the observed
+`0x42` and `0x82` short closing fields and the observed BW500 level-4
+`0x02` form after CRC and trailer validation.
+
+Replay the local capture set from `rust/`:
+
+```sh
+LINKWISE_STOCK_BW500_CAPTURE_DIR=../reference/vara/fixtures/stock-multi-2026-11-11 \
+cargo test --locked --release --test bw500_replay \
+  decodes_stock_bw500_delivery_and_level_fallback -- --ignored
+```
+
+The [native audio loopback test](../../docs/testing/utm-test-environments.md#verify-playback-through-a-native-loopback)
+covers 48 kHz playback and capture on the Linux guest audio backends.
+The audio bridge and the native-device test exercise separate paths.
+The daemon offers a separate radio-free waveform service. The original
+paired TCP echo bench continues to use its simulated backend.
+
 ## Verification and remaining work
 
 `tests/modem_runtime.rs` covers two-role establishment, binary preservation,
@@ -180,8 +294,8 @@ cargo test --locked --test modem_runtime
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Remaining work includes native waveform/device integration,
-production DATA packetization and wire reply/query qualification, host receive delivery and
-on-air duplicate suppression, turn/rate/keepalive/disconnect behavior, an operational backend for the paired TCP
-listener, station admission/grants, durable operation records,
-reference-peer/client interoperability, and OS-specific adapters/packaging.
+Remaining work includes integrating the bench waveform and host paths with
+the operational session owner, qualifying DATA and control behavior across
+the repeat matrix, and validating native playback, turnaround, and PTT
+release. Station admission, durable operation records, and native platform
+qualification also remain open.

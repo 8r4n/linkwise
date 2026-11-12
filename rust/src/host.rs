@@ -9,7 +9,10 @@ use std::{io, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::mpsc,
+    time::{Instant, MissedTickBehavior, interval_at},
 };
+
+const HOST_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Copy)]
 pub enum Channel {
@@ -66,7 +69,7 @@ pub async fn control<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let result = control_stream(stream, port, notices, None).await;
+    let result = control_stream(stream, port, notices, None, false).await;
     port.closed(Channel::Control).await;
     result
 }
@@ -76,6 +79,7 @@ async fn control_stream<S>(
     port: &dyn ModemPort,
     mut notices: mpsc::Receiver<Vec<u8>>,
     write_timeout: Option<Duration>,
+    send_heartbeat: bool,
 ) -> io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -84,8 +88,16 @@ where
     let mut decoder = CommandDecoder::default();
     let mut input = [0; 1024];
     let mut notifications_open = true;
+    let mut heartbeat = interval_at(
+        Instant::now() + HOST_HEARTBEAT_INTERVAL,
+        HOST_HEARTBEAT_INTERVAL,
+    );
+    heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
         tokio::select! {
+            _ = heartbeat.tick(), if send_heartbeat => {
+                write_bytes(&mut write, b"IAMALIVE\r", write_timeout).await?;
+            }
             count = read.read(&mut input) => {
                 let count = count?;
                 if count == 0 { return Ok(()); }
@@ -179,6 +191,28 @@ async fn write_bytes(
 mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
+
+    #[tokio::test(start_paused = true)]
+    async fn paired_control_heartbeat_keeps_an_idle_client_alive() {
+        let (mut client, server) = tokio::io::duplex(128);
+        let (_, notices) = mpsc::channel(1);
+        let server = tokio::spawn(async move {
+            let port = Port::default();
+            control_stream(server, &port, notices, Some(Duration::from_secs(5)), true).await
+        });
+        let start = Instant::now();
+        for elapsed in [60, 120] {
+            let mut reply = [0; 9];
+            tokio::time::timeout(Duration::from_secs(61), client.read_exact(&mut reply))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(&reply, b"IAMALIVE\r");
+            assert_eq!(start.elapsed(), Duration::from_secs(elapsed));
+        }
+        drop(client);
+        server.await.unwrap().unwrap();
+    }
     #[tokio::test(start_paused = true)]
     async fn bounded_writer_fails_when_the_peer_stops_reading() {
         let (mut writer, _peer) = tokio::io::duplex(1);

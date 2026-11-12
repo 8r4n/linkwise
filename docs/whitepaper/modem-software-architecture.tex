@@ -3,17 +3,17 @@
 \label{sec:modem-software}
 
 This section connects the proposed ports-and-adapters architecture to the
-Rust modem implementation as of 10 November 2026. It identifies implemented
-DSP and simulated execution, and records their verification limits.
-Statements marked \emph{proposed integration} describe work needed for an
-operational station. The receive evidence includes one live KiwiSDR frame.
-Reference-peer acceptance and Winlink transfer remain separate gates.
+Rust modem implementation as of 11 November 2026. The radio-free modem
+preview serves traditional clients over paired TCP sockets and exchanges
+audio with a bench peer. The proposed station runtime adds policy, device
+ownership, and physical transmit control. The evidence table records
+modem interoperability, client transfer, and station qualification separately.
 
 \subsection{Standalone modem product and shared runtime}
 \label{sec:modem-shared-runtime}
 \emph{Proposed integration.} The native modem should be delivered as a shared
 Rust runtime usable by traditional amateur-radio applications without an AI
-host. A foreground executable, provisionally \path{linkwise-modemd}, will
+host. The foreground executable \path{linkwise-modemd} will
 assemble the runtime and its adapters. Optional operating-system supervision
 and graphical configuration do not define a different protocol engine.
 Linkwise orchestration remains an additional client of the station execution
@@ -26,14 +26,10 @@ The implementation supports virtual time for deterministic tests and a
 monotonic clock for the foreground runner. The device execution tests use
 simulated audio and PTT.
 
-The first intended operational profile is BW500 with compression disabled.
-This is an implementation target, not an advertised interoperable capability.
-Its release manifest must enumerate supported establishment roles, levels,
-DATA forms, host commands, reply/query forms, turn/rate behavior, keepalive,
-and disconnect behavior. Initial native audio establishment is level 4;
-existing level-1--3 codec support does not establish those session modes.
-Unknown wire-field sequencing and recovery behavior require independent
-vectors or reference captures before implementation claims are extended.
+The radio-free preview supports uncompressed BW500 and fixed level-4
+BW2300/BW2750. BW500 remains the first target for station integration.
+A release manifest must enumerate the qualified roles, DATA forms,
+host commands, reply/query forms, rate behavior, and disconnect behavior.
 
 \subsection{Traditional-client interface and session admission}
 \label{sec:modem-client-admission}
@@ -45,9 +41,12 @@ a command nor opening a socket establishes on-air interoperability. Winlink
 message framing, mailbox exchange, and message acceptance remain the client's
 responsibility. No message body or continuous modem stream traverses MCP.
 
-The existing \path{host::control}, \path{host::data}, and
-\path{api::CommandDecoder} are reusable transport components. They do not
-currently listen on sockets, pair clients, or execute operational sessions.
+The preview uses \path{host::tcp} to pair one host command socket and one
+DATA socket. \path{api::CommandDecoder} parses the command stream.
+A separate IPv4 loopback socket exchanges audio with a single cable peer.
+Each record has a four-byte big-endian sample count followed by little-endian
+32-bit float samples at 48 kHz mono. The audio bridge can attach named
+virtual capture and playback devices.
 A compatibility matrix must record initialization commands, replies,
 asynchronous notifications, buffer semantics, and unsupported behavior for
 each qualified client/version. The current parser supports only a subset;
@@ -150,7 +149,7 @@ and paired TCP bench exercise stages three and four with simulated peers.
 Rolling pilot acquisition for levels 1--3 has separate off-air receive
 evidence (Table~\ref{tab:modem-evidence-gates}). The remaining work includes
 production DATA sequencing and recovery, native audio/PTT integration,
-and a qualified client and reference peer. The sequence below defines the
+and broader client and reference-peer qualification. The sequence below defines the
 scope and exit criteria for each stage.
 \begin{enumerate}
 \item \textbf{Session contracts and owner.} Define typed commands/events,
@@ -312,13 +311,15 @@ monotonic instants enforce deadlines; absolute sample counters locate signal
 evidence. One must not substitute for another.
 
 \subsection{Native implementation map and current limits}
-The Rust package contains executable components rather than a complete service:
+The Rust package contains the foreground bench service and reusable components.
 \path{audio::device} captures input; \path{modem::receiver} bounds and dispatches
 receive candidates; \path{modem::waveform} supplies energy detection and tone
 correlation; \path{modem::bw500} implements index-modulated levels 1--3;
 \path{modem::bw500_level4} handles level-4 channel coding;
 \path{modem::bw500_waveform} adds measured-reference two-band synthesis and
-reception; \path{modem::coding} implements whitening, CRC, interleavers, and
+reception; \path{modem::wide_level4} supplies level-4 setup and level-2 through
+level-4 DATA waveforms for BW2300 and BW2750, using the carrier allocations
+in \path{modem::wide_allocations}. \path{modem::coding} implements whitening, CRC, interleavers, and
 FEC. \path{modem::control}, \path{modem::setup}, \path{modem::handshake}, and
 \path{modem::audio_handshake} cover keyed control, caller setup, and
 establishment. \path{modem::data} and \path{modem::arq} are frame/container
@@ -326,13 +327,24 @@ and sender components. \path{api::CommandDecoder} and \path{host} implement
 host stream boundaries.
 
 The clock-driven \path{modem::runtime} combines establishment and ARQ at
-the validated-event boundary. The simulated audio loopback exercises
-bidirectional delivery and recovery with bench framing. The paired TCP bench
-exercises the host interface with a simulated peer. The optional CPAL output
-primitive reports a presentation estimate. Production integration still needs
-qualified playback and PTT completion, wire answer/query recognition, rate,
-turn, keepalive and disconnect behavior, and an operational host backend.
-The external VARA adapter needs a release-specific command/status contract.
+the validated-event boundary. The virtual host in \path{linkwise-modemd}
+owns its bench handshake, transmit turn, pending DATA, and deadlines.
+The host keeps command and binary DATA streams on paired TCP sockets. A
+separate virtual audio connection carries a big-endian sample count followed
+by little-endian 32-bit floating-point samples at 48 kHz. The host queues
+up to 4,096 bytes and segments BW500 writes into measured uncompressed
+deliveries of up to 203 bytes. A wide level-4 delivery can carry two 89-byte
+full frames and a closing frame of up to 86 bytes. Wide level-3 and level-2
+full frames carry 47 and 22 bytes, respectively.
+The optional CPAL bridge provides native capture and playback for isolated
+audio routes. Station integration still needs qualified hardware playback
+completion, PTT release, and the station admission and ownership contracts.
+
+ARM64 preview installers and station guides are available for macOS,
+Windows, Ubuntu, and Fedora. Windows, Ubuntu, and Fedora passed install,
+launch, simulation, and removal checks. The extracted macOS package
+executable ran successfully, and its bundled guide was checked. Native macOS
+capture awaits an input endpoint.
 
 \section{DSP implementation pipeline}
 \label{sec:modem-dsp}
@@ -363,6 +375,11 @@ The energy detector accumulates 10 ms windows. A window is active when
 \[
  \frac{1}{W}\sum_{n=0}^{W-1}x[n]^2 \geq 10^{-4},\qquad W=480.
 \]
+A 10 ms window holds 480 samples at 48 kHz. Square each normalized
+sample so positive and negative excursions both count, then average.
+A mean square of $10^{-4}$ corresponds to an RMS amplitude of 0.01,
+so this gate opens at one percent of full scale.
+
 A quiet window closes a candidate; end-of-stream flushes a partial window and
 any open candidate. The 1\% full-scale RMS gate serves level-4 acquisition
 with an external measurement profile and reports energy candidates for
@@ -432,12 +449,21 @@ For a symbol of length $H$ and bin $k$, the unnormalized tone energy is
 \[
  E_k=\left|\sum_{n=0}^{H-1}x[n]\exp(-j2\pi kn/H)\right|^2.
 \]
+The exponential supplies a reference that completes $k$ cycles over the
+$H$ samples. Multiplying and summing aligns a matching tone so its
+contributions add together. Taking the squared magnitude measures the
+strength of that match independently of its starting phase. For example,
+at 48 kHz with $H=1024$, bin 32 tests for a 1,500 Hz tone.
+
 For timing refinement and soft decisions, the implementation divides by
 $(H/2)\sum x[n]^2$, with an epsilon floor. For data, it measures the
 eight mapped bin hypotheses. For each of the three bit positions, the soft
 metric is the largest normalized power among labels with bit 1 minus the
 largest among labels with bit 0. This max-based difference is a decoder input;
 it is not a calibrated log likelihood, SNR, or BER estimate.
+A positive value means the strongest tone compatible with bit 1 beat
+the strongest tone compatible with bit 0. Values near zero give the
+decoder little reason to prefer either bit.
 
 Metrics are scattered through the inverse channel permutation into FEC order.
 Only a CRC-valid result is returned. The rolling scanner suppresses overlap
@@ -479,8 +505,15 @@ obeys
 \[
  s_{i+1}=(\texttt{0x43fd43fd}\,s_i+\texttt{0xc39ec3})\bmod 2^{24}.
 \]
-Whitening starts at $s_0=29318$ and takes the next state's high bit. Applying
-the same XOR after decoding restores the original bits. Permutations use
+Each step multiplies the current state $s_i$ by the first constant,
+adds the second constant, and keeps the lowest 24 bits. The remainder
+operation is what makes the state wrap. The same starting state and
+steps produce the same bit sequence at both ends of the link.
+
+Whitening starts at $s_0=29318$ and takes the next state's high bit. A
+generator bit of 1 flips the corresponding frame bit. A generator bit
+of 0 leaves it alone. Applying the same mask again flips those bits
+back. Permutations use
 rejection sampling: draw an index, append only its first occurrence, and
 continue until every index is present. The draw multiplies the normalized
 state by the requested size with single-precision rounding, matching the
@@ -494,6 +527,10 @@ $c_{\pi_1(j)}$. The inner permutation $\pi_2$ changes the input order of the
 second constituent encoder and must be inverted consistently when exchanging
 extrinsic information. Interleavers belong to the mode/profile, not to the
 agent's request parameters.
+In the worked example, the channel permutation puts coded bit 33 in the
+first transmitted position. The receiver puts the first soft decision
+back into slot 33 before decoding. The turbo permutation acts earlier,
+when the second encoder reads the information bits in a different order.
 
 \subsection{Turbo encoder and iterative receive decoder}
 The codec has two eight-state recursive systematic convolutional constituents.
@@ -504,6 +541,12 @@ $u$, the implementation uses
  p=a\oplus r_0\oplus r_2,\quad
  (r_0',r_1',r_2')=(a,r_0,r_1).
 \]
+The symbol $\oplus$ means exclusive OR. First compute the new feedback
+bit $a$ from the input and two stored bits. Then compute the parity bit
+$p$ from $a$ and two stored bits. Finally, shift the memory so $a$
+becomes the newest bit. Starting with an empty register and input 1,
+the encoder outputs parity 1 and moves to state $(1,0,0)$.
+
 Both encoders start at zero. The first consumes natural-order bits and the
 second consumes turbo-permuted bits. Levels 1/2 transmit systematic and both
 parity streams (rate 1/3); levels 3/4 transmit systematic bits and alternate
@@ -511,6 +554,10 @@ which constituent parity is retained (rate 1/2). Each constituent is terminated
 with three steps using $u=r_1\oplus r_2$. The wire tail is twelve bits,
 interleaving the two systematic/parity tail pairs at each of three steps.
 Thus the implemented coded sizes are $3N+12$ or $2N+12$.
+The factor of three or two counts the transmitted bits per information
+bit before termination. For the worked level-4 frame, 368 information
+bits give 736 systematic and parity bits, then the tail brings the
+total to 748.
 
 The receiver first makes hard decisions on systematic metrics and checks the
 frame CRC. If that fails, it constructs the two terminated trellises, treating
@@ -556,6 +603,13 @@ a real modem. Reproducible tests use SHA-256-pinned upstream measurements,
 extracted without executing downloaded source. Cached measurement sources
 retain their own attribution/license metadata and are not embedded in Rust.
 
+The phase index $k_{b,t}$ selects one of 128 equally spaced directions
+around a circle. For example, index 32 represents a quarter turn. The
+transmitter and receiver use opposite rotations so they can compare
+successive DATA symbols after accounting for the known phase pattern.
+
+\landscapediagram{\input{diagrams/modem-level4-symbol-timing.tikz}}{BW500 level-4 symbol centers on the 48 kHz sample axis. The plotted excerpt uses the implemented pilot allocation. Each marker locates the center of a 513-tap pulse extending 256 samples on either side.}{fig:dsp-level4-symbol-timing}
+
 \subsection{Level-4 transmit synthesis}
 After whitening, turbo encoding, and channel gather, coded bits fill band 0's
 data positions in time order, then band 1's. With initial polarity
@@ -568,6 +622,13 @@ carriers:
        \Re\{c_{b,t}\exp(j2\pi f_b n/48000)\},
 \]
 where $n_{b,t}=9H+tH+bH/2$, $f_b\in\{1350,1650\}$, and $p$ has 513 taps.
+To compute one output sample $x[n]$, center each symbol's pulse on
+$n_{b,t}$, evaluate the carrier at sample $n$, and add the real
+contributions from both bands. The pulse determines how much each nearby
+symbol contributes. The center formula allows nine hops before the
+first reference, advances one hop per column, and offsets the upper
+band by half a hop.
+
 The factor $1/4$ is the current bench amplitude scale, not a calibrated radio
 power command. A waveform's audio amplitude does not replace CAT power limits,
 route qualification, or PTT authority.
@@ -588,6 +649,11 @@ result is $z_{b,t}$, the differential statistic is
 \[
  d_{b,t}=\Re\{z_{b,t}\overline{z_{b,t-1}}\}.
 \]
+This dot product compares consecutive symbols after removing the known
+reference phase. It tends to be positive when their polarities agree
+and negative when they are opposite. A DATA bit 1 flips polarity,
+so the receiver negates this statistic to give a positive score for 1.
+
 A correct pilot transition should preserve polarity. Timing search maximizes
 the average normalized differential dot product over 36 pilot positions,
 first in 32-sample steps and then in two-sample steps around the best epoch.
@@ -643,6 +709,14 @@ capture and playback deadlines.
           \arg\!\left(\sum_{(b,t)\in\mathcal P}
           w_{b,t}z_{b,t}\overline{z_{b,t-1}}\right).
         \]
+        Each pilot pair measures the phase change over one symbol hop.
+        The set $\mathcal P$ identifies the pilot positions and the
+        weights $w_{b,t}$ determine how much each pair contributes.
+        The angle of the combined result gives radians per hop.
+        Multiplying by $48000/(2\pi H)$ converts that angle to hertz.
+        For example, a quarter-turn of phase per 512-sample hop
+        corresponds to about 23.44 Hz.
+
         This is a proposed pilot estimator, not a performance result. At
         $H=512$ its phase observation repeats every 93.75 Hz, requiring coarse
         branch selection and outlier/low-energy rejection. Fading and channel
@@ -731,12 +805,20 @@ or ambiguous forms are rejected. The implemented short builder reserves four
 body bytes for this trailer; additional published short/compressed forms are
 not silently treated as supported.
 
+The BW500 decoder also accepts the measured level-4 \texttt{0x02}
+control form. In setup, it validates the CRC, caller identity and
+requested level. In DATA, it requires the caller-keyed trailer and valid
+padding and rate fields. Stock Winlink Express used this form to send
+the B2F end-of-proposals bytes after storing the received message.
+
 Tests reconstruct the documented 200-byte delivery from four level-4 payloads
 of 43 bytes and one closing level-3 payload of 28 bytes, using the documented
 full fields \texttt{95}, \texttt{91}, \texttt{8d}, and \texttt{81}. This verifies
 the container interpretation for that example, not a general sender sequencing
 law. The full-frame field remains a supplied parameter because its evolving
-wire semantics need independent qualification. Compression TEXT/FILES,
+wire semantics need independent qualification. Appendix~\ref{app:bw500-wire}
+works through these bytes, their checksums, and the session exchange.
+Compression TEXT/FILES,
 delivery-level repacketization, and negotiated rate changes are not completed
 by the container codec.
 
@@ -757,6 +839,24 @@ recognition, query encoding, turn ownership, negotiated rate, and byte
 accounting. The sender's queue currently holds supplied blocks; its byte count
 must not be exposed as Winlink delivery progress or raw-host \texttt{BUFFER}
 semantics without that integration.
+
+The virtual host issues keyed state queries after missing BW500
+intermediate and closing acknowledgments. A positive answer retires the
+acknowledged bytes. A negative answer can trigger a level-3 retry of the
+outstanding DATA, preserving any acknowledged prefix. With crossed turn
+requests, Linkwise can grant a repeated stock caller request and resume
+queued DATA after the caller hands back the turn. A short continuation
+can retain level 3 after a level-3 close. A host \texttt{DISCONNECT}
+received while DATA is queued waits for the queue to drain before
+sending the disconnect waveform.
+
+For the wide modes, the virtual host tracks the outstanding waveform and
+the byte offset at the active rate. It can retry the unacknowledged suffix
+at level 3 after a keyed rejection, use level 2 after a missing-DATA query
+response, and return to level 4 when the peer requests the supported
+increase. These transitions cover measured frame layouts. General rate
+negotiation and repeatable recovery across the qualification matrix
+remain open.
 
 \landscapeplantuml{build/diagrams/Linkwise_Modem_Recovery}{Implemented event-level ARQ sender behavior and remaining wire integration. Missing answers request state; only a validated negative reply permits DATA retransmission.}{fig:modem-recovery}
 
@@ -810,6 +910,27 @@ embedded in this repository. The public protocol/reference source is listed
 in Reference~\ref{ref:modem-protocol}. Source-level traceability does not
 replace empirical qualification.
 
+\paragraph{Deterministic waveform regression and application delivery.}
+The 12 November 2026 BW500 suite passes packed PRBS9, PRBS15, alternating
+bits, and all-zero and all-one payloads through Linkwise's real-valued
+48~kHz waveform path. Levels 1--3 recover the exact DATA frames through
+attenuation and a fixed 1~ms echo. A separate level-4 test reassembles
+the 64-byte PRBS9 fixture from full and closing DATA frames using the
+measured waveform profile. The virtual daemon bench also recovers
+PRBS9 payloads at BW500, BW2300, and BW2750, with controlled DATA
+corruption or acknowledgment loss in selected cases.
+
+On the mixed BW500 bench, both Winlink Express peers sent and received
+an email with a PRBS9 attachment in each of two sessions. Linkwise and
+stock VARA HF 4.9.1 each initiated one session. Both peers disconnected
+cleanly and the four received attachments matched their sources byte for
+byte and by SHA-256. Separate stock-audio replays cover the initial caller
+poll and rate-down recovery in both caller roles. These measurements
+cover frame decoding and delivery after ARQ. Measuring raw bit errors
+requires aligned receiver decisions, and assessing fading tolerance
+requires a calibrated channel model. Fixture construction, commands, and
+run scope appear in the 12 November entry of \path{lab-notes/lab-notes.tex}.
+
 \begin{longtable}{@{}p{0.24\textwidth}p{0.70\textwidth}@{}}
 \caption{Modem evidence and remaining qualification gates.}\label{tab:modem-evidence-gates}\\
 \toprule
@@ -829,26 +950,35 @@ frames. These checks cover the tested recordings.\\
 Receiver robustness & Measure live frame recovery on known transmissions.
 Characterize offset, fading, interference, clipping, sample-clock error,
 false alarms, and processing latency.\\
-Reference acceptance & Show an unmodified release accepts native requests,
-setup and DATA and that native RX accepts its replies; preserve both audio
-directions, command bytes, readbacks, timing and payload comparisons.\\
-Session reliability & Deliberately lose DATA and answers, duplicate replies,
-interrupt playback, restart the owner, exhaust budgets and change rates;
-prove byte preservation and distinguish unresolved from acknowledged bytes.\\
+Reference acceptance & With stock VARA HF 4.9.1, the 11 November frozen
+build \texttt{6a4dc89e} passed one BW2300 and two BW2750 sender-recovery
+runs with 412 exact bytes, two-ended disconnect and a same-socket
+reconnect. Other runs stalled during setup or retry. The three-pass gate
+remains open.\\
+Session reliability & The frozen build passed two final-ACK-loss runs and
+one intermediate-ACK-loss run at BW500, with 406 exact bytes and two-ended
+disconnect in each pass. Setup and DATA timeouts interrupted the sequences.
+The earlier three-pass results apply to their recorded builds.\\
 Station safety & Qualify actual device presentation, turnaround, exclusive
 lease, permit expiry, duty limits, watchdog release and independent stop on
 an inhibited or conducted setup before operational RF use.\\
-Host and Winlink & Bind one command/data owner to the session engine; test
-backpressure, disconnect/reconnect and supported client outcomes; keep modem
-connection, client completion and CMS/recipient evidence distinct.\\
+Host and Winlink & Mixed BW500 Pat runs passed in both directions with a
+matching attachment SHA-256, exit status zero and two-ended disconnect.
+Mixed Winlink Express 1.8.6.0 and Pat 1.0.1 peer-to-peer transfers stored
+attachments with matching SHA-256 in both recipient mailboxes. The
+Pat-to-Express sender-side close and gateway/CMS qualification remain open.
+Two Winlink Express BW500 sessions with Linkwise and stock VARA verified
+two-way PRBS9 attachment delivery and clean disconnect with each modem
+as caller.\\
 \bottomrule
 \end{longtable}
 
-The attempted i386 Debian/Wine reference bench on the ARM64 Mac initialized
-Wine but failed during COM registration with an illegal-instruction exception
-and WineDbg attach error. It supplied no usable stock-VARA endpoint and was
-stopped. That is a failed environment gate, not acceptance/rejection evidence
-for native DSP. Until a functioning reference peer, operational runtime, and
-native device qualification exist, Linkwise must report these components as
-implemented prototypes with bounded local evidence rather than a complete
-VARA-compatible modem.
+The earlier i386 Debian/Wine bench on the ARM64 Mac stopped after an
+illegal-instruction exception during COM registration and a WineDbg
+attach error. The later Windows UTM bench provided a working stock peer.
+The November 11 lab chronicle records the stock Windows UTM runs, the
+Express message export, and installer checks. Its evidence manifest links
+the measured results to the captured audio and command transcripts.
+The repeat counts, build hashes, and failure captures are indexed in
+\path{docs/testing/vara-interoperability.md}.
+Physical transmit control and operational RF qualification remain open.

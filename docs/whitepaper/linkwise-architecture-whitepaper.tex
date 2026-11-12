@@ -8,6 +8,8 @@
 \usepackage{pdflscape}
 \usepackage{caption}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,decorations.pathreplacing}
 \usepackage{booktabs,tabularx,longtable,array}
 \usepackage{enumitem}
 \usepackage{fancyhdr}
@@ -34,7 +36,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \lhead{\small\color{ovgray}LINKWISE \textbullet{} SYSTEM ARCHITECTURE}
-\rhead{\small\color{ovgray}Whitepaper 0.2 \textbullet{} Proposed}
+\rhead{\small\color{ovgray}Whitepaper 0.3 \textbullet{} Proposed}
 \cfoot{\small\color{ovgray}\thepage\ of \pageref{LastPage}}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{ovblue}\leaders\hrule height \headrulewidth\hfill}}
@@ -45,20 +47,24 @@
 \newcommand{\todo}{\textcolor{ovred}{\textbf{TBD}}}
 \newcommand{\evidence}[1]{\textsf{#1}}
 \newcommand{\urlref}[2]{\href{#1}{#2}}
-% Every PlantUML figure gets a dedicated landscape page, a bounded image box,
-% and a caption/label. Keep height below the landscape text area for captions.
-\newcommand{\landscapeplantuml}[3]{%
+% Each technical figure gets a dedicated landscape page and caption.
+\newcommand{\landscapediagram}[3]{%
   \clearpage
   \begin{landscape}
     \thispagestyle{plain}
     \centering
-    \includegraphics[width=0.94\linewidth,height=0.86\textheight,keepaspectratio]{#1}\par
+    #1\par
     \vspace{0.10in}
     \captionsetup{width=0.94\linewidth}
     \captionof{figure}{#2}
     \label{#3}
   \end{landscape}
   \clearpage
+}
+\newcommand{\landscapeplantuml}[3]{%
+  \landscapediagram{%
+    \includegraphics[width=0.94\linewidth,height=0.86\textheight,keepaspectratio]{#1}%
+  }{#2}{#3}%
 }
 
 \begin{document}
@@ -77,11 +83,11 @@
   \vspace{0.65in}
   \vfill
   \textbf{Document:} LINKWISE-WP-001\par
-  \textbf{Version:} 0.2 --- Architecture proposal\par
+  \textbf{Version:} 0.3 --- Architecture proposal and modem bench status\par
   \textbf{Date:} November 2026\par
-  \textbf{Status:} Proposed system; radio MCP and native modem prototypes; operational qualification pending\par
+  \textbf{Status:} Proposed station system with a radio-free modem preview\par
   \vspace{0.25in}
-  {\small\color{ovgray}Prepared as an engineering whitepaper. All protocol, automation, and propagation capabilities remain subject to implementation and validation.}
+  {\small\color{ovgray}Prepared as an engineering whitepaper. Section~\ref{sec:modem-software} records the tested modem capabilities and open station qualification.}
 \end{titlepage}
 \hypersetup{pageanchor=true}
 \nopagecolor
@@ -298,12 +304,10 @@ This decomposition is also the integration strategy. Existing programs stay
 behind adapters, so their version-specific interfaces can be tested and
 replaced without putting those details into the optimizer. The current Rust
 prototype uses the official Rust MCP SDK \texttt{rmcp} and connects to
-Hamlib's \texttt{rigctld} service over TCP. It does not yet include audio
-support or embed Hamlib's C library. The cross-platform audio I/O library
-\texttt{cpal} remains an option for later evaluation, not a selected
-dependency [23,24]. The architecture favors connecting to existing local
-services over embedding native libraries until packaging, platform coverage,
-licensing, error handling, and hardware behavior have been evaluated.
+Hamlib's \texttt{rigctld} service over TCP. The radio-control MCP prototype
+uses that interface for CAT. The separate native modem preview uses optional
+\texttt{cpal} capture and playback for its virtual audio bridge [23,24].
+The station architecture connects these services through separate adapters.
 
 \subsection{Stakeholders and concerns}
 The design serves people with different priorities. The station owner needs reliable pre-deployment configuration and a dependable emergency stop; developers need stable interfaces and testable behavior; safety reviewers need to know how autonomous actions are bounded. The table connects those concerns to the views used later in the paper.
@@ -1268,11 +1272,13 @@ safety acceptance.
   \item \textbf{Candidate analysis:} source-normalized evidence, ranking/explanations, simulated test fixtures.
   \item \textbf{Preparation:} exclusive lease, configuration writes, readback, and mismatch handling; no transmission.
   \item \textbf{Session supervision:} supported Winlink client adapter, separate authorization, watchdog, timeouts, abort and recovery.
-  \item \textbf{Modem interoperability:} levels 1--3 pilot acquisition is implemented.
-        Receive evidence includes one live KiwiSDR frame and three published off-air
-        frames. Remaining gates include measured live frame recovery, production DATA
-        sequencing and recovery, native audio/PTT, and bidirectional testing with
-        unmodified VARA and a named Winlink client.
+  \item \textbf{Modem interoperability:} radio-free stock VARA transfers
+        have passed at BW500, BW2300, and BW2750. Mixed Winlink Express
+        and Pat peer-to-peer transfers have verified attachment delivery
+        in both directions. At BW500, two Winlink Express peers also
+        verified PRBS9 attachment delivery with each modem as caller.
+        Repeatability and station qualification are
+        tracked in Table~\ref{tab:modem-evidence-gates}.
   \item \textbf{Adaptive operation:} learn from historical outcomes and enable only bounded automation that has passed station-specific review.
 \end{enumerate}
 
@@ -1312,6 +1318,8 @@ emergency stop. This architecture offers a path to autonomous communications
 only after each adapter, control path, and operating limit has been validated.
 
 \appendix
+\input{modem-wire-example}
+
 \section{Extended propagation model evidence}\label{app:model-evidence}
 This appendix records model-comparison evidence that informs the
 calibration limits discussed in the main text. Findings are specific

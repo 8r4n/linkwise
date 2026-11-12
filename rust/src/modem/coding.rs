@@ -27,6 +27,49 @@ impl Random24 {
     }
 }
 
+pub(super) fn encode_frame<const BYTES: usize, const CELLS: usize>(
+    frame: &[u8; BYTES],
+    channel: &[usize],
+    turbo: &[usize],
+) -> Option<[u8; CELLS]> {
+    let (body, checksum) = frame.split_at(BYTES - 2);
+    if crc(body).to_be_bytes() != checksum {
+        return None;
+    }
+    let mut information: Vec<_> = frame
+        .iter()
+        .flat_map(|byte| (0..8).rev().map(move |shift| (byte >> shift) & 1))
+        .collect();
+    information.resize(turbo.len(), 0);
+    whiten(&mut information);
+    let coded = encode(&information, turbo, CELLS == 3 * turbo.len() + 12);
+    Some(std::array::from_fn(|position| coded[channel[position]]))
+}
+
+pub(super) fn decode_frame<const BYTES: usize, const CELLS: usize>(
+    cells: &[f64; CELLS],
+    channel: &[usize],
+    turbo: &[usize],
+) -> Option<[u8; BYTES]> {
+    if cells.iter().any(|cell| !cell.is_finite()) {
+        return None;
+    }
+    let mut coded = [0.0; CELLS];
+    for (position, &cell) in channel.iter().zip(cells) {
+        coded[*position] = cell;
+    }
+    decode(&coded, turbo, CELLS == 3 * turbo.len() + 12, |bits| {
+        let mut information = bits.to_vec();
+        whiten(&mut information);
+        let mut frame = [0; BYTES];
+        for (byte, bits) in frame.iter_mut().zip(information.as_chunks::<8>().0) {
+            *byte = bits.iter().fold(0, |value, bit| (value << 1) | bit);
+        }
+        let (body, checksum) = frame.split_at(BYTES - 2);
+        (crc(body).to_be_bytes() == checksum).then_some(frame)
+    })
+}
+
 pub(super) fn crc(bytes: &[u8]) -> u16 {
     let mut register = 0xffff_u16;
     for &byte in bytes {

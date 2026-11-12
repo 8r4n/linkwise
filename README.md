@@ -10,6 +10,16 @@ VARA HF is the interoperability target. Linkwise is a separate implementation:
 it is not a redistribution of VARA software, decompiled source, or proprietary
 assets.
 
+## Install the modem preview
+
+Follow the installation guide for
+[macOS](docs/install/macos.md), [Windows](docs/install/windows.md),
+[Ubuntu](docs/install/ubuntu.md), or [Fedora](docs/install/fedora.md).
+Each installer includes the station setup guide. The preview supports
+station checks and local simulations. Live Winlink message transfer and
+radio PTT remain under development. See the
+[packaging instructions](packaging/README.md) to build installers.
+
 ## Run the modem demo
 
 ```sh
@@ -139,9 +149,12 @@ Linkwise is in the research and foundation stage.
   sender and host-command/data stream transports are implemented. Level 4 uses an external
   measurement profile. Five
   published reference WAV excerpts decode to the expected payloads. Optional
-  CPAL input capture is available; complete live modem sessions, payload ARQ,
-  and bidirectional stock-VARA interoperability remain unqualified. See
-  [modem implementation status](rust/docs/modem.md).
+  CPAL input capture is available. The radio-free bench has passed mixed
+  stock VARA HF 4.9.1 DATA exchanges at BW500, BW2300, and BW2750 and
+  verified P2P attachment delivery in both mixed Pat and Winlink Express
+  directions. Repeat qualification on one build and physical RF
+  qualification remain open. See the [modem implementation status](rust/docs/modem.md)
+  and [bench results](docs/testing/vara-interoperability.md).
 - Compilation does not constitute an interoperability claim.
 
 The authoritative research record is
@@ -283,6 +296,11 @@ aarch64-unknown-linux-gnu  x86_64-unknown-linux-gnu
 
 Cross-target compilation is necessary but does not replace native execution,
 audio-device validation, PTT testing, or reference interoperability tests.
+
+## Product test environments
+
+Use the [UTM test environment guide](docs/testing/utm-test-environments.md)
+to provision Windows, Ubuntu, and Fedora ARM64 guests on Apple silicon.
 
 ## Containerized radio-control services
 

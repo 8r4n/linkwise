@@ -1,7 +1,117 @@
 use linkwise::modem::{
+    bw500::{self, Frame, Level},
     bw500_waveform::Waveform,
+    data,
     setup::{LinkSetup, Profile},
 };
+
+// Emit bit 0, shift right, insert the parity of the taps, and pack MSB-first.
+fn packed_prbs(degree: u32, taps: u32, seed: u32, bytes: usize) -> Vec<u8> {
+    let mut state = seed;
+    (0..bytes)
+        .map(|_| {
+            let mut byte = 0;
+            for _ in 0..8 {
+                byte = (byte << 1) | (state & 1) as u8;
+                let feedback = (state & taps).count_ones() & 1;
+                state = (state >> 1) | (feedback << (degree - 1));
+            }
+            byte
+        })
+        .collect()
+}
+
+fn demo_prbs9(bytes: usize) -> Vec<u8> {
+    // Same polynomial and initial phase as the Linkwise Winlink demo.
+    packed_prbs(9, 0b011010001, 0x1ff, bytes)
+}
+
+#[test]
+fn packed_prbs9_matches_the_winlink_demo_attachment() {
+    // One 511-bit period followed by the first bit to fill the last byte.
+    let actual: String = demo_prbs9(64)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    assert_eq!(
+        actual,
+        concat!(
+            "ff94c59b819974a3c6a968def9f117149b3cd7d8216d348c950248741e8805ea7",
+            "564155cef225fddcb185099c9ed6a2bc3431dbaecadf836c4e11cc071f4fd61",
+        )
+    );
+}
+
+#[test]
+fn bw500_data_patterns_survive_attenuation_and_a_fixed_echo() {
+    const PREFIX: usize = 3217;
+    const ECHO_DELAY: usize = 48; // 1 ms at the modem's 48 kHz sample rate.
+    for (level, size) in [(Level::One, 9), (Level::Two, 22), (Level::Three, 34)] {
+        let patterns = [
+            ("PRBS9", demo_prbs9(size)),
+            // x^15 + x^14 + 1 in the right-shifting convention above.
+            ("PRBS15", packed_prbs(15, (1 << 14) | 1, 0x7fff, size)),
+            ("dotting", vec![0xaa; size]),
+            ("zeros", vec![0; size]),
+            ("ones", vec![0xff; size]),
+        ];
+        let frames: Vec<_> = patterns
+            .iter()
+            .map(|(_, payload)| Frame {
+                payload: payload.clone(),
+                control: 0x99,
+            })
+            .collect();
+        let burst = bw500::synthesize(level, &frames).unwrap();
+        let mut audio = vec![0.0; PREFIX + burst.len() + ECHO_DELAY];
+        for (i, sample) in burst.into_iter().enumerate() {
+            audio[PREFIX + i] += 0.5 * sample;
+            audio[PREFIX + i + ECHO_DELAY] += 0.05 * sample;
+        }
+        let received = bw500::decode_burst(&audio, PREFIX - 97..audio.len());
+        assert_eq!(received.len(), patterns.len(), "{level:?}");
+        for (received, ((pattern, _), expected)) in received.iter().zip(patterns.iter().zip(frames))
+        {
+            assert_eq!(received.level, level, "{pattern}");
+            assert_eq!(received.frame, expected, "{level:?} {pattern}");
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires the verified external level-4 measurement profile"]
+fn demo_prbs9_round_trips_through_bw500_full_and_closing_data_audio() {
+    let path = std::env::var("LINKWISE_BW500_PROFILE").expect("set LINKWISE_BW500_PROFILE");
+    let waveform = Waveform::from_json(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let payload = demo_prbs9(64);
+    let mut received = Vec::new();
+    let (full, closing) = payload.split_at(43);
+    let frames = [
+        (data::full(4, full, 0x99).unwrap(), None),
+        (data::short(4, closing, "W9SSJ", 4).unwrap(), Some(4)),
+    ];
+    for (frame, next_level) in frames {
+        let frame = frame.try_into().unwrap();
+        let mut audio = vec![0.0; 1603];
+        audio.extend(
+            waveform
+                .synthesize(&frame)
+                .unwrap()
+                .into_iter()
+                .map(|s| s * 0.35),
+        );
+        let end = audio.len();
+        audio.extend([0.0; 960]);
+        let decoded = waveform
+            .decode(&audio, 5920..end)
+            .expect("level-4 DATA decode");
+        assert_eq!(decoded.frame, frame);
+        let decoded = data::decode(4, &decoded.frame, "W9SSJ").unwrap();
+        assert_eq!(decoded.next_receive_level, next_level);
+        received.extend(decoded.payload);
+    }
+    assert_eq!(received, payload);
+}
 
 #[test]
 #[ignore = "requires the verified external level-4 measurement profile"]

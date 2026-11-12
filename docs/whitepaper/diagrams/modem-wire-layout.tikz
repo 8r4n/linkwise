@@ -1,0 +1,54 @@
+\begin{tikzpicture}[x=0.44cm,y=0.75cm,font=\small,
+  field/.style={draw=ovnavy,thin},
+  covered/.style={ovblue,decorate,decoration={brace,mirror,amplitude=4pt}}]
+  \node[anchor=west,font=\bfseries] at (0,11.5) {Decoded BW500 frame bytes};
+  \draw[ovgray] (0,10.8) -- (46,10.8);
+  \foreach \offset in {0,10,20,30,40,46}{
+    \draw[ovgray] (\offset,10.8) -- ++(0,0.13)
+      node[above,font=\scriptsize] {\offset};
+    \draw[ovgray!23] (\offset,10.8) -- (\offset,4.9);
+  }
+  \node[anchor=east,font=\scriptsize] at (46,11.5) {Zero-based byte boundaries};
+
+  \node[anchor=west,font=\bfseries\small] at (0,10.25) {Level-4 setup \quad 46 bytes};
+  \foreach \from/\to/\shade/\name in {
+    0/10/ovteal!18/{Identity header},
+    10/42/ovpale/{Zero fill},
+    42/44/ovgold!65/{},
+    44/46/ovblue!25/{}} {
+    \draw[field,fill=\shade] (\from,9) rectangle (\to,9.8);
+    \node at ({(\from+\to)/2},9.4) {\name};
+  }
+  \draw[covered] (0,8.9) -- (44,8.9)
+    node[midway,below=5pt,font=\scriptsize] {CRC covers bytes 0--43};
+  \node[anchor=east,font=\scriptsize] at (46,8.25)
+    {\texttt{04 82} at 42--43 \quad CRC \texttt{1d ee} at 44--45};
+
+  \node[anchor=west,font=\bfseries\small] at (0,7.8) {Full level-4 DATA \quad 46 bytes};
+  \draw[field,fill=ovteal!18] (0,6.55) rectangle (43,7.35)
+    node[midway] {43 payload bytes};
+  \draw[field,fill=ovgold!65] (43,6.55) rectangle (44,7.35);
+  \draw[field,fill=ovblue!25] (44,6.55) rectangle (46,7.35);
+  \draw[covered] (0,6.45) -- (44,6.45)
+    node[midway,below=5pt,font=\scriptsize] {CRC covers bytes 0--43};
+  \node[anchor=east,font=\scriptsize] at (46,5.8)
+    {Frame 1 control \texttt{95} at 43 \quad CRC \texttt{cf 4d} at 44--45};
+
+  \node[anchor=west,font=\bfseries\small] at (0,5.35) {Closing level-3 DATA \quad 37 bytes};
+  \draw[field,fill=ovteal!18] (0,4.1) rectangle (28,4.9)
+    node[midway] {28 payload bytes \quad \texttt{ac--c7}};
+  \foreach \from/\to/\shade in {28/30/ovgold!65,30/33/ovpale,33/35/ovgold!65,35/37/ovblue!25}
+    \draw[field,fill=\shade] (\from,4.1) rectangle (\to,4.9);
+  \draw[covered] (0,4.0) -- (35,4.0)
+    node[midway,below=5pt,font=\scriptsize] {CRC covers bytes 0--34};
+  \node[anchor=west,font=\bfseries\small] at (4,2.8) {Closing trailer and CRC expanded};
+  \foreach \offset/\value/\shade [count=\i from 0] in {
+    28/14/ovgold!65,29/f6/ovgold!65,30/00/ovpale,31/00/ovpale,
+    32/00/ovpale,33/04/ovgold!65,34/82/ovgold!65,35/f0/ovblue!25,36/fe/ovblue!25} {
+    \draw[field,fill=\shade] ({4+\i*4.2},1.15) rectangle ++(4.2,0.85);
+    \node[font=\ttfamily] at ({6.1+\i*4.2},1.58) {\value};
+    \node[font=\scriptsize] at ({6.1+\i*4.2},2.22) {\offset};
+  }
+  \foreach \x/\name in {6.1/Marker,10.3/Caller key,18.7/Zero fill,27.1/Next level,31.3/Control,37.6/CRC}
+    \node[font=\scriptsize] at (\x,0.76) {\name};
+\end{tikzpicture}
