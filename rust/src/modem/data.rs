@@ -51,7 +51,7 @@ fn short_body(
     caller: &str,
     next_receive_level: u8,
 ) -> Option<Vec<u8>> {
-    let delimiter_only = size == 44 && payload.len() == 41;
+    let delimiter_only = matches!((size, payload.len()), (35, 32) | (44, 41));
     let unpadded = size == 44 && payload.len() == 42;
     if (payload.len() > size - 4 && !delimiter_only && !unpadded)
         || !(1..=4).contains(&next_receive_level)
@@ -228,9 +228,14 @@ fn decode_body(body: &[u8], field: u8, caller: &str) -> Option<Frame> {
     });
     let end = match endings.next() {
         Some((end, _)) => end,
-        // Stock level 4 uses the final byte before the rate as a
-        // delimiter when all 41 payload bytes are occupied.
-        None if field == 0x82 && payload.len() == 42 && payload.last() == Some(&0x14) => 41,
+        // Stock uses a delimiter without the callsign key when the
+        // closing payload leaves only one byte before the rate.
+        None if field == 0x82
+            && matches!(payload.len(), 33 | 42)
+            && payload.last() == Some(&0x14) =>
+        {
+            payload.len() - 1
+        }
         None => return None,
     };
     if endings.next().is_some() {
@@ -272,6 +277,21 @@ impl TransmitPlan {
                 closing_level: 4,
             });
         }
+        let blocks = length / FULL_LEVEL4_BYTES;
+        let remainder = length % FULL_LEVEL4_BYTES;
+        // Keep level 4 when the closing payload is too large for
+        // the padded level-3 form.
+        if (32..=42).contains(&remainder) && matches!(blocks, 2 | 3) {
+            return Some(Self {
+                full_fields: if blocks == 2 {
+                    &[0x8d, 0x89]
+                } else {
+                    &[0x91, 0x8d, 0x89]
+                },
+                full_level: 4,
+                closing_level: 4,
+            });
+        }
         if length == MAX_PLANNED_BYTES {
             return Some(Self {
                 full_fields: &[0x95, 0x91, 0x8d, 0x89],
@@ -279,8 +299,6 @@ impl TransmitPlan {
                 closing_level: 4,
             });
         }
-        let blocks = length / FULL_LEVEL4_BYTES;
-        let remainder = length % FULL_LEVEL4_BYTES;
         if remainder > 31 {
             return None;
         }
@@ -310,12 +328,12 @@ impl TransmitPlan {
     /// repeated first field and final full frame that retains level 3.
     pub fn level3_retry(length: usize) -> Option<Self> {
         let full_fields: &'static [u8] = match length {
-            1..=31 => &[],
-            34..=65 => &[0x89],
-            68..=99 => &[0x8d, 0x89],
-            102..=133 => &[0x91, 0x8d, 0x89],
-            136..=167 => &[0x95, 0x91, 0x8d, 0x89],
-            170..=201 => &[0x99, 0x99, 0x95, 0x91, 0x89],
+            1..=32 => &[],
+            34..=66 => &[0x89],
+            68..=100 => &[0x8d, 0x89],
+            102..=134 => &[0x91, 0x8d, 0x89],
+            136..=168 => &[0x95, 0x91, 0x8d, 0x89],
+            170..=202 => &[0x99, 0x99, 0x95, 0x91, 0x89],
             _ => return None,
         };
         Some(Self {
@@ -513,6 +531,68 @@ mod tests {
         assert_eq!(decoded.payload, b"FF\r");
         assert_eq!(decoded.next_receive_level, Some(4));
         assert!(decode_received(4, &frame, "W1A").is_none());
+    }
+
+    #[test]
+    fn accepts_stock_bw500_level3_delimiter_only_close() {
+        let input: Vec<u8> = (0..32).collect();
+        let mut payload = input.clone();
+        payload.extend([0x14, 4]);
+        let frame = bw500::Frame {
+            payload,
+            control: 0x82,
+        };
+        let decoded = decode_received(3, &frame, "W6WW").unwrap();
+        assert_eq!(decoded.payload, input);
+        assert_eq!(decoded.next_receive_level, Some(4));
+        let mut expected_wire = frame.payload;
+        expected_wire.push(frame.control);
+        assert_eq!(
+            short(3, &input, "W6WW", 4).unwrap(),
+            checksum(expected_wire)
+        );
+        let bytes: Vec<u8> = (0..100).collect();
+        let plan = TransmitPlan::level3_retry(bytes.len()).unwrap();
+        assert_eq!(plan.full_frames(), 2);
+        let (level, closing) = plan.encode(2, &bytes, "W6WW").unwrap();
+        assert_eq!(
+            decode(level, &closing, "W6WW").unwrap().payload,
+            bytes[68..]
+        );
+    }
+
+    #[test]
+    fn uses_stock_level4_close_for_the_164_byte_delivery() {
+        let input: Vec<u8> = (0..164).collect();
+        let (length, plan) = TransmitPlan::prefix(input.len()).unwrap();
+        assert_eq!(length, input.len());
+        let mut received = Vec::new();
+        for (index, field) in [0x91, 0x8d, 0x89, 0x82].into_iter().enumerate() {
+            let (level, wire) = plan.encode(index, &input, "KN6MQS").unwrap();
+            assert_eq!(level, 4);
+            let frame = decode(level, &wire, "KN6MQS").unwrap();
+            assert_eq!(frame.field, field);
+            assert_eq!(frame.next_receive_level, (index == 3).then_some(4));
+            received.extend(frame.payload);
+        }
+        assert_eq!(received, input);
+    }
+
+    #[test]
+    fn returns_to_level4_after_stock_acknowledges_a_34_byte_retry() {
+        let retry = TransmitPlan::level3_retry(160).unwrap();
+        let (acknowledged, continuation) = retry.level4_retry_continuation(0, 160).unwrap();
+        assert_eq!(acknowledged, 34);
+        let input: Vec<u8> = (0..126).collect();
+        let mut received = Vec::new();
+        for (index, field) in [0x8d, 0x89, 0x82].into_iter().enumerate() {
+            let (level, wire) = continuation.encode(index, &input, "KN6MQS").unwrap();
+            assert_eq!(level, 4);
+            let frame = decode(level, &wire, "KN6MQS").unwrap();
+            assert_eq!(frame.field, field);
+            received.extend(frame.payload);
+        }
+        assert_eq!(received, input);
     }
 
     #[test]

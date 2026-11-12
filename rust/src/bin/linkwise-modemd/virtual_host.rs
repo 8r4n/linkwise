@@ -33,6 +33,7 @@ const MAX_AUDIO: usize = 48_000 * 6;
 const MAX_PAYLOAD: usize = 4096;
 const MAX_RECEIVE: usize = 4096;
 const HOST_BATCH_WINDOW: Duration = Duration::from_millis(100);
+const FIRST_RESPONDER_POLL_WAIT: Duration = Duration::from_millis(1600);
 
 enum Request {
     Command(Command, oneshot::Sender<Reply>),
@@ -165,6 +166,7 @@ struct Engine<'a> {
     returned_turn: bool,
     caller_requested_turn: bool,
     initial_poll: bool,
+    first_responder_poll: bool,
     closed_at_level3: bool,
     rejected_over: bool,
     receive_bytes: Vec<u8>,
@@ -195,6 +197,7 @@ impl Engine<'_> {
         self.returned_turn = false;
         self.caller_requested_turn = false;
         self.initial_poll = false;
+        self.first_responder_poll = false;
         self.closed_at_level3 = false;
         self.rejected_over = false;
         self.receive_bytes.clear();
@@ -236,6 +239,11 @@ impl Engine<'_> {
         self.notify("DISCONNECTED\r".into())
     }
 
+    async fn fail_delivery(&mut self, cable: &mut Cable, reason: &str) -> io::Result<()> {
+        eprintln!("Virtual BW{} delivery failed: {reason}", self.mode.width());
+        self.disconnect(cable).await
+    }
+
     fn transition(&mut self, phase: Phase) {
         self.phase = phase;
         self.deadline = Some(Instant::now() + PHASE_TIMEOUT);
@@ -269,6 +277,7 @@ impl Engine<'_> {
                         self.transition(Phase::ConfirmAck);
                     } else {
                         if self.mode.bandwidth() == Hz500 {
+                            self.first_responder_poll = true;
                             self.phase = Phase::ResponderConfirm;
                             self.deadline = Some(Instant::now() + HOST_BATCH_WINDOW);
                         } else {
@@ -365,8 +374,18 @@ impl Engine<'_> {
             | Phase::Received => {
                 self.initial_poll = self.phase == Phase::CallerReady;
                 self.phase = Phase::Collecting;
-                self.deadline = Some(Instant::now() + HOST_BATCH_WINDOW);
+                // Leave one stock post-confirmation poll time to finish
+                // before keying an unsolicited responder turn request.
+                self.deadline = Some(
+                    Instant::now()
+                        + if self.first_responder_poll {
+                            FIRST_RESPONDER_POLL_WAIT
+                        } else {
+                            HOST_BATCH_WINDOW
+                        },
+                );
             }
+            Phase::Collecting if self.first_responder_poll => {}
             Phase::Collecting => self.deadline = Some(Instant::now() + HOST_BATCH_WINDOW),
             Phase::ResponderConfirm
             | Phase::PollAck
@@ -589,14 +608,16 @@ impl Engine<'_> {
         }
         if !self.pending.is_empty() {
             // Do not retire bytes or repeat DATA on a missing answer.
-            return Err(io::Error::new(
-                io::ErrorKind::TimedOut,
-                if self.phase == Phase::TurnGrant {
-                    "peer did not grant the transmit turn"
-                } else {
-                    "virtual DATA delivery was not acknowledged"
-                },
-            ));
+            return self
+                .fail_delivery(
+                    cable,
+                    if self.phase == Phase::TurnGrant {
+                        "peer did not grant the transmit turn"
+                    } else {
+                        "virtual DATA delivery was not acknowledged"
+                    },
+                )
+                .await;
         }
         self.reset()?;
         self.notify("DISCONNECTED\r".into())
@@ -681,6 +702,29 @@ impl Engine<'_> {
                         .await?;
                     self.transition(Phase::TurnGrant);
                 }
+                Phase::PollAck if bandwidth == Hz500 => {
+                    let Some(reply) = self.receive_data(samples, start..range.end as usize)? else {
+                        continue;
+                    };
+                    cable.write(&reply).await?;
+                }
+                Phase::Responder | Phase::Collecting | Phase::TurnGrant
+                    if !local_caller
+                        && (self.phase == Phase::Responder || bandwidth == Hz500)
+                        && (matches(Message::Bw500KeepaliveA, &link.called)
+                            || matches(Message::Bw500KeepaliveB, &link.called)) =>
+                {
+                    // Stock grants the responder's first queued delivery with
+                    // its post-confirmation poll.
+                    if std::mem::take(&mut self.first_responder_poll) && !self.pending.is_empty() {
+                        self.plan_delivery()?;
+                        self.send_over(cable).await?;
+                        return Ok(());
+                    }
+                    cable
+                        .send(control::poll_ack(bandwidth, &link.caller))
+                        .await?;
+                }
                 Phase::TurnGrant => {
                     let responder_requested =
                         local_caller && matches(Message::Bw500ResponderTurnRequest, &link.caller);
@@ -691,6 +735,7 @@ impl Engine<'_> {
                     // Give the responder the first opportunity when requests cross.
                     // A stock caller can repeat its request instead of granting it.
                     if responder_requested || caller_requested && self.caller_requested_turn {
+                        self.first_responder_poll = false;
                         cable
                             .send(control::turn_grant(bandwidth, &link.called, !local_caller))
                             .await?;
@@ -858,10 +903,12 @@ impl Engine<'_> {
                             self.send_over(cable).await?;
                             return Ok(());
                         }
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "peer rejected DATA; no qualified retry layout remains",
-                        ));
+                        return self
+                            .fail_delivery(
+                                cable,
+                                "peer rejected DATA; no qualified retry layout remains",
+                            )
+                            .await;
                     }
                     if self.send_index == plan.full_frames() {
                         if !ack() {
@@ -959,14 +1006,6 @@ impl Engine<'_> {
                         .send(control::synthesize_connected_ack(bandwidth, &link.caller))
                         .await?;
                 }
-                Phase::Responder
-                    if matches(Message::Bw500KeepaliveA, &link.called)
-                        || matches(Message::Bw500KeepaliveB, &link.called) =>
-                {
-                    cable
-                        .send(control::poll_ack(bandwidth, &link.caller))
-                        .await?;
-                }
                 Phase::Received | Phase::Collecting
                     if !self.returned_turn
                         && self.last_received.is_some()
@@ -992,7 +1031,10 @@ impl Engine<'_> {
                 | Phase::Responder
                 | Phase::Sent
                 | Phase::TurnReleased
-                | Phase::Received => {
+                | Phase::Received
+                | Phase::Collecting
+                    if self.phase != Phase::Collecting || self.first_responder_poll =>
+                {
                     let request = if local_caller {
                         Message::Bw500ResponderTurnRequest
                     } else {
@@ -1010,6 +1052,7 @@ impl Engine<'_> {
                         }
                         continue;
                     }
+                    self.first_responder_poll = false;
                     let grant = control::turn_grant(bandwidth, &link.called, !local_caller);
                     cable.send(grant).await?;
                     self.receive_bytes.clear();
@@ -1104,6 +1147,7 @@ impl Engine<'_> {
         Ok(())
     }
     async fn send_over(&mut self, cable: &mut Cable) -> io::Result<()> {
+        self.first_responder_poll = false;
         let link = self
             .session
             .as_ref()
@@ -1286,11 +1330,12 @@ impl Engine<'_> {
         }
         if bandwidth == Hz500
             && self.phase == Phase::Receiving
-            && responder_sends
             && decoded.0 == 3
-            && frame.field == 0x95
             && let Some((4, previous)) = &self.last_received
-            && matches!(previous.control, 0x8d | 0x91)
+            && matches!(
+                (responder_sends, previous.control, frame.field),
+                (true, 0x8d | 0x91, 0x95) | (_, 0x81, 0x81)
+            )
             && previous.payload.starts_with(&frame.payload)
         {
             // Stock can miss the same-rate ACK and replace this frame with
@@ -1509,6 +1554,7 @@ pub async fn serve(args: &[String], wide: bool) -> Result<(), Box<dyn std::error
             returned_turn: false,
             caller_requested_turn: false,
             initial_poll: false,
+            first_responder_poll: false,
             closed_at_level3: false,
             rejected_over: false,
             receive_bytes: Vec::new(),

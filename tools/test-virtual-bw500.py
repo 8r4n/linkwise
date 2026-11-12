@@ -6,6 +6,7 @@ import re
 import socket
 import struct
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -77,16 +78,68 @@ def attach(stack, modem, profile, callsign, bandwidth):
     return connect_station(stack, start_station(stack, modem, profile, callsign, bandwidth))
 
 
-def establish_bw500(caller, peer, peer_call="W1AW"):
+def establish_bw500(caller, peer, peer_call="W1AW", caller_call="KN6MQS"):
     caller_cmd, _, caller_audio = caller
     peer_cmd, _, peer_audio = peer
     peer_cmd.sendall(b"LISTEN ON\r")
     assert read_line(peer_cmd) == b"OK\r"
-    caller_cmd.sendall(f"CONNECT KN6MQS {peer_call}\r".encode())
+    caller_cmd.sendall(f"CONNECT {caller_call} {peer_call}\r".encode())
     assert read_line(caller_cmd) == b"OK\r"
     for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 3:
         destination.sendall(waveform(source))
-    assert read_line(caller_cmd) == read_line(peer_cmd) == f"CONNECTED KN6MQS {peer_call} 500\r".encode()
+    assert read_line(caller_cmd) == read_line(peer_cmd) == f"CONNECTED {caller_call} {peer_call} 500\r".encode()
+
+
+def responder_sends_on_first_poll(modem, profile, stock_poll=None):
+    with contextlib.ExitStack() as stack:
+        caller = attach(stack, modem, profile, "W6WW", 500)
+        responder = attach(stack, modem, profile, "KN6MQS", 500)
+        establish_bw500(caller, responder, "KN6MQS", "W6WW")
+        responder[1].sendall(b"Responder greeting")
+        assert read_line(responder[0]) == b"BUFFER 18\r"
+        time.sleep(0.2)  # The first poll can arrive after the normal batching window.
+        caller[1].sendall(b"Caller greeting")
+        assert read_line(caller[0]) == b"BUFFER 15\r"
+        poll = waveform(caller[2])
+        if stock_poll is not None:
+            samples = stock_poll.read_bytes()
+            poll = struct.pack(">I", len(samples) // 4) + samples
+        responder[2].sendall(poll)
+        caller[2].sendall(waveform(responder[2]))
+        assert read_exact(caller[1], 18) == b"Responder greeting"
+        responder[2].sendall(waveform(caller[2]))
+        assert read_line(responder[0]) == b"BUFFER 0\r"
+    print("BW500 responder delivered queued DATA in response to the first caller poll.")
+
+
+def replay_stock_rate_down(modem, profile, expected_path, captures, stock_caller=False):
+    with contextlib.ExitStack() as stack:
+        caller_call, peer_call = ("W6WW", "KN6MQS") if stock_caller else ("KN6MQS", "W6WW")
+        caller = attach(stack, modem, profile, caller_call, 500)
+        responder = attach(stack, modem, profile, peer_call, 500)
+        establish_bw500(caller, responder, peer_call, caller_call)
+        sender, receiver = (caller, responder) if stock_caller else (responder, caller)
+        sender[1].sendall(b"turn")
+        assert read_line(sender[0]) == b"BUFFER 4\r"
+        if stock_caller:
+            receiver[2].sendall(waveform(sender[2]))
+            sender[2].sendall(waveform(receiver[2]))
+        receiver[2].sendall(waveform(sender[2]))
+        waveform(receiver[2])  # Grant to the stock sender.
+        for capture in captures:
+            samples = capture.read_bytes()
+            receiver[2].sendall(struct.pack(">I", len(samples) // 4) + samples)
+            waveform(receiver[2])
+        expected = expected_path.read_bytes()
+        assert read_exact(receiver[1], len(expected)) == expected
+        receiver[1].settimeout(0.2)
+        try:
+            extra = receiver[1].recv(1)
+        except socket.timeout:
+            pass
+        else:
+            raise AssertionError(f"unexpected bytes after stock rate-down replay: {extra!r}")
+    print("BW500 stock rate-down replay delivered the original stream without duplication.")
 
 
 def reconnect_after_channel_loss(modem, profile):
@@ -521,11 +574,14 @@ def recover_intermediate_ack(modem, profile, stock_over_nak):
         data = waveform(caller_audio)
         assert len(waveform(caller_audio)) < len(data)
         assert len(waveform(caller_audio)) < len(data)
-        assert caller_audio.recv(1) == b"", "silence must not trigger DATA retransmission"
-        notices = bytearray()
-        while chunk := caller_cmd.recv(4096):
-            notices.extend(chunk)
-        assert b"BUFFER 0\r" not in notices, "silence must leave delivery unconfirmed"
+        disconnect = waveform(caller_audio)
+        assert len(disconnect) < len(data), "silence must not trigger DATA retransmission"
+        assert read_line(caller_cmd) == b"DISCONNECTED\r", "silence must leave delivery unconfirmed"
+        peer_audio.sendall(disconnect)
+        assert read_line(peer_cmd) == b"DISCONNECTED\r"
+        establish_bw500(
+            (caller_cmd, caller_data, caller_audio), (peer_cmd, peer_data, peer_audio)
+        )
     print("Consecutive BW500 deliveries recovered an intermediate ACK without duplicate bytes.")
 
 
@@ -546,6 +602,12 @@ if __name__ == "__main__":
     parser.add_argument("--stock-crossed-turn", nargs=4, type=Path, metavar="F32",
                         help="replay the stock caller's request, idle, handback, and DATA rejection")
     parser.add_argument("--stock-wide-nak", type=Path, metavar="F32", help="replay W1A's BW2750 negative acknowledgment")
+    parser.add_argument("--stock-caller-poll", type=Path, metavar="F32",
+                        help="replay W6WW's BW500 post-connect poll to KN6MQS")
+    parser.add_argument("--stock-responder-rate-down", nargs="+", type=Path, metavar="FILE",
+                        help="expected host bytes followed by captured stock responder DATA bursts")
+    parser.add_argument("--stock-caller-rate-down", nargs="+", type=Path, metavar="FILE",
+                        help="expected host bytes followed by captured stock caller DATA bursts")
     args = parser.parse_args()
     if args.stock_short_turn_request and not args.stock_turn_release:
         parser.error("--stock-short-turn-request requires --stock-turn-release")
@@ -555,6 +617,7 @@ if __name__ == "__main__":
     )
     exercise(args.modem, args.profile, bytes(range(200)), 4, crossed_turns=True)
     exercise(args.modem, args.profile, bytes(range(84)), 1)
+    exercise(args.modem, args.profile, bytes(range(164)), 3)
     exercise(args.modem, args.profile, bytes(4096), 4, replenish=True)
     exercise(args.modem, args.profile, bytes(range(200)), 5, corrupt_first=True)
     exercise(
@@ -565,6 +628,14 @@ if __name__ == "__main__":
     recover_intermediate_ack(args.modem, args.profile, args.stock_over_nak)
     reconnect_after_channel_loss(args.modem, args.profile)
     disconnect_after_drain(args.modem, args.profile)
+    responder_sends_on_first_poll(args.modem, args.profile, args.stock_caller_poll)
+    for stock_caller, fixture in ((False, args.stock_responder_rate_down),
+                                  (True, args.stock_caller_rate_down)):
+        if fixture:
+            expected, *captures = fixture
+            if not captures:
+                parser.error("a stock rate-down replay requires at least one captured DATA burst")
+            replay_stock_rate_down(args.modem, args.profile, expected, captures, stock_caller)
     if args.wide:
         for bandwidth in (2300, 2750):
             exercise(args.modem, args.profile, bytes(range(86)), 0, bandwidth=bandwidth, query_after_loss=True)
