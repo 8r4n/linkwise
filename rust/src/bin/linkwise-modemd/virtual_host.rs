@@ -349,7 +349,9 @@ impl Engine<'_> {
     }
 
     fn host_data(&mut self, bytes: &[u8]) -> io::Result<()> {
-        if bytes.is_empty() || bytes.len() > MAX_PAYLOAD - self.pending.len() {
+        // The active frame plan still indexes the acknowledged prefix.
+        // Host writes can refill the space advertised by BUFFER immediately.
+        if bytes.is_empty() || bytes.len() > MAX_PAYLOAD - self.unacknowledged_bytes() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "virtual modem transmit buffer is full",
@@ -386,15 +388,18 @@ impl Engine<'_> {
         self.report_buffer()
     }
 
-    fn report_buffer(&self) -> io::Result<()> {
+    fn unacknowledged_bytes(&self) -> usize {
         let acknowledged = self
             .plan
             .as_ref()
             .map_or(self.send_index * self.wide_block_bytes(), |plan| {
                 self.send_index * plan.full_payload_bytes()
             });
-        let remaining = self.pending.len() - acknowledged;
-        self.notify(format!("BUFFER {remaining}\r"))
+        self.pending.len() - acknowledged
+    }
+
+    fn report_buffer(&self) -> io::Result<()> {
+        self.notify(format!("BUFFER {}\r", self.unacknowledged_bytes()))
     }
 
     fn plan_delivery(&mut self) -> io::Result<()> {
@@ -942,10 +947,13 @@ impl Engine<'_> {
                     }
                 }
                 Phase::Received
-                    if bandwidth == Hz500
-                        && !local_caller
-                        && (matches(Message::Bw500FinalQueryShort, &link.called)
-                            || matches(Message::Bw500FinalQuery, &link.called)) =>
+                    if !local_caller
+                        && self.last_received.is_some()
+                        && (matches(Message::Bw500FinalQuery, &link.called)
+                            || bandwidth == Hz500
+                                && matches(Message::Bw500FinalQueryShort, &link.called)
+                            || bandwidth != Hz500
+                                && matches(Message::Bw500AlternateQuery, &link.called)) =>
                 {
                     cable
                         .send(control::synthesize_connected_ack(bandwidth, &link.caller))
@@ -966,6 +974,8 @@ impl Engine<'_> {
                             || !local_caller && matches(Message::Bw500Drained, &link.called)) =>
                 {
                     self.returned_turn = true;
+                    // A delivery on the returned turn may repeat the same bytes.
+                    self.last_received = None;
                     if self.pending.is_empty() {
                         let reply = if local_caller {
                             own_release.synthesize_on(&link.called, bandwidth)

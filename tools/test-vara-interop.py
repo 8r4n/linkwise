@@ -104,6 +104,7 @@ class Trial:
         self.stock_retry_seen = False
         self.rate_reply_injected = False
         self.phase = "bridge setup"
+        self.tearing_down = False
 
     def log(self, *items):
         with self.log_lock:
@@ -285,14 +286,15 @@ class Trial:
         def run():
             try:
                 target(*args)
-            except (EOFError, OSError):
-                pass
-            except BenchFault as error:
-                self.log("AUDIO FAULT", error)
+            except (BenchFault, EOFError, OSError) as error:
                 with self.changed:
-                    self.transport_fault = error
+                    if self.tearing_down or self.transport_fault is not None:
+                        return
+                    detail = str(error) or type(error).__name__
+                    self.transport_fault = BenchFault(f"audio transport: {detail}")
                     self.closed.add("audio")
                     self.changed.notify_all()
+                self.log("AUDIO FAULT", self.transport_fault)
 
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
@@ -362,7 +364,13 @@ class Trial:
                 workers.append(self.worker(self.receive_host, data, role, False))
             try:
                 self.exchange(channels)
+                with self.changed:
+                    if self.transport_fault is not None:
+                        raise self.transport_fault
+                    self.tearing_down = True
             finally:
+                with self.changed:
+                    self.tearing_down = True
                 for sockets in channels:
                     for stream in sockets:
                         try:
