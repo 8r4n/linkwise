@@ -38,9 +38,9 @@ caption space. Keep text legible; restructure any crowded source. Do not add
 portrait tables or inline diagrams to the publication edition. The title-page
 metadata is prose, rather than a portrait table.
 
-The plan records the exploratory live receive result and the regression
-expectations. The controlled RF campaign still requires a readiness review and
-a scheduled transmitter and receiver window.
+Revision 0.9 records the exploratory RF receive result and separate stock VARA
+bench evidence. It defines a PRBS9-derived BW500 pilot and a station readiness
+gate before the first controlled RF burst. The campaign remains unscheduled.
 
 ## Julian transmitter and candidate map
 
@@ -64,8 +64,9 @@ for environment checks, 30-burst source preparation, local replay, pinned
 KiwiClient setup, bounded capture, conversion and scoring. Hardware transmit
 steps remain explicitly manual until a station-specific procedure is qualified.
 
-- `tools/kiwisdr-bench.py` prepares source WAVs and an exact-frame oracle through
-  the local Rust demo, then verifies those source files with the Rust decoder.
+- `tools/kiwisdr-bench.py` prepares the PRBS9-derived source WAVs and an
+  exact-frame oracle through the local Rust demo, then verifies the exported
+  files with the Rust decoder.
 - `procedures/capture-profile.env.example` supplies the reviewed capture profile;
   `procedures/capture-audio.sh` checks the pinned client and limits capture time.
 - `data/kiwiclient-command-reference.json` records the client source revision and

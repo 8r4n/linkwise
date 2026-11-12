@@ -1,9 +1,9 @@
 # Draft: Linkwise modem testing with the KiwiSDR network
 
 Plan ID: LW-MODEM-KIWI-001  
-Revision: 0.8, 10 November 2026
+Revision: 0.9, 12 November 2026
 
-Status: one live receive frame verified in exploratory monitoring. The controlled campaign with known transmitted payloads remains unscheduled.
+Status: exploratory RF receive evidence and radio-free interoperability evidence are recorded. The controlled campaign with known transmitted payloads remains unscheduled.
 
 Presentation rule: all figures, tables, and diagrams in the LaTeX/PDF edition
 use dedicated landscape pages, scaled within both page dimensions with room for
@@ -33,6 +33,16 @@ Use three distinct evidence labels:
 - **RF observation:** remote recording of a physically transmitted known waveform.
 - **Operational link:** a separate, qualified two-station exchange, not established
   by this plan.
+
+Record the radio-free mixed-peer bench separately from those campaign results.
+On merged main commit `70cf5ed`, BW2300 and BW2750 each passed three consecutive
+stock VARA HF 4.9.1 DATA recovery trials in both tested Linkwise roles, with
+exact bytes, two-ended disconnect, and a same-socket reconnect. Two BW500
+Winlink Express sessions exchanged byte-exact 64-byte PRBS9 attachments, one
+session initiated by each modem. BW500 ACK-loss and mixed Pat repeat
+qualification on the merged build remain open. None of these bench rows enters
+the Kiwi RF denominator. [Wide recovery sign-off](../../docs/testing/vara-interoperability.md)
+and [Winlink PRBS9 evidence](../../docs/media/modem/winlink-prbs9/verified-attachments.json).
 
 ## 2. Current implementation and prerequisites
 
@@ -210,6 +220,16 @@ Each burst must have a unique expected frame identity. Encode a compact test
 sequence in the payload; the manifest holds full experiment metadata so it need
 not fit the smallest frame. Include the exact padding/control bytes in the oracle.
 
+The pilot uses nine ASCII payload bytes before level-dependent padding.
+`K` and a two-digit index identify the burst. The remaining six bytes encode
+30 successive PRBS9 bits as six five-bit Base32 symbols, most-significant bit
+first within each symbol. The right-shifting register starts at `0x1ff`,
+emits bit zero, and inserts the XOR of bits 7, 6, 4, and 0 at bit 8.
+The helper records each burst's starting register state and the waveform seed.
+The block follows a fixed balanced level order, so the manifest can reproduce
+the sequence without a randomized ordering seed. Retain the source hashes
+and calculated schedule with the station playback record.
+
 Begin with one full DATA frame per burst at levels 1–3. Confirm every stimulus
 decodes locally before transmission. Maintain at least two seconds of quiet
 guard between bursts and record background before and after the block. Bound
@@ -223,7 +243,7 @@ the detector's candidate; do not decode an arbitrarily truncated burst.
 | K2: pilot | Interleaved levels 1–3, fixed station power/configuration | 10 bursts per level, up to three simultaneous receivers | Measure one-way recovery against known transmissions |
 | K3: temporal replication | Repeat K2 in distinct contact windows | At least three sessions; record dates and UTC separately | Expose time/path variation without pooling it away |
 | K4: decoder comparison | Identical retained K2/K3 captures replayed through baseline and candidate commits | All valid captures; paired comparison | Isolate software changes from HF variation |
-| K5: diagnostic extension | One variable at a time: bounded offset, power setting, AGC profile, or optional level 4 | Separate predeclared blocks after K0–K2 | Characterize specific failure modes |
+| K5: diagnostic extension | One variable at a time: bounded offset, power setting, AGC profile, BW500 level 4, or wide bandwidth | Separate blocks after K0–K2, with a mode-specific local oracle and verified receiver passband | Characterize specific failure modes |
 
 A complete K2 block contains 30 transmitted bursts and up to 90 receiver/burst
 observations, not 90 independent transmissions. K3 repeats that block across
@@ -260,6 +280,28 @@ transmissions do not experience identical channels.
    Generate the report, archive required artifacts, and retain failures as well
    as successful examples. Publish only material covered by the capture terms.
 
+### Station readiness record before K1
+
+The test lead records the disposition, station operator, capture operator,
+procedure revision, date and UTC window. The station operator confirms the
+as-tested radio, firmware, audio devices and gain, route, antenna or load, mode,
+frequency, and power. Use the station's permitted operating envelope.
+
+Before the first radiated block, rehearse the playback and abort sequence with
+transmit inhibited or into a suitable conducted load. Record the exact source
+hash, local monitor trace, PTT assertion and release, measured turnaround, and
+the response to an operator stop. Record the limit and observed value for
+each timing check. A failed release, unexpected transmission, monitor loss,
+wrong route or frequency, or receiver-window loss stops the block. The operator
+confirms PTT release and restores the station before dispositioning the attempt.
+
+Record each cooperating receiver's agreed slot, time limit, passband, gain
+profile, and retention or publication terms. Recheck access and effective
+settings near the scheduled window. The station operator authorizes the
+bounded K1 burst only after the test lead has recorded K0, station readiness,
+and receiver readiness. Authorize K2 after reviewing K1 capture validity and
+the disposition of any decode miss.
+
 No experiment starts solely because a model predicts an opening. The station
 execution path retains local authority, timing, and stop conditions.
 
@@ -273,6 +315,13 @@ recovery while remaining ineligible for propagation timing measurements.
   and truncated windows make affected intervals decode-ineligible unless complete
   unaffected bursts can be isolated with explicit provenance. Do not interpolate
   missing signal samples and count the result as a valid RF observation.
+- For the offline continuity check, pair a clean local fixture with a copy
+  missing a 50 ms interior block. At 12 kHz this is 600 samples. Preserve
+  original sample indices or packet sequence metadata and the deletion range.
+  Require the continuity check to flag the affected burst before decoding.
+  A wide-mode stock turn-grant capture lost 2,400 samples at 48 kHz and timed
+  out, motivating this control. WAV length and decoder success alone cannot
+  locate an internal gap in a live recording.
 - Receiver unavailable/busy, permission denial, client faults, and inability to
   verify required settings are infrastructure outcomes. A valid continuous
   recording with no recovered signal remains an RF/decode outcome.
@@ -602,7 +651,7 @@ B runs the remaining shell commands and keeps the exported variables.
 | --- | --- | --- | --- |
 | B01 | Terminal A: `rust/target/debug/modem-demo --port 8789` | Binds localhost and prints its URL. Keep running through B03. A port conflict is a stop, not a reason to terminate an unknown process. | Local service only; no radio or Kiwi stream. |
 | B02 | Terminal B: `curl --fail --max-time 10 http://127.0.0.1:8789/api/config --output "$KIWI_RUN_DIR/demo-config.json"` | Exit 0; JSON advertises native levels 1–3. | Retain configuration; inspect available levels. |
-| B03 | `python3 tools/kiwisdr-bench.py prepare --url http://127.0.0.1:8789 --output "$KIWI_RUN_DIR/stimuli"` | Creates 30 mono 48 kHz PCM16 WAVs, `manifest.json`, and `schedule.json`. IDs B001–B030; payloads K00000001–K00000030; L1,L2,L3 repeated ten times; one full frame each. | Each source was byte-verified by Rust before export. No RF emitted. Nonempty output directory is rejected. |
+| B03 | `python3 tools/kiwisdr-bench.py prepare --url http://127.0.0.1:8789 --output "$KIWI_RUN_DIR/stimuli"` | Creates 30 mono 48 kHz PCM16 WAVs, `manifest.json`, and `schedule.json`. IDs B001–B030, payload prefixes K01–K30 followed by six PRBS9-derived symbols. One frame per burst. | Rust verifies the source bytes before export. The schedule records the pattern, ordering, and waveform seed. |
 | B04 | `python3 tools/kiwisdr-bench.py verify --manifest "$KIWI_RUN_DIR/stimuli/manifest.json" --decoder rust/target/debug/linkwise --output "$KIWI_RUN_DIR/local-verification.json"` | Exit 0 and summary `passed: true`, `files: 30`, `verified_frames: 30`. Every WAV hash/header and decoded level/control/payload must match its oracle. | Retain the full per-file decoder report. Any mismatch stops the campaign. |
 
 | Oracle review step | Exact command / action | Expected result | Evidence / disposition |
@@ -647,7 +696,7 @@ profiles for R03 and R05 rather than silently reusing R02's host/gain values.
 | D01 | `cp docs/testing/procedures/capture-profile.env.example "$KIWI_RUN_DIR/capture-profile.env"` | Profile template copied into the new run. | Original template stays unchanged. |
 | D02 | MANUAL: fill the empty profile fields from the approved station/receiver configuration, then run `. "$KIWI_RUN_DIR/capture-profile.env"` | Node, host/port, USB carrier kHz, passband edges Hz, fixed gain and capture duration are explicitly reviewed. K1 duration example is 120 s, subject to the agreed window. | Empty settings must stop capture. Do not guess a transmit frequency. |
 | D03 | `curl --fail --max-time 10 "http://$KIWI_HOST:$KIWI_PORT/status" --output "$KIWI_RUN_DIR/$KIWI_NODE_ID-status.txt"` | Metadata request returns the expected receiver name/coordinates and current status. | A listing, HTTP 200 or spare slot is not owner consent. No audio stream yet. |
-| D04 | MANUAL: review access agreement, station procedure, antenna coordinates, local monitor, complete K0 evidence, and stop/restoration rules. | Readiness disposition recorded before E01. | BLOCKED until the actual playback/PTT procedure and RF configuration are qualified. |
+| D04 | MANUAL: complete the station readiness record in section 6 and review K0, conducted or inhibited rehearsal results, and receiver terms. | Test lead records disposition before E01. Station operator authorizes the bounded first RF burst. | Stop if any required result or receiver window is missing. |
 | D05 | For K2, set `export KIWI_CAPTURE_S="$(python3 -c 'import json,os; print(json.load(open(os.environ["KIWI_RUN_DIR"]+"/stimuli/schedule.json"))["capture_seconds"])')"` | Duration comes from the actual prepared 30-burst schedule and fits the agreed receiver/station window. | This step precedes capture; do not extend a live session silently. |
 
 ### 14.5 E — Capture and execute the scheduled block
@@ -715,6 +764,23 @@ and [atrim filter](https://ffmpeg.org/ffmpeg-filters.html#atrim) documentation.
 This procedure must be qualified on known audio before RF evidence is scored;
 source-reviewed commands are not a completed conversion test.
 
+For K0, use the approved FFmpeg build to derive a mono PCM16 12 kHz copy of
+the clean B001 source with `-af aresample=12000:resampler=soxr:precision=28`.
+Use F03–F07 on the entire clean copy, with the sample range starting at zero.
+Require the exact expected B001 frame and the documented 12-to-48 kHz sample
+mapping. Repeat with the same input and compare the derived WAV hashes and
+frame results. Preserve both sample counts and the FFmpeg build configuration.
+
+For the 50 ms control, represent the 12 kHz source as 600-sample numbered
+blocks with their original offsets. Remove one block fully inside the known
+burst and retain the original block indices in the fixture sidecar. Run the
+same continuity check on the clean and gapped sidecars. Require a contiguous
+clean result and a reported 600-sample discontinuity in the gapped result.
+Mark the affected observation ineligible before conversion or decoding. This
+synthetic control verifies the check against known missing samples. K0 also
+requires showing how the pinned recorder produces equivalent continuity
+evidence for a real capture.
+
 ### 14.7 Recorded validation of this procedure draft
 
 Only the file/loopback path and fail-fast controls are exercised while drafting.
@@ -729,3 +795,12 @@ Wrong-payload and wrong-hash oracles returned failure, and a nonempty destinatio
 was rejected. The capture launcher passed shell syntax checks; missing profile
 and wrong-checkout guards were tested without opening a receiver. No live
 capture, radio transmission, or FFmpeg conversion was performed in these checks.
+
+Revision 0.9 local validation (12 November 2026): the pinned modem tests
+passed. The updated helper generated 30 PRBS9-derived WAVs and the Rust WAV
+decoder recovered all 30 expected frames. An independent payload check
+confirmed the register phases and encoded symbols. A second preparation
+produced identical WAVs, manifests, and schedule. The scheduled capture
+length was 277 s. The available FFmpeg binary lacked libsoxr, so the K0
+conversion check, recorder continuity evidence, and station rehearsal
+remain pending.

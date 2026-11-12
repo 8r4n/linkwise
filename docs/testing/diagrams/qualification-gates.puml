@@ -16,7 +16,7 @@ rectangle "K2 / pilot\n10 bursts per level\nup to 3 observers" as K2
 rectangle "K3 / replication\n3 distinct session blocks\npath / UTC strata" as K3
 rectangle "K4 / replay comparison\nfrozen holdout captures\npaired gains / losses" as K4
 rectangle "K5 / optional diagnostic\nsingle-variable matrix\nseparate claim scope" as K5
-K0 -right-> K1 : readiness
+K0 -right-> K1 : station rehearsal\n+ receiver readiness
 K1 -right-> K2 : valid capture
 K2 -down-> K3 : complete outcomes
 K2 --> K4 : freeze corpus

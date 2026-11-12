@@ -15,6 +15,8 @@ import urllib.parse
 import wave
 
 ROOT = Path(__file__).resolve().parents[1]
+PRBS9_SEED = 0x1FF
+BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
 
 def prepare(args):
@@ -29,10 +31,22 @@ def prepare(args):
     export = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(export)
     entries, start = [], 30.0
+    state = PRBS9_SEED
     for repetition in range(10):
         for level in (1, 2, 3):
             sequence = len(entries) + 1
-            message = f"K{sequence:08d}"
+            # A fixed-width ID and six ASCII symbols fit the 9-byte level-1
+            # payload. Carry the PRBS state forward across the ordered block.
+            phase_seed = state
+            symbols = []
+            for _ in range(6):
+                index = 0
+                for _ in range(5):
+                    index = (index << 1) | (state & 1)
+                    feedback = ((state >> 7) ^ (state >> 6) ^ (state >> 4) ^ state) & 1
+                    state = (state >> 1) | (feedback << 8)
+                symbols.append(BASE32[index])
+            message = f"K{sequence:02d}" + "".join(symbols)
             request = dict(source="native", level=level, message=message,
                            snr_db=None, dropout=False, seed=20261109)
             req = urllib.request.Request(args.url.rstrip('/') + '/api/run',
@@ -50,6 +64,7 @@ def prepare(args):
             if not 0 < duration < 20:
                 raise ValueError("burst duration outside plan limit")
             entries.append(dict(burst_id=f"B{sequence:03d}", file=filename,
+                                prbs9_phase_seed=f"0x{phase_seed:03x}",
                                 request=request, frames=report['frames'],
                                 duration_s=duration, start_offset_s=start,
                                 end_offset_s=start+duration,
@@ -58,6 +73,11 @@ def prepare(args):
     schedule = dict(status='planned; no RF performed', order='L1,L2,L3 repeated ten times',
                     bursts=30, pre_roll_s=30, minimum_interburst_guard_s=2,
                     post_roll_s=30, last_burst_end_s=start,
+                    waveform_seed=20261109,
+                    payload_pattern=dict(polynomial='x^9 + x^7 + x^6 + x^4 + 1',
+                                         initial_seed='0x1ff', taps='0x0d1',
+                                         encoding='K + two-digit ID + six Base32 symbols; 5 bits per symbol, MSB-first',
+                                         order='continuous right-shifting register, emitting bit 0'),
                     capture_seconds=math.ceil(start+30),
                     timing_note='Offsets are relative to capture start. Actual RF timing must be independently logged; source guards are additional to interburst quiet time.')
     (destination / 'manifest.json').write_text(json.dumps(entries, indent=2)+'\n')
