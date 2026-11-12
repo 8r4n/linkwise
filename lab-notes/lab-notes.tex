@@ -53,7 +53,7 @@
 \title{Linkwise: Radio, Modem, and Link Management Research\\[0.4em]
 \large Lab notes and evidence ledger}
 \author{Engineering research log}
-\date{11 November 2026}
+\date{12 November 2026}
 
 \begin{document}
 \maketitle
@@ -2339,6 +2339,73 @@ once at BW2300 and twice at BW2750 with exact DATA, two-ended disconnect,
 and a same-socket reconnect probe. Setup and retry failures interrupted
 the repeat sequences. The build-specific results and failure captures
 are indexed in \pathtext{docs/testing/vara-interoperability.md}.
+
+\section{2026-11-12: Winlink PRBS9 bench and waveform tests}
+\label{sec:prbs9-bench}
+
+\subsection{Two-peer Winlink bench}
+
+Winlink Express 1.8.6.0 ran on both Windows UTM guests. The MacBook
+client used native Linkwise through its command and DATA sockets. The
+Mac mini client used stock VARA HF 4.9.1. The isolated virtual-audio
+link operated at BW500. Each peer initiated a successful P2P session
+carrying one email with an attachment in each direction. Both peers
+disconnected cleanly in both sessions. All four received attachments
+matched their source bytes and SHA-256.
+
+The fixture used the polynomial $x^9+x^7+x^6+x^4+1$ from MIL-STD-188-110C
+Appendix B. The right-shifting register emits bit zero and inserts the XOR
+of bits 7, 6, 4, and 0 at bit 8. Each attachment contains one 511-bit
+period followed by its first bit, packed most-significant bit first.
+Linkwise used seed \texttt{0x1ff} and stock VARA used \texttt{0x155}.
+The Linkwise fixture SHA-256 was
+\hashtext{c6c461ba53b69fd4}{568bc8409534673e}{b9896a36dc0ddee8}{649617962cfbe8c8}.
+The stock VARA fixture SHA-256 was
+\hashtext{0846ac101f1bcaa7}{268d9878b79107f9}{eb562c8fd027103b}{dd53240edc952936}.
+The demonstration video, fixture manifest, and verification results are
+in \pathtext{docs/media/modem/winlink-prbs9/}.
+
+The bench exposed a BW500 first-poll handoff when the responder already
+had DATA queued, stock rate-down replay of a previously acknowledged
+prefix, and unsupported closing-frame layouts. The fixes handle the
+first-poll grant, suppress duplicate delivery on the observed rate-down
+sequence in either caller role, and support the observed level-4 close
+and 32-byte delimiter-only level-3 close. Timeout recovery now closes
+the modem session while preserving the host sockets for a fresh call.
+
+\subsection{Enhanced regression run}
+
+The Rust waveform tests use the existing 48 kHz audio encoder and decoder.
+Levels 1--3 recovered PRBS9, PRBS15, alternating bits, all zeros, and all
+ones through a fixed 1 ms echo with an echo amplitude one tenth of the
+direct path. At level 4, the exact 64-byte demo fixture passed through a
+43-byte full DATA frame and a 21-byte closing frame and was recovered
+byte for byte. A reference-vector assertion fixes the demo seed, phase,
+and packing.
+
+\noindent\begin{minipage}{\linewidth}
+\begin{lstlisting}
+python3 tools/test-modem.py --audio-device
+cargo build --locked --manifest-path rust/Cargo.toml --bin linkwise-modemd
+python3 tools/test-virtual-bw500.py rust/target/debug/linkwise-modemd \
+  reference/vara/fixtures/level4/bw500-level4.json --wide
+\end{lstlisting}
+\end{minipage}
+
+The Rust run passed 92 tests, including all seven BW500 waveform tests
+and the published BW500 audio replay. The virtual bench passed at BW500,
+BW2300, and BW2750. Four supplemental PRBS9 socket cases verified exact
+delivery, including recovery after injected DATA corruption or ACK loss.
+Captured stock VARA audio passed the first-poll check and both caller-role
+rate-down checks with no duplicate bytes. Execution logs are in
+\pathtext{/tmp/linkwise-enhanced.VZSprv}; the fixture audio and manifests
+remain local.
+
+Two legacy stock WAV replays and the native audio loopback case require
+their dedicated fixture sets or an explicitly configured device. These
+bench results establish decoded-frame and application-delivery correctness
+for the tested cases. Raw BER, calibrated fading sweeps, and over-the-air
+transmit qualification remain open.
 
 \section{Chronicle maintenance}
 

@@ -1,0 +1,300 @@
+\section{Worked BW500 wire exchange}
+\label{app:bw500-wire}
+
+This radio-free example follows a Linkwise caller \texttt{W9SSJ} sending
+200 uncompressed bytes to \texttt{W1A}. Host byte $i$ has value $i$ for
+$0\le i<200$, so the payload is the inclusive hexadecimal sequence
+\texttt{00} through \texttt{c7}. It uses the measured frame layout exercised
+by \path{modem::data::tests::reassembles_the_documented_200_byte_delivery_without_padding}.
+The bytes below are reproducible codec vectors. The exchange diagram
+combines those vectors with the implemented virtual-host session sequence.
+
+\subsection{Establish the session}
+
+The caller sends a request keyed to \texttt{W1A}. The responder returns a
+response keyed to the same callsign. The caller then sends its identity
+in a level-4 setup frame. Table~\ref{tab:worked-bw500-setup} gives every
+byte before whitening and channel coding. The receiver checks the frame
+CRC, decodes the identity, and sends a connected ACK keyed to \texttt{W9SSJ}.
+The caller sends a confirm keyed to \texttt{W1A}, waits for the responder's
+ACK, and obtains the transmit turn through the poll and turn-request exchange.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}rll@{}}
+\toprule
+Offset & Hex bytes & Meaning \\
+\midrule
+0--4 & \texttt{5e 44 d3 28 00} & Packed six-bit callsign symbols and trailing zero bits \\
+5--6 & \texttt{00 00} & No SSID and a reserved zero byte \\
+7 & \texttt{80} & Base capability \\
+8--9 & \texttt{14 f6} & Marker and high byte of the callsign CRC \\
+10--41 & \texttt{00} repeated 32 times & Padding emitted by the setup encoder \\
+42--43 & \texttt{04 82} & Requested level and setup control \\
+44--45 & \texttt{1d ee} & Big-endian frame CRC over offsets 0--43 \\
+\bottomrule
+\end{tabular}
+\caption{BW500 level-4 setup frame for \texttt{W9SSJ}. Offsets are decimal and zero-based.}
+\label{tab:worked-bw500-setup}
+\end{table}
+
+The six-bit symbol values are $23,35,19,19,10,0$. The last value fills the
+unused sixth character slot. CRC-16/GENIBUS of the uppercase ASCII callsign
+is \texttt{f677}, so the setup and closing DATA trailer both use \texttt{f6}.
+The frame CRC is separate and covers the body including that trailer.
+
+\subsection{Build and decode all five DATA frames}
+
+The level-4 frames each carry 43 payload bytes at offsets 0--42, one control
+byte at offset 43, and a two-byte CRC at offsets 44--45. The fifth frame
+uses level 3 and carries the remaining 28 bytes. The inclusive hex ranges
+in Table~\ref{tab:worked-bw500-data} denote consecutive byte values, so each
+row specifies the complete frame. The sender's \texttt{BUFFER} count is
+shown after the corresponding acknowledgment.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}rrlrrlr@{}}
+\toprule
+Frame & Level & Payload values & Bytes & Control & CRC & \texttt{BUFFER} \\
+\midrule
+1 & 4 & \texttt{00--2a} & 43 & \texttt{95} & \texttt{cf 4d} & 157 \\
+2 & 4 & \texttt{2b--55} & 43 & \texttt{91} & \texttt{fc 74} & 114 \\
+3 & 4 & \texttt{56--80} & 43 & \texttt{8d} & \texttt{e0 ea} & 71 \\
+4 & 4 & \texttt{81--ab} & 43 & \texttt{81} & \texttt{17 49} & 28 \\
+5 & 3 & \texttt{ac--c7} & 28 & \texttt{82} & \texttt{f0 fe} & 0 \\
+\bottomrule
+\end{tabular}
+\caption{The 200-byte BW500 DATA delivery. The frame-5 trailer is shown below.}
+\label{tab:worked-bw500-data}
+\end{table}
+
+Frame 5 contains the following 37 bytes, including its CRC.
+\begin{verbatim}
+00  ac ad ae af b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 ba bb
+10  bc bd be bf c0 c1 c2 c3 c4 c5 c6 c7 14 f6 00 00
+20  00 04 82 f0 fe
+\end{verbatim}
+The left column gives hexadecimal offsets. In decimal, offsets 28 and 29
+hold the marker \texttt{14} and caller key \texttt{f6}, offsets 30--32 hold
+zero fill, and offset 33 advertises level 4 for the next receive over.
+Offset 34 holds the closing control \texttt{82}. The CRC at offsets 35--36
+covers offsets 0--34. The advertised level 4 is a field in the level-3 frame.
+
+\landscapediagram{\input{diagrams/modem-wire-layout.tikz}}{Byte offsets and CRC coverage for the worked setup, full DATA, and closing DATA frames. The three rows share a byte scale. The inset expands the closing trailer and CRC.}{fig:worked-bw500-layout}
+
+The transmitter serializes each frame most-significant bit first. At
+level 4, 46 bytes give 368 information bits and the whitening, turbo and
+interleaving chain yields 748 bits for the differential cells. At level 3,
+37 bytes give 296 bits. One zero pad bit outside the byte CRC brings the
+information block to 297 bits, yielding 606 coded bits mapped to 202 tone-index
+columns. The receiver reverses the matching waveform and coding pipeline,
+validates the frame CRC, and interprets the DATA control and trailer.
+It buffers the first 172 bytes and releases all 200 to the host only when
+the closing frame validates. The marker, key, padding, control, and CRC
+are excluded from the host stream.
+
+For an independent byte check, the following Python reproduces all six
+frames, including the setup frame. \texttt{crc\_hqx} computes the
+unreflected polynomial update and the final XOR supplies the complement.
+\begin{verbatim}
+from binascii import crc_hqx
+
+def crc(body):
+    return (crc_hqx(body, 0xffff) ^ 0xffff).to_bytes(2, "big")
+
+payload = bytes(range(200))
+key = crc(b"W9SSJ")[:1]
+setup = bytes.fromhex("5e 44 d3 28 00 00 00 80 14")
+setup += key + bytes(32) + bytes.fromhex("04 82")
+bodies = [setup]
+for index, control in enumerate((0x95, 0x91, 0x8d, 0x81)):
+    start = 43 * index
+    bodies.append(payload[start:start + 43] + bytes([control]))
+bodies.append(payload[172:] + b"\x14" + key + bytes(3) + b"\x04\x82")
+for body in bodies:
+    print((body + crc(body)).hex(" "))
+\end{verbatim}
+
+\subsection{Trace frame 1 through the physical layer}
+\label{sec:worked-bw500-phy}
+
+Take the first DATA frame from Table~\ref{tab:worked-bw500-data}.
+Its 46 bytes are \texttt{00} through \texttt{2a}, followed by
+\texttt{95 cf 4d}. This trace uses the checked-in
+\path{reference/vara/fixtures/level4/bw500-level4.json} profile and
+48 kHz mono PCM from \path{modem::bw500_waveform::Waveform::synthesize}.
+The receiver sees the complete synthetic burst with nominal carrier and
+sample rates, unit gain, zero added noise, and no channel filtering.
+It searches for timing within that candidate. The example characterizes
+the transforms and framing on this input. The profile SHA-256 is
+\path{7fe1eed44ca50f20cb7f64e1e70b9e21d8fe9c348a920609b9888bfdde82bb48}.
+
+\paragraph{Serialization, whitening, and turbo coding}
+Serialize the bytes most-significant bit first. The first 16 input bits
+are \texttt{00000000 00000001}. The whitening generator starts at 29,318.
+Its first 16 output bits are \texttt{11101010 11111110}, giving
+\texttt{11101010 11111111} after XOR. The full 368 whitened information
+bits, packed most-significant bit first, are
+\par\noindent\begin{minipage}{\linewidth}
+\begin{verbatim}
+ea ff 1a 2d 5a 33 09 a8 83 9c 53 d3 f8 0d 52 32
+fe ee 28 a6 b0 49 b4 83 68 f4 fc a5 2c e9 d2 d9
+8b e4 c8 c2 a8 a4 8a 15 c5 62 50 70 55 4c
+\end{verbatim}
+\end{minipage}
+
+With zero-based indexing, the second constituent starts with whitened
+bits at indices 271, 94, 29, 148, 87, 280, 290, and 316 in that order. The encoder
+pairs each systematic bit with the first constituent's parity at even
+indices and the second's parity at odd indices. Three termination steps
+per constituent contribute the final 12 bits. The complete 748-bit
+vector before channel interleaving is
+\begin{verbatim}
+fd cc bf ea 16 99 0c e3 37 9c 1b 1e 14 93 88 95
+d5 4b d2 b5 63 1a b3 5b fb 91 44 a3 23 5c 4a 48
+ef fc a9 b9 19 c0 98 38 8b 15 21 c3 8f 24 d4 5b
+2d d1 ff 64 ba b1 d9 62 19 e4 ec 93 e3 4d a7 87
+c1 cb fd 30 b4 c0 a0 0d 88 c5 9c 61 d4 cc 02 73
+f5 36 7d 4c 33 01 7a 10 37 33 24 e1 c1 30
+\end{verbatim}
+In each 748-bit hex dump, the low nibble of the last byte is zero
+display padding. The termination bits are \texttt{110000010011}.
+
+\paragraph{Channel order and symbol placement}
+The channel permutation gathers coded bits at indices
+33, 165, 300, 126, 467, 684, 192, and 25 for the first eight transmitted positions.
+The resulting channel-order vector is
+\begin{verbatim}
+03 0b 87 87 f8 33 2b 92 a7 5d 99 23 01 58 b6 8c
+5b dc 7e 6e d9 38 dc 42 41 52 e4 3e 33 d9 63 a9
+1f 2d 03 0b 52 bc 8a ec 44 fa 0d 69 82 f1 48 2a
+6a c3 e8 f8 56 b2 b0 5b e9 4e 96 2d 55 1b 6b 2e
+06 bd 01 1c 78 6c 5f b9 c5 aa 7a b6 3f a1 4b 24
+ef 1e 42 e6 ac f6 f8 28 14 54 c0 d4 d7 10
+\end{verbatim}
+
+Figure~\ref{fig:dsp-level4-symbol-timing} gives the transmit centers
+$n_{b,j}=4608+512j+256b$. Column zero initializes the differential
+polarity in each band. Bits $q_0$ through $q_{373}$ fill the lower band
+and $q_{374}$ through $q_{747}$ fill the upper band. In each band the
+mapper skips pilot columns. The first six lower-band DATA bits leave the
+polarity unchanged. Bits $q_6$ and $q_7$ flip it on successive columns.
+For example, $q_6$ lands at lower-band column 7. Start at sample 4608
+and add seven 512-sample hops to get sample 8192. The upper-band center
+at the same column comes 256 samples later.
+In the upper band, $q_{379}$ occupies column 6, column 7 is a pilot,
+and $q_{380}$ occupies column 8. The pilot holds polarity and consumes
+no coded bit.
+
+\paragraph{Timing estimate, soft metrics, and recovered frame}
+For the 205,825-sample synthesized burst, the timing search selects
+$\widehat n_0=4524$ with a mean normalized pilot score of approximately
+0.99989, above the 0.65 threshold. The nominal transmit center is 4608.
+The estimated epoch maximizes pilot agreement for this waveform and
+search window. Its 84-sample difference is specific to this trace.
+
+At each estimated center $\widehat n_{b,j}=\widehat n_0+512j+256b$,
+the receiver mixes to complex baseband, sums against the 513 pulse taps,
+and removes the measured reference phase. Call the resulting complex
+sample $z_{b,j}$. For each DATA column it computes
+$d_{b,j}=\Re\{z_{b,j}\overline{z_{b,j-1}}\}$ and emits
+$m_i=-6d_{b,j}/\overline{|d|}$. In this trace
+$\overline{|d|}\simeq408.10681$ across the 748 DATA cells.
+Here $\overline{|d|}$ is the average size of the dot products with their
+signs removed. Dividing by that average puts the cells on a common
+scale. The factor of six sets their average absolute score to six.
+For $q_6$, the dot product is about $-406.93$. Negating and scaling
+it gives $+5.98269$, evidence for a polarity flip and hence bit 1.
+Table~\ref{tab:worked-bw500-metrics} shows selected positions and their
+rounded metrics. The preceding column supplies the reference for each
+differential decision, including the upper-band pilot immediately before
+column 8.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}rrrrrrrr@{}}
+\toprule
+$i$ & Coded index & $q_i$ & Band & Column & TX center & RX center & $m_i$ \\
+\midrule
+0   & 33  & 0 & 0 & 1   & 5120   & 5036   & $-5.88364$ \\
+6   & 192 & 1 & 0 & 7   & 8192   & 8108   & $+5.98269$ \\
+7   & 25  & 1 & 0 & 8   & 8704   & 8620   & $+5.93823$ \\
+373 & 440 & 0 & 0 & 392 & 205312 & 205228 & $-5.98740$ \\
+374 & 733 & 0 & 1 & 1   & 5376   & 5292   & $-6.15735$ \\
+379 & 293 & 0 & 1 & 6   & 7936   & 7852   & $-6.12393$ \\
+380 & 457 & 1 & 1 & 8   & 8960   & 8876   & $+5.95272$ \\
+\bottomrule
+\end{tabular}
+\caption{Selected channel-order soft metrics for frame 1. Centers are absolute sample indices within the synthetic burst.}
+\label{tab:worked-bw500-metrics}
+\end{table}
+
+For example, scatter $m_6$ to coded index 192. Index 192 is the
+systematic position for information bit 96, so its positive sign yields
+whitened bit 1 at that position. The receiver scatters the remaining
+metrics the same way and takes the signs of coded positions
+$0,2,\ldots,734$. The systematic decisions reproduce all 368 whitened
+bits. Applying the whitening sequence again recovers
+\texttt{00} through \texttt{2a} followed by \texttt{95 cf 4d}.
+CRC-16/GENIBUS over the first 44 bytes yields \texttt{cf4d}.
+The clean trace therefore exits on the systematic CRC check.
+If that check fails, the iterative max-log-MAP path in
+\path{modem::coding} uses the parity metrics before trying the CRC again.
+The modem contributes 43 bytes to the pending delivery from this frame.
+
+\subsection{Confirm delivery and recover a withheld ACK}
+
+An accepted intermediate reply advances the sender to the next DATA frame.
+The closing ACK confirms the delivery at the modem boundary and retires
+the last 28 bytes. If the closing ACK is withheld, the caller still reports
+28 buffered bytes. It sends a short final query keyed to the called station
+and can follow with the long final query. A Linkwise receiver in the closing
+ACK window answers with the same caller-keyed ACK without emitting the
+payload a second time. After a valid ACK the caller reports \texttt{BUFFER 0}.
+A subsequent host disconnect sends the session disconnect control.
+This example ends at modem DATA delivery. Winlink mailbox storage is a
+separate test outcome.
+
+\landscapeplantuml{build/diagrams/Linkwise_BW500_Worked_Exchange}{BW500 setup, transmit-turn acquisition, DATA acknowledgments, and closing-ACK recovery for the worked delivery. The recovery branch shows the Linkwise virtual-host behavior exercised by the socket fixture.}{fig:worked-bw500-exchange}
+
+\subsection{Other implemented frame layouts}
+
+Table~\ref{tab:worked-mode-widths} gives the decoded byte geometry. The
+control offset is also the final byte covered by the frame CRC.
+Full frames carry payload in every byte before control. A keyed closing
+frame uses a marker, caller key, optional zero fill, and rate byte before
+control. The decoder also accepts measured BW500 closing variants.
+The keyed forms use \texttt{42} or \texttt{82}, with \texttt{02} accepted
+at level 4. A 41-byte level-4 close can use \texttt{14} followed directly
+by the rate and \texttt{82}. An unpadded \texttt{83} close carries 33
+bytes at level 3 or 42 at level 4, followed by the rate and control.
+The current encoder emits the keyed form by default, plus the two
+level-4 exceptions at 41 and 42 payload bytes.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{@{}lrrrrl@{}}
+\toprule
+Mode & Level & Full payload & Control offset & Frame bytes & CRC offsets \\
+\midrule
+BW500 & 1 & 9 & 9 & 12 & 10--11 \\
+BW500 & 2 & 22 & 22 & 25 & 23--24 \\
+BW500 & 3 & 34 & 34 & 37 & 35--36 \\
+BW500 & 4 & 43 & 43 & 46 & 44--45 \\
+BW2300 / BW2750 & 2 & 22 & 22 & 25 & 23--24 \\
+BW2300 / BW2750 & 3 & 47 & 47 & 50 & 48--49 \\
+BW2300 / BW2750 & 4 & 89 & 89 & 92 & 90--91 \\
+\bottomrule
+\end{tabular}
+\caption{Decoded DATA byte geometry before mode-specific coding and modulation.}
+\label{tab:worked-mode-widths}
+\end{table}
+
+Wide level-4 setup keeps the same identity header at offsets 0--9. Its
+encoder fills offsets 10--87 with zeros, places the level and control at
+88--89, and appends CRC at 90--91. BW2300 and BW2750 share the byte
+geometry in the table and use different carrier allocations. The BW500
+example's control sequence and waveform parameters apply to its tested
+profile. The wide receive and recovery results are tracked separately in
+Table~\ref{tab:modem-evidence-gates}.

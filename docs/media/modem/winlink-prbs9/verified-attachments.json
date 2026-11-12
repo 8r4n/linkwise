@@ -1,0 +1,40 @@
+[
+  {
+    "initiator": "Linkwise",
+    "attachments": [
+      {
+        "direction": "Linkwise \u2192 stock VARA HF",
+        "filename": "prbs9-linkwise.bin",
+        "bytes": 64,
+        "sent": "c6c461ba53b69fd4568bc8409534673eb9896a36dc0ddee8649617962cfbe8c8",
+        "received": "c6c461ba53b69fd4568bc8409534673eb9896a36dc0ddee8649617962cfbe8c8"
+      },
+      {
+        "direction": "Stock VARA HF \u2192 Linkwise",
+        "filename": "prbs9-vara.bin",
+        "bytes": 64,
+        "sent": "0846ac101f1bcaa7268d9878b79107f9eb562c8fd027103bdd53240edc952936",
+        "received": "0846ac101f1bcaa7268d9878b79107f9eb562c8fd027103bdd53240edc952936"
+      }
+    ]
+  },
+  {
+    "initiator": "Stock VARA HF",
+    "attachments": [
+      {
+        "direction": "Linkwise \u2192 stock VARA HF",
+        "filename": "prbs9-linkwise.bin",
+        "bytes": 64,
+        "sent": "c6c461ba53b69fd4568bc8409534673eb9896a36dc0ddee8649617962cfbe8c8",
+        "received": "c6c461ba53b69fd4568bc8409534673eb9896a36dc0ddee8649617962cfbe8c8"
+      },
+      {
+        "direction": "Stock VARA HF \u2192 Linkwise",
+        "filename": "prbs9-vara.bin",
+        "bytes": 64,
+        "sent": "0846ac101f1bcaa7268d9878b79107f9eb562c8fd027103bdd53240edc952936",
+        "received": "0846ac101f1bcaa7268d9878b79107f9eb562c8fd027103bdd53240edc952936"
+      }
+    ]
+  }
+]

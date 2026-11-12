@@ -1,6 +1,6 @@
 # Linkwise architecture whitepaper
 
-Build the paper and all PlantUML figures from the repository root:
+Build the paper and its PlantUML and TikZ figures from the repository root:
 
 ```sh
 bash tools/build-whitepaper.sh
@@ -20,14 +20,13 @@ whitepaper. The first build needs network access so the tools can fetch and
 cache PlantUML/TeX resources; subsequent builds reuse those caches. Generated
 PDFs and auxiliary files are written to the ignored `build/` folder.
 
-Architecture and software-design figures are authored only in
-[`diagrams/`](diagrams/). The paper distinguishes the proposed system views
+Figure sources are in [`diagrams/`](diagrams/). PlantUML sources use
+the `.puml` extension. Native `.tikz` figures compile with the main paper.
+The paper distinguishes the proposed system views
 from as-built MCP views: the latter cover runtime components, Compose
 deployment, control read/write sequences, write validation, and current PTT
 behavior. Each diagram is placed on its own landscape page with a bounded
-image size and caption. Edit PlantUML sources rather than generated LaTeX or
-PDFs. PlantUML's LaTeX output is an intermediate rendering format, not a
-diagram source of truth.
+image size and caption. Edit the `.puml` or `.tikz` source for each figure.
 
 The source uses a portable `article` class and standard TeX packages. It is
 original project material. The supplied

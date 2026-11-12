@@ -8,6 +8,8 @@
 \usepackage{pdflscape}
 \usepackage{caption}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,decorations.pathreplacing}
 \usepackage{booktabs,tabularx,longtable,array}
 \usepackage{enumitem}
 \usepackage{fancyhdr}
@@ -45,20 +47,24 @@
 \newcommand{\todo}{\textcolor{ovred}{\textbf{TBD}}}
 \newcommand{\evidence}[1]{\textsf{#1}}
 \newcommand{\urlref}[2]{\href{#1}{#2}}
-% Every PlantUML figure gets a dedicated landscape page, a bounded image box,
-% and a caption/label. Keep height below the landscape text area for captions.
-\newcommand{\landscapeplantuml}[3]{%
+% Each technical figure gets a dedicated landscape page and caption.
+\newcommand{\landscapediagram}[3]{%
   \clearpage
   \begin{landscape}
     \thispagestyle{plain}
     \centering
-    \includegraphics[width=0.94\linewidth,height=0.86\textheight,keepaspectratio]{#1}\par
+    #1\par
     \vspace{0.10in}
     \captionsetup{width=0.94\linewidth}
     \captionof{figure}{#2}
     \label{#3}
   \end{landscape}
   \clearpage
+}
+\newcommand{\landscapeplantuml}[3]{%
+  \landscapediagram{%
+    \includegraphics[width=0.94\linewidth,height=0.86\textheight,keepaspectratio]{#1}%
+  }{#2}{#3}%
 }
 
 \begin{document}
@@ -1269,7 +1275,9 @@ safety acceptance.
   \item \textbf{Modem interoperability:} radio-free stock VARA transfers
         have passed at BW500, BW2300, and BW2750. Mixed Winlink Express
         and Pat peer-to-peer transfers have verified attachment delivery
-        in both directions. Repeatability and station qualification are
+        in both directions. At BW500, two Winlink Express peers also
+        verified PRBS9 attachment delivery with each modem as caller.
+        Repeatability and station qualification are
         tracked in Table~\ref{tab:modem-evidence-gates}.
   \item \textbf{Adaptive operation:} learn from historical outcomes and enable only bounded automation that has passed station-specific review.
 \end{enumerate}
@@ -1310,6 +1318,8 @@ emergency stop. This architecture offers a path to autonomous communications
 only after each adapter, control path, and operating limit has been validated.
 
 \appendix
+\input{modem-wire-example}
+
 \section{Extended propagation model evidence}\label{app:model-evidence}
 This appendix records model-comparison evidence that informs the
 calibration limits discussed in the main text. Findings are specific

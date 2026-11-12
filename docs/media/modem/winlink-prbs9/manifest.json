@@ -1,0 +1,20 @@
+{
+  "polynomial": "x^9 + x^7 + x^6 + x^4 + 1",
+  "period_bits": 511,
+  "output": "512 bits per file, packed MSB-first, with the first bit repeated at the end",
+  "register": "emit bit 0; shift right; insert bit 7 XOR bit 6 XOR bit 4 XOR bit 0 at bit 8",
+  "attachments": [
+    {
+      "filename": "prbs9-linkwise.bin",
+      "seed": "0x1ff",
+      "bytes": 64,
+      "sha256": "c6c461ba53b69fd4568bc8409534673eb9896a36dc0ddee8649617962cfbe8c8"
+    },
+    {
+      "filename": "prbs9-vara.bin",
+      "seed": "0x155",
+      "bytes": 64,
+      "sha256": "0846ac101f1bcaa7268d9878b79107f9eb562c8fd027103bdd53240edc952936"
+    }
+  ]
+}

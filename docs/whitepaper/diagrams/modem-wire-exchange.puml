@@ -1,0 +1,41 @@
+@startuml Linkwise_BW500_Worked_Exchange
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 11
+skinparam ArrowColor #2A9D8F
+hide footbox
+participant "Caller host" as CH
+participant "Linkwise W9SSJ" as C
+participant "Linkwise W1A" as R
+participant "Recipient host" as RH
+
+C -> R : Connect request keyed to W1A
+R -> C : Connect response keyed to W1A
+C -> R : Level-4 setup identifies W9SSJ
+R -> C : Connected ACK keyed to W9SSJ
+C -> R : Confirm keyed to W1A
+R -> C : Connected ACK
+CH -> C : Queue 200 bytes
+C -> R : Post-confirmation poll
+R -> C : Poll ACK
+C -> R : Caller turn request
+R -> C : Turn grant
+loop Four level-4 frames with 43 bytes each
+  C -> R : DATA and CRC
+  R -> C : Intermediate acknowledgment
+end
+C -> R : Level-3 close with final 28 bytes
+R -> RH : Release all 200 payload bytes
+alt Closing ACK received
+  R -> C : Closing ACK
+else Closing ACK withheld
+  R ->x C : Closing ACK
+  C -> R : Short final query
+  R -> C : Repeat closing ACK
+end
+C -> CH : BUFFER 0
+CH -> C : DISCONNECT
+C -> R : Session disconnect control
+@enduml

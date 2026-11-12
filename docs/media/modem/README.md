@@ -1,5 +1,14 @@
 # Modem demo media
 
+The [Winlink Express PRBS9 video](winlink-prbs9/winlink-prbs9.mp4) shows two
+BW500 virtual-audio sessions between Linkwise and stock VARA HF. Each modem
+initiated one session and both clients sent and received a 64-byte attachment.
+The [fixture manifest](winlink-prbs9/manifest.json) records the generator
+parameters and source hashes. The [verification results](winlink-prbs9/verified-attachments.json)
+record the matching received hashes for both sessions.
+
+## Streaming codec demo
+
 `modem-streaming.gif` is a cropped screen recording excerpt of the actual local
 SigPlot demo in Google Chrome, captured on 2026-11-09. It shows a BW500 level-1
 native stream carrying `HELLO FROM LINKWISE` across three frames, starting partway

@@ -375,6 +375,11 @@ The energy detector accumulates 10 ms windows. A window is active when
 \[
  \frac{1}{W}\sum_{n=0}^{W-1}x[n]^2 \geq 10^{-4},\qquad W=480.
 \]
+A 10 ms window holds 480 samples at 48 kHz. Square each normalized
+sample so positive and negative excursions both count, then average.
+A mean square of $10^{-4}$ corresponds to an RMS amplitude of 0.01,
+so this gate opens at one percent of full scale.
+
 A quiet window closes a candidate; end-of-stream flushes a partial window and
 any open candidate. The 1\% full-scale RMS gate serves level-4 acquisition
 with an external measurement profile and reports energy candidates for
@@ -444,12 +449,21 @@ For a symbol of length $H$ and bin $k$, the unnormalized tone energy is
 \[
  E_k=\left|\sum_{n=0}^{H-1}x[n]\exp(-j2\pi kn/H)\right|^2.
 \]
+The exponential supplies a reference that completes $k$ cycles over the
+$H$ samples. Multiplying and summing aligns a matching tone so its
+contributions add together. Taking the squared magnitude measures the
+strength of that match independently of its starting phase. For example,
+at 48 kHz with $H=1024$, bin 32 tests for a 1,500 Hz tone.
+
 For timing refinement and soft decisions, the implementation divides by
 $(H/2)\sum x[n]^2$, with an epsilon floor. For data, it measures the
 eight mapped bin hypotheses. For each of the three bit positions, the soft
 metric is the largest normalized power among labels with bit 1 minus the
 largest among labels with bit 0. This max-based difference is a decoder input;
 it is not a calibrated log likelihood, SNR, or BER estimate.
+A positive value means the strongest tone compatible with bit 1 beat
+the strongest tone compatible with bit 0. Values near zero give the
+decoder little reason to prefer either bit.
 
 Metrics are scattered through the inverse channel permutation into FEC order.
 Only a CRC-valid result is returned. The rolling scanner suppresses overlap
@@ -491,8 +505,15 @@ obeys
 \[
  s_{i+1}=(\texttt{0x43fd43fd}\,s_i+\texttt{0xc39ec3})\bmod 2^{24}.
 \]
-Whitening starts at $s_0=29318$ and takes the next state's high bit. Applying
-the same XOR after decoding restores the original bits. Permutations use
+Each step multiplies the current state $s_i$ by the first constant,
+adds the second constant, and keeps the lowest 24 bits. The remainder
+operation is what makes the state wrap. The same starting state and
+steps produce the same bit sequence at both ends of the link.
+
+Whitening starts at $s_0=29318$ and takes the next state's high bit. A
+generator bit of 1 flips the corresponding frame bit. A generator bit
+of 0 leaves it alone. Applying the same mask again flips those bits
+back. Permutations use
 rejection sampling: draw an index, append only its first occurrence, and
 continue until every index is present. The draw multiplies the normalized
 state by the requested size with single-precision rounding, matching the
@@ -506,6 +527,10 @@ $c_{\pi_1(j)}$. The inner permutation $\pi_2$ changes the input order of the
 second constituent encoder and must be inverted consistently when exchanging
 extrinsic information. Interleavers belong to the mode/profile, not to the
 agent's request parameters.
+In the worked example, the channel permutation puts coded bit 33 in the
+first transmitted position. The receiver puts the first soft decision
+back into slot 33 before decoding. The turbo permutation acts earlier,
+when the second encoder reads the information bits in a different order.
 
 \subsection{Turbo encoder and iterative receive decoder}
 The codec has two eight-state recursive systematic convolutional constituents.
@@ -516,6 +541,12 @@ $u$, the implementation uses
  p=a\oplus r_0\oplus r_2,\quad
  (r_0',r_1',r_2')=(a,r_0,r_1).
 \]
+The symbol $\oplus$ means exclusive OR. First compute the new feedback
+bit $a$ from the input and two stored bits. Then compute the parity bit
+$p$ from $a$ and two stored bits. Finally, shift the memory so $a$
+becomes the newest bit. Starting with an empty register and input 1,
+the encoder outputs parity 1 and moves to state $(1,0,0)$.
+
 Both encoders start at zero. The first consumes natural-order bits and the
 second consumes turbo-permuted bits. Levels 1/2 transmit systematic and both
 parity streams (rate 1/3); levels 3/4 transmit systematic bits and alternate
@@ -523,6 +554,10 @@ which constituent parity is retained (rate 1/2). Each constituent is terminated
 with three steps using $u=r_1\oplus r_2$. The wire tail is twelve bits,
 interleaving the two systematic/parity tail pairs at each of three steps.
 Thus the implemented coded sizes are $3N+12$ or $2N+12$.
+The factor of three or two counts the transmitted bits per information
+bit before termination. For the worked level-4 frame, 368 information
+bits give 736 systematic and parity bits, then the tail brings the
+total to 748.
 
 The receiver first makes hard decisions on systematic metrics and checks the
 frame CRC. If that fails, it constructs the two terminated trellises, treating
@@ -568,6 +603,13 @@ a real modem. Reproducible tests use SHA-256-pinned upstream measurements,
 extracted without executing downloaded source. Cached measurement sources
 retain their own attribution/license metadata and are not embedded in Rust.
 
+The phase index $k_{b,t}$ selects one of 128 equally spaced directions
+around a circle. For example, index 32 represents a quarter turn. The
+transmitter and receiver use opposite rotations so they can compare
+successive DATA symbols after accounting for the known phase pattern.
+
+\landscapediagram{\input{diagrams/modem-level4-symbol-timing.tikz}}{BW500 level-4 symbol centers on the 48 kHz sample axis. The plotted excerpt uses the implemented pilot allocation. Each marker locates the center of a 513-tap pulse extending 256 samples on either side.}{fig:dsp-level4-symbol-timing}
+
 \subsection{Level-4 transmit synthesis}
 After whitening, turbo encoding, and channel gather, coded bits fill band 0's
 data positions in time order, then band 1's. With initial polarity
@@ -580,6 +622,13 @@ carriers:
        \Re\{c_{b,t}\exp(j2\pi f_b n/48000)\},
 \]
 where $n_{b,t}=9H+tH+bH/2$, $f_b\in\{1350,1650\}$, and $p$ has 513 taps.
+To compute one output sample $x[n]$, center each symbol's pulse on
+$n_{b,t}$, evaluate the carrier at sample $n$, and add the real
+contributions from both bands. The pulse determines how much each nearby
+symbol contributes. The center formula allows nine hops before the
+first reference, advances one hop per column, and offsets the upper
+band by half a hop.
+
 The factor $1/4$ is the current bench amplitude scale, not a calibrated radio
 power command. A waveform's audio amplitude does not replace CAT power limits,
 route qualification, or PTT authority.
@@ -600,6 +649,11 @@ result is $z_{b,t}$, the differential statistic is
 \[
  d_{b,t}=\Re\{z_{b,t}\overline{z_{b,t-1}}\}.
 \]
+This dot product compares consecutive symbols after removing the known
+reference phase. It tends to be positive when their polarities agree
+and negative when they are opposite. A DATA bit 1 flips polarity,
+so the receiver negates this statistic to give a positive score for 1.
+
 A correct pilot transition should preserve polarity. Timing search maximizes
 the average normalized differential dot product over 36 pilot positions,
 first in 32-sample steps and then in two-sample steps around the best epoch.
@@ -655,6 +709,14 @@ capture and playback deadlines.
           \arg\!\left(\sum_{(b,t)\in\mathcal P}
           w_{b,t}z_{b,t}\overline{z_{b,t-1}}\right).
         \]
+        Each pilot pair measures the phase change over one symbol hop.
+        The set $\mathcal P$ identifies the pilot positions and the
+        weights $w_{b,t}$ determine how much each pair contributes.
+        The angle of the combined result gives radians per hop.
+        Multiplying by $48000/(2\pi H)$ converts that angle to hertz.
+        For example, a quarter-turn of phase per 512-sample hop
+        corresponds to about 23.44 Hz.
+
         This is a proposed pilot estimator, not a performance result. At
         $H=512$ its phase observation repeats every 93.75 Hz, requiring coarse
         branch selection and outlier/low-energy rejection. Fading and channel
@@ -754,7 +816,9 @@ of 43 bytes and one closing level-3 payload of 28 bytes, using the documented
 full fields \texttt{95}, \texttt{91}, \texttt{8d}, and \texttt{81}. This verifies
 the container interpretation for that example, not a general sender sequencing
 law. The full-frame field remains a supplied parameter because its evolving
-wire semantics need independent qualification. Compression TEXT/FILES,
+wire semantics need independent qualification. Appendix~\ref{app:bw500-wire}
+works through these bytes, their checksums, and the session exchange.
+Compression TEXT/FILES,
 delivery-level repacketization, and negotiated rate changes are not completed
 by the container codec.
 
@@ -846,6 +910,27 @@ embedded in this repository. The public protocol/reference source is listed
 in Reference~\ref{ref:modem-protocol}. Source-level traceability does not
 replace empirical qualification.
 
+\paragraph{Deterministic waveform regression and application delivery.}
+The 12 November 2026 BW500 suite passes packed PRBS9, PRBS15, alternating
+bits, and all-zero and all-one payloads through Linkwise's real-valued
+48~kHz waveform path. Levels 1--3 recover the exact DATA frames through
+attenuation and a fixed 1~ms echo. A separate level-4 test reassembles
+the 64-byte PRBS9 fixture from full and closing DATA frames using the
+measured waveform profile. The virtual daemon bench also recovers
+PRBS9 payloads at BW500, BW2300, and BW2750, with controlled DATA
+corruption or acknowledgment loss in selected cases.
+
+On the mixed BW500 bench, both Winlink Express peers sent and received
+an email with a PRBS9 attachment in each of two sessions. Linkwise and
+stock VARA HF 4.9.1 each initiated one session. Both peers disconnected
+cleanly and the four received attachments matched their sources byte for
+byte and by SHA-256. Separate stock-audio replays cover the initial caller
+poll and rate-down recovery in both caller roles. These measurements
+cover frame decoding and delivery after ARQ. Measuring raw bit errors
+requires aligned receiver decisions, and assessing fading tolerance
+requires a calibrated channel model. Fixture construction, commands, and
+run scope appear in the 12 November entry of \path{lab-notes/lab-notes.tex}.
+
 \begin{longtable}{@{}p{0.24\textwidth}p{0.70\textwidth}@{}}
 \caption{Modem evidence and remaining qualification gates.}\label{tab:modem-evidence-gates}\\
 \toprule
@@ -881,7 +966,10 @@ Host and Winlink & Mixed BW500 Pat runs passed in both directions with a
 matching attachment SHA-256, exit status zero and two-ended disconnect.
 Mixed Winlink Express 1.8.6.0 and Pat 1.0.1 peer-to-peer transfers stored
 attachments with matching SHA-256 in both recipient mailboxes. The
-Pat-to-Express sender-side close and gateway/CMS qualification remain open.\\
+Pat-to-Express sender-side close and gateway/CMS qualification remain open.
+Two Winlink Express BW500 sessions with Linkwise and stock VARA verified
+two-way PRBS9 attachment delivery and clean disconnect with each modem
+as caller.\\
 \bottomrule
 \end{longtable}
 
