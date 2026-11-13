@@ -18,7 +18,7 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 use crate::{frame_cli::Failure, session_cli::Control};
 
-const PROTOCOL: &[u8] = b"linkwise-transfer/1";
+const PROTOCOL: &[u8] = b"linkwise-transfer/2";
 const REQUIRED_CIPHER: CipherSuite = CipherSuite::TLS13_AES_256_GCM_SHA384;
 const CHUNK: usize = 512;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(90);
@@ -247,6 +247,8 @@ async fn execute(
             }
             tls.get_mut().1.send_close_notify();
             timeout(IO_TIMEOUT, tls.flush()).await??;
+            // The peer's close-notify confirms that ours crossed the modem.
+            wait_for_tls_close(&mut tls).await?;
         } else {
             let mut tls = timeout(
                 IO_TIMEOUT,
@@ -282,11 +284,9 @@ async fn execute(
                 temporary.persist_noclobber(&destination)?;
                 receipt(&mut tls, &digest).await?;
             }
-            // Keep the DATA connection alive while the sender receives the receipt.
-            let mut unexpected = [0];
-            if timeout(IO_TIMEOUT, tls.read(&mut unexpected)).await?? != 0 {
-                return Err(io::Error::other("unexpected data after receipt"));
-            }
+            wait_for_tls_close(&mut tls).await?;
+            tls.get_mut().1.send_close_notify();
+            timeout(IO_TIMEOUT, tls.flush()).await??;
         }
         Ok::<_, io::Error>(())
     };
@@ -330,6 +330,14 @@ async fn execute(
         Ok::<_, io::Error>(())
     })
     .await??;
+    Ok(())
+}
+
+async fn wait_for_tls_close(reader: &mut (impl AsyncRead + Unpin)) -> io::Result<()> {
+    let mut unexpected = [0];
+    if timeout(IO_TIMEOUT, reader.read(&mut unexpected)).await?? != 0 {
+        return Err(io::Error::other("unexpected data after receipt"));
+    }
     Ok(())
 }
 
