@@ -155,6 +155,8 @@ Linkwise is in the research and foundation stage.
   directions. Repeat qualification on one build and physical RF
   qualification remain open. See the [modem implementation status](rust/docs/modem.md)
   and [bench results](docs/testing/vara-interoperability.md).
+- The optional [encrypted P2P transfer CLI](rust/docs/secure-transfer.md)
+  uses mutual TLS and is disabled by default.
 - Compilation does not constitute an interoperability claim.
 
 The authoritative research record is

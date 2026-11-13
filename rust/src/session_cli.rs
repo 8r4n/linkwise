@@ -111,12 +111,7 @@ async fn send(
         )
     })
     .await??;
-    let (read, write) = control.into_split();
-    let mut control = Control {
-        read: BufReader::new(read),
-        write,
-        prefix: Vec::new(),
-    };
+    let mut control = Control::new(control);
     let (mut inbound, mut outbound) = data.into_split();
     let transfer = async {
         timeout(CONNECT_TIMEOUT, async {
@@ -178,14 +173,23 @@ async fn send(
     }
 }
 
-struct Control {
+pub(crate) struct Control {
     read: BufReader<OwnedReadHalf>,
     write: OwnedWriteHalf,
     prefix: Vec<u8>,
 }
 
 impl Control {
-    async fn line(&mut self) -> io::Result<String> {
+    pub(crate) fn new(stream: TcpStream) -> Self {
+        let (read, write) = stream.into_split();
+        Self {
+            read: BufReader::new(read),
+            write,
+            prefix: Vec::new(),
+        }
+    }
+
+    pub(crate) async fn line(&mut self) -> io::Result<String> {
         loop {
             let bytes = self.read.fill_buf().await?;
             if bytes.is_empty() {
@@ -211,10 +215,14 @@ impl Control {
         }
     }
 
-    async fn command(&mut self, command: &str) -> io::Result<()> {
+    pub(crate) async fn request(&mut self, command: &str) -> io::Result<()> {
         self.write
             .write_all(format!("{command}\r").as_bytes())
-            .await?;
+            .await
+    }
+
+    pub(crate) async fn command(&mut self, command: &str) -> io::Result<()> {
+        self.request(command).await?;
         loop {
             match self.line().await?.as_str() {
                 "OK" => return Ok(()),
