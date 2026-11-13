@@ -21,6 +21,7 @@ struct Measurements {
 }
 
 /// Explicit external measurements; construction validates every required cell.
+#[derive(Clone)]
 pub struct Waveform {
     reference: [[Cell; COLUMNS]; 2],
     pulse: [f64; PULSE],

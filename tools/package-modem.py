@@ -43,10 +43,18 @@ def stage(binaries, docs, binary_dir, suffix, guide):
         (docs / name).chmod(0o644)
 
 
+def stage_linux_units(payload):
+    for scope, source in (("system", "linkwise-modem.service"), ("user", "linkwise-modem-user.service")):
+        directory = payload / "usr/lib/systemd" / scope
+        directory.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / "packaging/systemd" / source, directory / "linkwise-modem.service")
+
+
 def build_deb(work, binary_dir, version, architecture, output):
     debian = work / "debian"
     payload = debian / "linkwise-modem"
     stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "", "ubuntu")
+    stage_linux_units(payload)
     (debian / "control").write_text(
         "Source: linkwise-modem\n\nPackage: linkwise-modem\nArchitecture: any\n",
         encoding="utf-8",
@@ -63,18 +71,46 @@ def build_deb(work, binary_dir, version, architecture, output):
         f"Package: linkwise-modem\nVersion: {version}\nArchitecture: {architecture}\n"
         "Maintainer: Linkwise project\n"
         "Section: hamradio\nPriority: optional\n"
-        f"Depends: {dependencies}\n"
+        f"Depends: init-system-helpers, {dependencies}\n"
         "Homepage: https://github.com/8r4n/linkwise\n"
         "Description: Linkwise modem preview\n"
         " Station diagnostics and local modem simulations for amateur radio.\n",
         encoding="utf-8",
     )
+    (debian / "changelog").write_text(
+        f"linkwise-modem ({version}) unstable; urgency=medium\n\n"
+        "  * Build Linkwise modem.\n\n"
+        " -- Linkwise project <noreply@github.com>  Thu, 12 Nov 2026 00:00:00 +0000\n",
+        encoding="utf-8",
+    )
+    (debian / "compat").write_text("13\n", encoding="ascii")
+    env = dict(os.environ, DEB_RULES_REQUIRES_ROOT="no")
+    # --no-start suppresses debhelper's stop script as well. Stop only on
+    # removal and restart only an already running service on upgrade.
+    (debian / "linkwise-modem.prerm").write_text(
+        '#!/bin/sh\nset -e\n'
+        'if [ "$1" = remove ] && [ -d /run/systemd/system ]; then\n'
+        '    deb-systemd-invoke stop linkwise-modem.service >/dev/null\n'
+        'fi\n#DEBHELPER#\n', encoding="ascii",
+    )
+    (debian / "linkwise-modem.postinst").write_text(
+        '#!/bin/sh\nset -e\n#DEBHELPER#\n'
+        'if [ "$1" = configure ] && [ -n "$2" ] && [ -d /run/systemd/system ]; then\n'
+        '    systemctl try-restart linkwise-modem.service\n'
+        'fi\n', encoding="ascii",
+    )
+    run("dh_installsystemd", "--no-enable", "--no-start", cwd=work, env=env)
+    run("dh_installsystemduser", "--no-enable", cwd=work, env=env)
+    run("dh_installdeb", cwd=work, env=env)
     run("dpkg-deb", "--root-owner-group", "--build", payload, output)
 
 
 def build_rpm(work, binary_dir, version, architecture, output):
     payload = work / "payload"
     stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "", "fedora")
+    stage_linux_units(payload)
+    shutil.copytree(ROOT / "packaging/selinux", work / "selinux")
+    shutil.copyfile(ROOT / "packaging/systemd/80-linkwise-modem.preset", work / "80-linkwise-modem.preset")
     run(
         "rpmbuild", "-bb", "--define", f"_topdir {work}", "--define",
         f"linkwise_version {version}", "--target", architecture,
@@ -83,12 +119,33 @@ def build_rpm(work, binary_dir, version, architecture, output):
     shutil.copyfile(next((work / "RPMS" / architecture).glob("*.rpm")), output)
 
 
-def build_pkg(work, binary_dir, version, architecture, output, identity):
+def build_pkg(work, binary_dir, version, architecture, output, identity, application_identity):
     payload = work / "payload"
     stage(
         payload / "usr/local/bin", payload / "usr/local/share/doc/linkwise-modem",
         binary_dir, "", "macos",
     )
+    macos = ROOT / "packaging/macos"
+    app = payload / "Applications/Linkwise Station.app"
+    contents = app / "Contents"
+    executables = contents / "MacOS"
+    agents = contents / "Library/LaunchAgents"
+    executables.mkdir(parents=True)
+    agents.mkdir(parents=True)
+    shutil.copyfile(macos / "Info.plist", contents / "Info.plist")
+    agent = "io.github.8r4n.linkwise.modem.station.plist"
+    shutil.copyfile(macos / agent, agents / agent)
+    shutil.copy2(payload / "usr/local/bin/linkwise-modemd", executables)
+    cpu = "arm64" if architecture == "arm64" else "x86_64"
+    run("swiftc", "-target", f"{cpu}-apple-macos13", macos / "Station.swift",
+        "-o", executables / "LinkwiseStation")
+    if application_identity:
+        sign = ("codesign", "--force", "--options", "runtime", "--timestamp",
+                "--sign", application_identity)
+        for item in (executables / "linkwise-modemd", payload / "usr/local/bin/linkwise-modemd", app):
+            run(*sign, "--entitlements", macos / "Station.entitlements", item)
+        run(*sign, payload / "usr/local/bin/linkwise")
+        run("codesign", "--verify", "--deep", "--strict", app)
     component = work / "linkwise-modem-component.pkg"
     run(
         "pkgbuild", "--root", payload, "--ownership", "recommended", "--identifier",
@@ -113,13 +170,27 @@ def build_pkg(work, binary_dir, version, architecture, output, identity):
     )
 
 
-def build_exe(work, binary_dir, version, architecture, output, compiler):
+def build_exe(work, binary_dir, version, architecture, output, compiler, thumbprint):
     stage(work, work, binary_dir, ".exe", "windows")
+    shutil.copy2(ROOT / "packaging/windows/Configure-Winlink.ps1", work)
+    shutil.copy2(ROOT / "docs/install/winlink-quick-start.md", work / "Winlink-Quick-Start.md")
+    if thumbprint:
+        for program in PROGRAMS:
+            sign_windows(work / (program + ".exe"), thumbprint)
     run(
         compiler, f"/DAppVersion={version}", f"/DAppArchitecture={architecture}",
         f"/DStageDir={work}", f"/O{output.parent}", f"/F{output.stem}",
         ROOT / "packaging/linkwise-modem.iss",
     )
+    if thumbprint:
+        sign_windows(output, thumbprint)
+
+
+def sign_windows(path, thumbprint):
+    run("signtool", "sign", "/sha1", thumbprint, "/fd", "SHA256",
+        "/tr", "http://timestamp.digicert.com", "/td", "SHA256", path)
+    run("signtool", "verify", "/pa", path)
+
 
 
 def main():
@@ -129,7 +200,12 @@ def main():
     parser.add_argument("--cargo", default="cargo")
     parser.add_argument("--iscc", default="ISCC.exe", help="path to the Inno Setup 6 compiler")
     parser.add_argument("--macos-installer-identity", help="Developer ID Installer certificate")
+    parser.add_argument("--macos-application-identity", help="Developer ID Application certificate")
+    parser.add_argument("--windows-signing-thumbprint", help="Authenticode certificate thumbprint")
+    parser.add_argument("--macos-notary-profile", help="notarytool keychain profile")
     args = parser.parse_args()
+    if args.macos_notary_profile and not (args.macos_application_identity and args.macos_installer_identity):
+        parser.error("macOS notarization requires both Developer ID signing identities")
     system = platform.system()
     if args.format not in FORMATS.get(system, ()):
         parser.error(f"{args.format} packaging requires its native build platform")
@@ -189,9 +265,13 @@ def main():
         elif args.format == "rpm":
             build_rpm(work, binary_dir, version, rpm_arch, output)
         elif args.format == "pkg":
-            build_pkg(work, binary_dir, version, architecture, output, args.macos_installer_identity)
+            build_pkg(work, binary_dir, version, architecture, output, args.macos_installer_identity, args.macos_application_identity)
         else:
-            build_exe(work, binary_dir, version, windows_arch, output, args.iscc)
+            build_exe(work, binary_dir, version, windows_arch, output, args.iscc, args.windows_signing_thumbprint)
+        if args.format == "pkg" and args.macos_notary_profile:
+            run("xcrun", "notarytool", "submit", output, "--keychain-profile", args.macos_notary_profile, "--wait")
+            run("xcrun", "stapler", "staple", output)
+            run("xcrun", "stapler", "validate", output)
         checksum = hashlib.sha256(output.read_bytes()).hexdigest()
         manifest = work / f"{filename}.sha256"
         manifest.write_text(f"{checksum}  {filename}\n", encoding="ascii")

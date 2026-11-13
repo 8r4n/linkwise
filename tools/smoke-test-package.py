@@ -59,11 +59,11 @@ def smoke(package, version, station):
         install = ("sudo", "-n", "dnf", "-y", "--setopt=tsflags=", "install", package)
         uninstall = ("sudo", "-n", "dnf", "-y", "remove", PACKAGE)
     elif system == "Windows" and suffix == ".exe":
-        binaries = Path(os.environ["LOCALAPPDATA"]) / "Programs" / "Linkwise Modem"
+        binaries = Path(os.environ["ProgramFiles"]) / "Linkwise Modem"
         docs = binaries / "docs"
         query = (
             "reg.exe", "query",
-            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall"
+            r"HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall"
             + f"\\{INSTALLER_ID}_is1", "/reg:64",
         )
         flags = ("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
@@ -77,6 +77,11 @@ def smoke(package, version, station):
     modem = binaries / f"linkwise-modemd{extension}"
     guides = tuple(docs / name for name in GUIDES)
     installed_files = (cli, modem, *guides)
+    if system == "Windows":
+        installed_files += (binaries / "Configure-Winlink.ps1", docs / "Winlink-Quick-Start.md")
+    mac_app = Path("/Applications/Linkwise Station.app")
+    if system == "Darwin" and mac_app.exists():
+        raise RuntimeError("Use a clean test host without the Linkwise Station app")
     if (
         any(path.exists() or path.is_symlink() for path in installed_files)
         or (system == "Windows" and binaries.exists())
@@ -95,12 +100,19 @@ def smoke(package, version, station):
         run(modem, "--help")
         run(modem, "--check-config", station)
         run(modem, "--simulate")
+        if system == "Windows":
+            run("sc.exe", "qc", "LinkwiseModem")
+            run("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                Path(__file__).with_name("test-windows-station.ps1"))
     finally:
         if system == "Darwin":
             run("sudo", "-n", "rm", "-f", *installed_files)
+            run("sudo", "-n", "rm", "-rf", mac_app)
         if registered(*query) or (system == "Windows" and uninstall[0].is_file()):
             run(*uninstall)
 
+    if system == "Windows" and registered("sc.exe", "query", "LinkwiseModem"):
+        raise RuntimeError("Uninstall left the Windows modem service registered")
     if any(path.exists() for path in installed_files) or registered(*query):
         raise RuntimeError("Uninstall left the package or its files behind")
 

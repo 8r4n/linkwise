@@ -1,0 +1,16 @@
+[Unit]
+Description=Linkwise modem desktop station
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/linkwise-modemd --serve-station %h/.config/linkwise/station.json
+NoNewPrivileges=yes
+TimeoutStartSec=45
+TimeoutStopSec=10
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

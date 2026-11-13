@@ -1,5 +1,4 @@
-//! A radio-free host service. Each virtual cable message carries one 48 kHz
-//! mono waveform; the service has no audio-device or PTT access.
+//! Two-way modem host over native audio or an isolated 48 kHz waveform cable.
 use std::{io, net::SocketAddr, time::Duration};
 
 use async_trait::async_trait;
@@ -40,13 +39,32 @@ enum Request {
     Data(Vec<u8>, oneshot::Sender<io::Result<()>>),
 }
 
-struct Port(mpsc::Sender<Request>);
+struct Port {
+    requests: mpsc::Sender<Request>,
+    #[cfg(windows)]
+    report_attachment: std::sync::atomic::AtomicBool,
+}
 
 #[async_trait]
 impl ModemPort for Port {
     async fn command(&self, command: Command) -> Reply {
+        #[cfg(windows)]
+        if self
+            .report_attachment
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
+            super::windows_service::log_event(
+                "TNC client attached and sent its first command",
+                false,
+            );
+        }
         let (send, receive) = oneshot::channel();
-        if self.0.send(Request::Command(command, send)).await.is_err() {
+        if self
+            .requests
+            .send(Request::Command(command, send))
+            .await
+            .is_err()
+        {
             return Reply::Wrong;
         }
         receive.await.unwrap_or(Reply::Wrong)
@@ -60,7 +78,7 @@ impl ModemPort for Port {
             ));
         }
         let (send, receive) = oneshot::channel();
-        self.0
+        self.requests
             .send(Request::Data(bytes.to_vec(), send))
             .await
             .map_err(|_| io::Error::other("virtual cable closed"))?;
@@ -224,7 +242,7 @@ impl Engine<'_> {
         ))
     }
 
-    async fn disconnect(&mut self, cable: &mut Cable) -> io::Result<()> {
+    async fn disconnect(&mut self, cable: &mut Audio) -> io::Result<()> {
         if let Some(link) = &self.session {
             cable
                 .send(
@@ -239,7 +257,7 @@ impl Engine<'_> {
         self.notify("DISCONNECTED\r".into())
     }
 
-    async fn fail_delivery(&mut self, cable: &mut Cable, reason: &str) -> io::Result<()> {
+    async fn fail_delivery(&mut self, cable: &mut Audio, reason: &str) -> io::Result<()> {
         eprintln!("Virtual BW{} delivery failed: {reason}", self.mode.width());
         self.disconnect(cable).await
     }
@@ -249,7 +267,7 @@ impl Engine<'_> {
         self.deadline = Some(Instant::now() + PHASE_TIMEOUT);
     }
 
-    async fn establish(&mut self, mut action: Option<Action>, cable: &mut Cable) -> io::Result<()> {
+    async fn establish(&mut self, mut action: Option<Action>, cable: &mut Audio) -> io::Result<()> {
         while let Some(next) = action {
             match next {
                 Action::Transmit { token, audio } => {
@@ -304,11 +322,16 @@ impl Engine<'_> {
         Ok(())
     }
 
-    async fn host_command(&mut self, command: Command, cable: &mut Cable) -> io::Result<Reply> {
+    async fn host_command(&mut self, command: Command, cable: &mut Audio) -> io::Result<Reply> {
         let idle = self.phase == Phase::Handshake && self.deadline.is_none();
         match command {
             Command::Version => Ok(Reply::Version(format!(
-                "LINKWISE VIRTUAL BW{}",
+                "LINKWISE {}BW{}",
+                if matches!(cable, Audio::Virtual(_)) {
+                    "VIRTUAL "
+                } else {
+                    ""
+                },
                 self.mode.width()
             ))),
             Command::MyCall(calls) if calls.as_slice() == [self.local] => Ok(Reply::Ok),
@@ -458,7 +481,7 @@ impl Engine<'_> {
         }
     }
 
-    async fn start_delivery(&mut self, cable: &mut Cable) -> io::Result<()> {
+    async fn start_delivery(&mut self, cable: &mut Audio) -> io::Result<()> {
         self.plan_delivery()?;
         self.caller_requested_turn = false;
         let link = self.session.as_ref().expect("sending requires a session");
@@ -482,7 +505,7 @@ impl Engine<'_> {
         Ok(())
     }
 
-    async fn acknowledge_delivery(&mut self, cable: &mut Cable) -> io::Result<()> {
+    async fn acknowledge_delivery(&mut self, cable: &mut Audio) -> io::Result<()> {
         self.closed_at_level3 = self
             .plan
             .as_ref()
@@ -532,7 +555,7 @@ impl Engine<'_> {
                 .is_some_and(|plan| self.send_index == plan.full_frames())
     }
 
-    async fn expire(&mut self, cable: &mut Cable) -> io::Result<()> {
+    async fn expire(&mut self, cable: &mut Audio) -> io::Result<()> {
         if self.phase == Phase::ResponderConfirm {
             if !self.pending.is_empty() {
                 self.plan_delivery()?;
@@ -623,7 +646,7 @@ impl Engine<'_> {
         self.notify("DISCONNECTED\r".into())
     }
 
-    async fn audio(&mut self, samples: &[f32], cable: &mut Cable) -> io::Result<()> {
+    async fn audio(&mut self, samples: &[f32], cable: &mut Audio) -> io::Result<()> {
         let mut detector = BurstDetector::new(48_000);
         let mut candidates = Vec::new();
         detector.push(samples, |range| candidates.push(range));
@@ -1146,7 +1169,7 @@ impl Engine<'_> {
         }
         Ok(())
     }
-    async fn send_over(&mut self, cable: &mut Cable) -> io::Result<()> {
+    async fn send_over(&mut self, cable: &mut Audio) -> io::Result<()> {
         self.first_responder_poll = false;
         let link = self
             .session
@@ -1197,7 +1220,7 @@ impl Engine<'_> {
             )
         };
         let samples = samples.ok_or_else(|| io::Error::other("could not render DATA waveform"))?;
-        let playback = Duration::from_secs_f64(samples.len() as f64 / 48_000.0);
+        let playback = cable.transmission_remaining(samples.len());
         let local_caller = link.caller == self.local;
         cable.write(&samples).await?;
         self.transition(Phase::DataAck);
@@ -1450,6 +1473,38 @@ impl Cable {
         timeout(IO_TIMEOUT, self.stream.write_all(&frame)).await??;
         Ok(())
     }
+}
+
+enum Audio {
+    Virtual(Cable),
+    #[cfg(feature = "audio-device")]
+    Native(Box<super::station::NativeAudio>),
+}
+
+impl Audio {
+    async fn read(&mut self) -> io::Result<Vec<f32>> {
+        match self {
+            Self::Virtual(cable) => cable.read().await,
+            #[cfg(feature = "audio-device")]
+            Self::Native(device) => device.read().await,
+        }
+    }
+
+    async fn write(&mut self, samples: &[f32]) -> io::Result<()> {
+        match self {
+            Self::Virtual(cable) => cable.write(samples).await,
+            #[cfg(feature = "audio-device")]
+            Self::Native(device) => device.write(samples).await,
+        }
+    }
+
+    fn transmission_remaining(&self, samples: usize) -> Duration {
+        match self {
+            Self::Virtual(_) => Duration::from_secs_f64(samples as f64 / 48_000.0),
+            #[cfg(feature = "audio-device")]
+            Self::Native(_) => Duration::ZERO,
+        }
+    }
 
     async fn send(&mut self, samples: Option<Vec<f32>>) -> io::Result<()> {
         self.write(&samples.ok_or_else(|| io::Error::other("could not render waveform"))?)
@@ -1459,7 +1514,7 @@ impl Cable {
 
 async fn run(
     mut engine: Engine<'_>,
-    mut cable: Cable,
+    mut cable: Audio,
     mut host: mpsc::Receiver<Request>,
 ) -> io::Result<()> {
     loop {
@@ -1507,19 +1562,41 @@ pub async fn serve(args: &[String], wide: bool) -> Result<(), Box<dyn std::error
         let waveform = Box::new(Waveform::from_json(&profile)?);
         Mode::Bw500 { profile, waveform }
     };
-    let identity = LinkSetup {
-        caller: call.clone(),
-        high_speed: false,
-        requested_level: 4,
-    };
-    let wire = identity.encode(Profile::Bw500).ok_or("invalid callsign")?;
-    let local = LinkSetup::decode(Profile::Bw500, &wire)
-        .ok_or("invalid callsign")?
-        .caller;
+    serve_mode(call, mode, (control, data, audio), false, || Ok(())).await
+}
+
+#[cfg(windows)]
+pub(super) async fn serve_winlink_test(
+    call: &str,
+    profile: &std::path::Path,
+    ports: (u16, u16, u16),
+    on_bound: impl FnOnce() -> io::Result<()>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let profile = super::setup::read_text(profile, 128 * 1024).map_err(io::Error::other)?;
+    let waveform = Box::new(Waveform::from_json(&profile)?);
+    serve_mode(
+        call,
+        Mode::Bw500 { profile, waveform },
+        ports,
+        true,
+        on_bound,
+    )
+    .await
+}
+
+async fn serve_mode(
+    call: &str,
+    mode: Mode,
+    (control, data, audio): (u16, u16, u16),
+    _service: bool,
+    on_bound: impl FnOnce() -> io::Result<()>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let local = normalize_callsign(call)?;
     let address = |port| SocketAddr::from(([127, 0, 0, 1], port));
     let mut listener = Listener::bind(address(control), address(data), IO_TIMEOUT).await?;
     let audio = TcpListener::bind(address(audio)).await?;
     let (control, data) = listener.addresses()?;
+    on_bound()?;
     println!(
         "VIRTUAL BW{} {local}. Command {control}, DATA {data}, audio {}.",
         mode.width(),
@@ -1527,50 +1604,170 @@ pub async fn serve(args: &[String], wide: bool) -> Result<(), Box<dyn std::error
     );
     loop {
         let (stream, _) = audio.accept().await?;
-        let (send, host) = mpsc::channel(8);
-        let (notices, control_rx) = mpsc::channel(8);
-        let (received, data_rx) = mpsc::channel(1);
-        let port = Port(send);
-        let engine = Engine {
-            local: &local,
-            mode: &mode,
-            wide_lead: None,
-            wide_level3: wide_level4::LowerWaveform::new_level3(mode.bandwidth()),
-            wide_level2: wide_level4::RobustWaveform::new_level2(mode.bandwidth()),
-            wide_rate: 4,
-            wide_outstanding: Vec::new(),
-            handshake: mode.handshake(&local, false)?,
-            session: None,
-            phase: Phase::Handshake,
-            listen: false,
-            disconnect_pending: false,
-            pending: Vec::new(),
-            plan: None,
-            delivery_len: 0,
-            send_index: 0,
-            intermediate_transmissions: 0,
-            retried_data: false,
-            retry_on_confirm: false,
-            returned_turn: false,
-            caller_requested_turn: false,
-            initial_poll: false,
-            first_responder_poll: false,
-            closed_at_level3: false,
-            rejected_over: false,
-            receive_bytes: Vec::new(),
-            last_received: None,
-            deadline: None,
-            start: Instant::now(),
-            notices,
-            received,
-        };
-        let result = tokio::select! {
-            result = listener.serve_one(&port, control_rx, data_rx) => result,
-            result = run(engine, Cable { stream, input: Vec::new() }, host) => result,
-        };
+        #[cfg(windows)]
+        if _service {
+            super::windows_service::log_event("Waveform peer attached", false);
+        }
+        let result = serve_audio(
+            &mut listener,
+            &local,
+            &mode,
+            Audio::Virtual(Cable {
+                stream,
+                input: Vec::new(),
+            }),
+            _service,
+        )
+        .await;
+        #[cfg(windows)]
+        if _service {
+            super::windows_service::log_event(
+                "TNC or waveform connection ended. Waiting for a waveform peer.",
+                false,
+            );
+        }
         if let Err(error) = result {
             eprintln!("Virtual BW{} connection ended: {error}", mode.width());
         }
+    }
+}
+
+fn normalize_callsign(call: &str) -> io::Result<String> {
+    let identity = LinkSetup {
+        caller: call.to_owned(),
+        high_speed: false,
+        requested_level: 4,
+    };
+    let wire = identity
+        .encode(Profile::Bw500)
+        .ok_or_else(|| io::Error::other("invalid callsign"))?;
+    Ok(LinkSetup::decode(Profile::Bw500, &wire)
+        .ok_or_else(|| io::Error::other("invalid callsign"))?
+        .caller)
+}
+
+async fn serve_audio(
+    listener: &mut Listener,
+    local: &str,
+    mode: &Mode,
+    audio: Audio,
+    _service: bool,
+) -> io::Result<()> {
+    let (send, host) = mpsc::channel(8);
+    let (notices, control_rx) = mpsc::channel(8);
+    let (received, data_rx) = mpsc::channel(1);
+    let port = Port {
+        requests: send,
+        #[cfg(windows)]
+        report_attachment: std::sync::atomic::AtomicBool::new(_service),
+    };
+    let engine = Engine {
+        local,
+        mode,
+        wide_lead: None,
+        wide_level3: wide_level4::LowerWaveform::new_level3(mode.bandwidth()),
+        wide_level2: wide_level4::RobustWaveform::new_level2(mode.bandwidth()),
+        wide_rate: 4,
+        wide_outstanding: Vec::new(),
+        handshake: mode.handshake(local, false)?,
+        session: None,
+        phase: Phase::Handshake,
+        listen: false,
+        disconnect_pending: false,
+        pending: Vec::new(),
+        plan: None,
+        delivery_len: 0,
+        send_index: 0,
+        intermediate_transmissions: 0,
+        retried_data: false,
+        retry_on_confirm: false,
+        returned_turn: false,
+        caller_requested_turn: false,
+        initial_poll: false,
+        first_responder_poll: false,
+        closed_at_level3: false,
+        rejected_over: false,
+        receive_bytes: Vec::new(),
+        last_received: None,
+        deadline: None,
+        start: Instant::now(),
+        notices,
+        received,
+    };
+    tokio::select! {
+        result = listener.serve_one(&port, control_rx, data_rx) => result,
+        result = run(engine, audio, host) => result,
+    }
+}
+
+#[cfg(feature = "audio-device")]
+pub(super) async fn serve_native(
+    station: &super::setup::Station,
+    path: &std::path::Path,
+    bandwidth: u16,
+    on_bound: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let mode = match bandwidth {
+        500 => {
+            let path = station.profile_path(path).ok_or("Missing BW500 profile")?;
+            let profile = super::setup::read_text(&path, 128 * 1024)?;
+            let waveform =
+                Box::new(Waveform::from_json(&profile).map_err(|error| error.to_string())?);
+            Mode::Bw500 { profile, waveform }
+        }
+        2300 | 2750 => {
+            let bandwidth = if bandwidth == 2300 {
+                Bandwidth::Hz2300
+            } else {
+                Bandwidth::Hz2750
+            };
+            let waveform =
+                Box::new(wide_level4::Waveform::new(bandwidth).ok_or("Invalid bandwidth")?);
+            Mode::Wide {
+                bandwidth,
+                waveform,
+            }
+        }
+        _ => return Err("Invalid station bandwidth".into()),
+    };
+    let local = normalize_callsign(&station.callsign).map_err(|error| error.to_string())?;
+    let address = |port| SocketAddr::from(([127, 0, 0, 1], port));
+    let mut listener = Listener::bind(
+        address(station.command_port),
+        address(station.data_port),
+        IO_TIMEOUT,
+    )
+    .await
+    .map_err(|error| format!("Bind modem host ports: {error}"))?;
+    on_bound()?;
+    let mut delay = Duration::from_secs(1);
+    loop {
+        match super::station::NativeAudio::open(&station.input, &station.output).await {
+            Ok(audio) => {
+                delay = Duration::from_secs(1);
+                super::station::notify_manager(&format!(
+                    "READY=1\nSTATUS=BW{bandwidth} transmit and receive ready"
+                ));
+                match serve_audio(
+                    &mut listener,
+                    &local,
+                    &mode,
+                    Audio::Native(Box::new(audio)),
+                    cfg!(windows),
+                )
+                .await
+                {
+                    Ok(()) => continue,
+                    Err(error) => eprintln!("BW{bandwidth} session ended: {error}"),
+                }
+            }
+            Err(error) => {
+                eprintln!("BW{bandwidth} audio unavailable: {error}");
+                super::station::notify_manager(&format!("STATUS=Degraded: {error}"));
+            }
+        }
+        tokio::time::sleep(delay).await;
+        delay = (delay * 2).min(Duration::from_secs(30));
     }
 }
 

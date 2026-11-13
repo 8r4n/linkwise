@@ -13,23 +13,28 @@ use std::{
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Station {
+pub(super) struct Station {
     version: u32,
-    callsign: String,
-    input: AudioDevice,
-    output: AudioDevice,
+    pub(super) callsign: String,
+    pub(super) input: AudioDevice,
+    pub(super) output: AudioDevice,
+    pub(super) bandwidth: Option<u16>,
     #[serde(default = "default_command_port")]
-    command_port: u16,
+    pub(super) command_port: u16,
     #[serde(default = "default_data_port")]
-    data_port: u16,
+    pub(super) data_port: u16,
     bw500_profile: Option<PathBuf>,
+    #[cfg(windows)]
+    pub(super) winlink_test_audio_port: Option<u16>,
+    #[cfg(windows)]
+    pub(super) verify_bw500_fixture: Option<bool>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct AudioDevice {
-    name: String,
-    channel: u16,
+pub(super) struct AudioDevice {
+    pub(super) name: String,
+    pub(super) channel: u16,
 }
 
 fn default_command_port() -> u16 {
@@ -40,7 +45,7 @@ fn default_data_port() -> u16 {
     8301
 }
 
-fn read_text(path: &Path, max_bytes: u64) -> Result<String, String> {
+pub(super) fn read_text(path: &Path, max_bytes: u64) -> Result<String, String> {
     let mut content = String::new();
     File::open(path)
         .and_then(|file| file.take(max_bytes + 1).read_to_string(&mut content))
@@ -52,7 +57,7 @@ fn read_text(path: &Path, max_bytes: u64) -> Result<String, String> {
 }
 
 impl Station {
-    fn load(path: &Path) -> Result<Self, String> {
+    pub(super) fn load(path: &Path) -> Result<Self, String> {
         let content = read_text(path, 16 * 1024)?;
         let mut station: Self = serde_json::from_str(&content)
             .map_err(|error| format!("{}: {error}", path.display()))?;
@@ -80,24 +85,63 @@ impl Station {
         {
             return Err("Choose distinct, nonzero command and data ports".into());
         }
-        if let Some(profile) = &station.bw500_profile {
-            let profile = path.parent().unwrap_or(Path::new("")).join(profile);
-            let content = read_text(&profile, 128 * 1024)?;
-            Waveform::from_json(&content)
-                .map_err(|error| format!("Invalid profile {}: {error}", profile.display()))?;
+        if let Some(bandwidth) = station.bandwidth {
+            if !matches!(bandwidth, 500 | 2300 | 2750) {
+                return Err("Choose station bandwidth 500, 2300, or 2750 Hz".into());
+            }
+            if bandwidth == 500 && station.bw500_profile.is_none() {
+                return Err("Two-way BW500 requires bw500_profile".into());
+            }
+        }
+        #[cfg(windows)]
+        if let Some(port) = station.winlink_test_audio_port {
+            if station.bandwidth.is_some() {
+                return Err("Choose either native bandwidth or winlink_test_audio_port".into());
+            }
+            if station.command_port.checked_add(1) != Some(station.data_port) {
+                return Err(
+                    "Winlink Express requires the DATA port to follow the command port".into(),
+                );
+            }
+            if port == 0 || port == station.command_port || port == station.data_port {
+                return Err("Winlink test audio port must be nonzero and distinct".into());
+            }
+            if station.bw500_profile.is_none() {
+                return Err("Winlink test mode requires bw500_profile".into());
+            }
         }
         Ok(station)
+    }
+
+    pub(super) fn profile_path(&self, station_path: &Path) -> Option<PathBuf> {
+        self.bw500_profile
+            .as_ref()
+            .map(|profile| station_path.parent().unwrap_or(Path::new("")).join(profile))
+    }
+
+    pub(super) fn waveform(&self, path: &Path) -> Result<Option<Waveform>, String> {
+        self.profile_path(path)
+            .map(|profile| {
+                let content = read_text(&profile, 128 * 1024)?;
+                Waveform::from_json(&content)
+                    .map_err(|error| format!("Invalid profile {}: {error}", profile.display()))
+            })
+            .transpose()
     }
 }
 
 pub fn check_config(file: &str) -> Result<(), String> {
-    let station = Station::load(Path::new(file))?;
+    let path = Path::new(file);
+    let station = Station::load(path)?;
+    station.waveform(path)?;
     println!("Configuration valid for {}.", station.callsign);
     Ok(())
 }
 
 pub async fn check_station(file: &str) -> Result<(), String> {
-    let station = Station::load(Path::new(file))?;
+    let path = Path::new(file);
+    let station = Station::load(path)?;
+    station.waveform(path)?;
     check_audio(&station.input, &station.output)?;
 
     let command = SocketAddr::from((Ipv4Addr::LOCALHOST, station.command_port));

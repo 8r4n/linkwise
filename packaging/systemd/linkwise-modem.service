@@ -1,0 +1,26 @@
+[Unit]
+Description=Linkwise modem station
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/linkwise-modemd --serve-station /etc/linkwise/station.json
+DynamicUser=yes
+Environment=HOME=/nonexistent
+SupplementaryGroups=audio
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateIPC=yes
+DevicePolicy=closed
+DeviceAllow=char-alsa rw
+RestrictAddressFamilies=AF_UNIX AF_INET
+TimeoutStartSec=45
+TimeoutStopSec=10
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

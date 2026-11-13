@@ -2,6 +2,12 @@ name: Modem preview packages
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - package
+    tags:
+      - 'v*'
   pull_request:
     paths:
       - '.github/workflows/modem-packages.yml'
@@ -11,12 +17,24 @@ on:
       - 'rust-toolchain.toml'
       - 'tools/package-modem.py'
       - 'tools/smoke-test-package.py'
+      - 'tools/test-windows-station.ps1'
 
 permissions:
   contents: read
 
 jobs:
+  dependency-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: cargo +stable install cargo-audit --version 0.22.2 --locked
+      - run: cargo audit --file rust/Cargo.lock
+
   native:
+    needs: dependency-audit
     name: ${{ matrix.os }} ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
@@ -42,14 +60,14 @@ jobs:
         if: matrix.os == 'ubuntu'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libasound2-dev pkg-config dpkg-dev
+          sudo apt-get install -y build-essential libasound2-dev pkg-config dpkg-dev debhelper
       - name: Build and test Unix installer
         if: matrix.os != 'windows'
         env:
           PACKAGE_FORMAT: ${{ matrix.format }}
         run: |
-          python tools/package-modem.py "$PACKAGE_FORMAT"
-          python tools/smoke-test-package.py dist/*."$PACKAGE_FORMAT"
+          python tools/package-modem.py "$PACKAGE_FORMAT" --output-dir installer-artifacts
+          python tools/smoke-test-package.py installer-artifacts/*."$PACKAGE_FORMAT"
       - name: Build and test Windows installer
         if: matrix.os == 'windows'
         shell: pwsh
@@ -65,18 +83,19 @@ jobs:
             '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$inno`""
           ) -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Inno Setup failed: $($installer.ExitCode)" }
-          python tools/package-modem.py exe --iscc (Join-Path $inno 'ISCC.exe')
+          python tools/package-modem.py exe --output-dir installer-artifacts --iscc (Join-Path $inno 'ISCC.exe')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $packages = @(Get-ChildItem dist -Filter '*.exe')
+          $packages = @(Get-ChildItem installer-artifacts -Filter '*.exe')
           if ($packages.Count -ne 1) { throw 'Expected one Linkwise installer' }
           python tools/smoke-test-package.py $packages[0].FullName
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linkwise-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/
+          path: installer-artifacts/
           if-no-files-found: error
 
   fedora:
+    needs: dependency-audit
     name: Fedora 45 ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
@@ -95,15 +114,15 @@ jobs:
           CONTAINER_PLATFORM: ${{ matrix.platform }}
         run: |
           docker run --rm --platform "$CONTAINER_PLATFORM" -v "$PWD:/src" -w /src fedora:45 bash -euc '
-            dnf install -y gcc alsa-lib-devel pkgconf-pkg-config rpm-build python3 sudo curl-minimal
+            dnf install -y gcc alsa-lib-devel pkgconf-pkg-config rpm-build make selinux-policy-devel systemd-rpm-macros python3 sudo curl-minimal
             curl --proto "=https" --tlsv1.2 -fsS https://sh.rustup.rs -o /tmp/rustup.sh
             sh /tmp/rustup.sh -y --profile minimal --default-toolchain none
             export PATH="$HOME/.cargo/bin:$PATH"
-            python3 tools/package-modem.py rpm
-            python3 tools/smoke-test-package.py dist/*.rpm
+            python3 tools/package-modem.py rpm --output-dir installer-artifacts
+            python3 tools/smoke-test-package.py installer-artifacts/*.rpm
           '
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linkwise-fedora-${{ matrix.arch }}
-          path: dist/
+          path: installer-artifacts/
           if-no-files-found: error

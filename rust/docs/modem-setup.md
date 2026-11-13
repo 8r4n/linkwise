@@ -1,9 +1,7 @@
 # Linkwise modem setup checks
 
-Use these checks to prepare a station for Linkwise. The current build checks
-audio and local port availability and can run isolated audio bench sessions.
-Over-the-air Winlink sessions and PTT control require the operational
-modem runtime.
+Use these checks to prepare a station for Linkwise. The native modem uses
+the selected input and output for half-duplex transmission and reception.
 
 ## Select your radio's audio devices
 
@@ -52,6 +50,22 @@ If you already have a Linkwise BW500 level-4 measurement profile, set
 `bw500_profile` to its JSON file path to check that it can be loaded. A
 relative path is resolved from the directory containing `station.json`.
 The profile is optional for these setup checks.
+
+## Run the two-way modem
+
+Add `"bandwidth": 500` to `station.json` and set `bw500_profile` to a
+valid level-4 measurement profile. Use bandwidth `2300` or `2750`
+for the corresponding wide waveform. Both stations must use compatible
+waveforms. Start the installed service or run
+`linkwise-modemd --serve-station station.json` in the foreground.
+
+In Winlink Express, use VARA HF P2P with host `127.0.0.1` and the
+configured command port. The data port must follow the command port.
+Turn off VARA auto-launch and select the corresponding bandwidth.
+Linkwise plays audio on the configured output channel. For RF operation,
+use radio or interface VOX or external PTT control and verify turnaround
+with your equipment. A configuration without `bandwidth` runs receive
+diagnostics on the command port.
 
 ## Start an isolated wide-mode bench
 

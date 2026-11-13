@@ -1,0 +1,1 @@
+(portcon tcp 8300 (system_u object_r linkwise_modem_port_t ((s0) (s0))))

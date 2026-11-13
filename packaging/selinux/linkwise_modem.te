@@ -1,0 +1,36 @@
+policy_module(linkwise_modem, 1.0.0)
+
+type linkwise_modem_t;
+type linkwise_modem_exec_t;
+init_daemon_domain(linkwise_modem_t, linkwise_modem_exec_t)
+init_nnp_daemon_domain(linkwise_modem_t, linkwise_modem_exec_t)
+
+type linkwise_modem_etc_t;
+files_config_file(linkwise_modem_etc_t)
+
+type linkwise_modem_port_t;
+corenet_port(linkwise_modem_port_t)
+
+allow linkwise_modem_t linkwise_modem_etc_t:dir search_dir_perms;
+allow linkwise_modem_t linkwise_modem_etc_t:file read_file_perms;
+files_search_etc(linkwise_modem_t)
+files_read_etc_files(linkwise_modem_t)
+dev_read_sound(linkwise_modem_t)
+dev_write_sound(linkwise_modem_t)
+allow linkwise_modem_t self:unix_dgram_socket create_socket_perms;
+init_dgram_send(linkwise_modem_t)
+
+allow linkwise_modem_t self:tcp_socket create_stream_socket_perms;
+allow linkwise_modem_t linkwise_modem_port_t:tcp_socket name_bind;
+corenet_tcp_bind_generic_node(linkwise_modem_t)
+
+# ALSA reads its packaged configuration and enumerates kernel sound cards.
+optional_policy(`
+    alsa_read_rw_config(linkwise_modem_t)
+')
+files_read_usr_files(linkwise_modem_t)
+kernel_read_system_state(linkwise_modem_t)
+init_write_pid_socket(linkwise_modem_t)
+
+# PID 1 can inherit its named notification socket from early boot.
+kernel_dgram_send(linkwise_modem_t)
