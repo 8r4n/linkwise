@@ -23,6 +23,9 @@ and notarized build.
 
 ## Set up your station
 
+Run `man 1 linkwise-modemd` for the command reference and
+`man 5 linkwise-station` for the station configuration format.
+
 Open `/usr/local/share/doc/linkwise-modem/Station-setup.md` for instructions
 on selecting devices and creating `station.json`. If capture is denied, check
 System Settings → Privacy & Security → Microphone for your terminal app.
@@ -48,7 +51,9 @@ package receipt:
 ```sh
 sudo rm -f /usr/local/bin/linkwise /usr/local/bin/linkwise-modemd \
   /usr/local/share/doc/linkwise-modem/Install.md \
-  /usr/local/share/doc/linkwise-modem/Station-setup.md
+  /usr/local/share/doc/linkwise-modem/Station-setup.md \
+  /usr/local/share/man/man1/linkwise-modemd.1 \
+  /usr/local/share/man/man5/linkwise-station.5
 sudo rm -rf "/Applications/Linkwise Station.app"
 sudo pkgutil --forget io.github.8r4n.linkwise.modem
 ```

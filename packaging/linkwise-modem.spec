@@ -22,6 +22,8 @@ install -Dm644 "%{_topdir}/payload/usr/lib/systemd/system/linkwise-modem.service
 install -Dm644 "%{_topdir}/payload/usr/lib/systemd/user/linkwise-modem.service" "%{buildroot}%{_userunitdir}/linkwise-modem.service"
 mkdir -p "%{buildroot}%{_docdir}"
 cp -a "%{_topdir}/payload/usr/share/doc/linkwise-modem" "%{buildroot}%{_docdir}/"
+install -Dm644 "%{_topdir}/payload/usr/share/man/man1/linkwise-modemd.1" "%{buildroot}%{_mandir}/man1/linkwise-modemd.1"
+install -Dm644 "%{_topdir}/payload/usr/share/man/man5/linkwise-station.5" "%{buildroot}%{_mandir}/man5/linkwise-station.5"
 
 install -Dm644 "%{_topdir}/selinux/linkwise_modem.pp" "%{buildroot}%{_datadir}/selinux/packages/linkwise_modem.pp"
 install -Dm644 "%{_topdir}/selinux/linkwise_modem_ports.cil" "%{buildroot}%{_datadir}/selinux/packages/linkwise_modem_ports.cil"
@@ -58,6 +60,8 @@ fi
 %{_bindir}/linkwise
 %{_bindir}/linkwise-modemd
 %doc %{_docdir}/linkwise-modem/
+%{_mandir}/man1/linkwise-modemd.1*
+%{_mandir}/man5/linkwise-station.5*
 %{_unitdir}/linkwise-modem.service
 %{_userunitdir}/linkwise-modem.service
 %{_presetdir}/80-linkwise-modem.preset

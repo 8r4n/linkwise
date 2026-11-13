@@ -20,6 +20,9 @@ with the newer file to update. The simulation runs locally without a radio.
 
 ## Set up your station
 
+Run `man 1 linkwise-modemd` for the command reference and
+`man 5 linkwise-station` for the station configuration format.
+
 Open `/usr/share/doc/linkwise-modem/Station-setup.md` for instructions on
 selecting devices and creating `station.json`. Run audio checks as your
 desktop user so Linkwise can access the current audio session.
@@ -63,8 +66,9 @@ sudo ausearch -m AVC,USER_AVC -ts recent -i
 
 Expect `linkwise_modem_exec_t` on the executable, `linkwise_modem_etc_t` on
 configuration, and `linkwise_modem_t` on the system service. The policy
-labels TCP port 8300 with `linkwise_modem_port_t`. An administrator using
-another status port must assign that port type and resolve any existing
+labels the default command and data ports, TCP 8300 and 8301, with
+`linkwise_modem_port_t`. An administrator using different ports must
+assign that port type and resolve any existing
 port-label conflict. The desktop service runs in the caller's user domain.
 
 Fedora enforcement testing and DISA STIG qualification are separate checks.

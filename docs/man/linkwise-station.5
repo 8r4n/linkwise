@@ -1,0 +1,73 @@
+.TH LINKWISE-STATION 5 "2026-11-12" "Linkwise" "File Formats"
+.SH NAME
+linkwise\-station \- Linkwise modem station configuration
+.SH SYNOPSIS
+.I station.json
+.SH DESCRIPTION
+The station configuration is a UTF-8 JSON object.
+The file is limited to 16 KiB.
+Unknown keys are rejected.
+.BR linkwise-modemd (1)
+reads the file specified on its command line.
+.SH FIELDS
+.TP
+.B version
+Required integer.
+Use 1 for this format.
+.TP
+.B callsign
+Required station callsign.
+Linkwise trims whitespace and converts letters to uppercase.
+.TP
+.BR input ", " output
+Required objects with a
+.B name
+string and a zero-based integer
+.B channel .
+Use the exact device names reported by
+.BR "linkwise-modemd --audio-devices" .
+.TP
+.B bandwidth
+Optional integer in Hz.
+Use 500, 2300, or 2750 for two-way native audio.
+Omit this field to run receive diagnostics.
+.TP
+.BR command_port ", " data_port
+Optional TCP ports.
+The defaults are 8300 and 8301 respectively.
+Choose distinct nonzero port numbers.
+Only the command port is used for receive diagnostics.
+For Winlink Express, use the command port followed by the next consecutive
+port for data.
+.TP
+.B bw500_profile
+Path to a BW500 measurement profile in JSON, limited to 128 KiB.
+Relative paths are resolved from the station file's directory.
+The field is required for two-way operation at 500 Hz and optional for
+receive diagnostics.
+.SH FILES
+.TP
+.I /etc/linkwise/station.json
+Linux system service configuration.
+.TP
+.I ~/.config/linkwise/station.json
+Linux user service configuration.
+.TP
+.I ~/Library/Application Support/Linkwise/station.json
+macOS login agent configuration.
+.SH EXAMPLES
+A two-way 500 Hz station configuration follows.
+Replace the callsign, device names, and profile path with those for your
+station.
+.EX
+{
+  "version": 1,
+  "callsign": "W1AW",
+  "input": {"name": "Radio input", "channel": 0},
+  "output": {"name": "Radio output", "channel": 0},
+  "bandwidth": 500,
+  "bw500_profile": "bw500-profile.json"
+}
+.EE
+.SH SEE ALSO
+.BR linkwise-modemd (1)

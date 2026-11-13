@@ -1,0 +1,111 @@
+.TH LINKWISE-MODEMD 1 "2026-11-12" "Linkwise" "User Commands"
+.SH NAME
+linkwise\-modemd \- run and diagnose a Linkwise software modem station
+.SH SYNOPSIS
+.B linkwise\-modemd
+.RB { \-h | \-\-help | \-\-version | \-\-audio\-devices | \-\-simulate }
+.br
+.B linkwise\-modemd
+.RB { \-\-check\-config | \-\-check\-station | \-\-serve\-station }
+.I FILE
+.br
+.B linkwise\-modemd \-\-simulate\-audio
+.I PROFILE
+.br
+.B linkwise\-modemd \-\-serve\-bench
+.IR CALL " [" CONTROL_PORT " " DATA_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-bw500
+.IR CALL " " PROFILE " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-wide
+.IR CALL " " BANDWIDTH " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-virtual\-audio\-device
+.I AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE
+.SH DESCRIPTION
+Run a native audio station, check a station configuration, or exercise the
+modem in a radio-free bench session.
+Select one operation per invocation.
+The packaged audio build uses 48 kHz audio.
+Station and bench listeners bind to IPv4 loopback.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Print usage and exit.
+.TP
+.B \-\-version
+Print the program version and exit.
+.TP
+.B \-\-audio\-devices
+List the available capture and playback device names.
+.TP
+.BI "\-\-check\-config " FILE
+Validate the station JSON and any referenced BW500 waveform profile.
+.TP
+.BI "\-\-check\-station " FILE
+Validate the configuration, wait for capture samples, check the advertised
+output format, and temporarily reserve the command and data ports.
+This check plays no audio.
+.TP
+.BI "\-\-serve\-station " FILE
+Run the station in the foreground.
+A configured bandwidth enables transmit and receive using the configured
+devices and separate command and data sockets.
+Without a bandwidth, the command socket returns receive diagnostics as JSON.
+The station handles SIGINT and SIGTERM.
+.TP
+.B \-\-simulate
+Run a local modem exchange using simulated devices.
+.TP
+.BI "\-\-simulate\-audio " PROFILE
+Run a local exchange using synthesized BW500 waveforms and the specified
+measurement profile.
+.TP
+.BI "\-\-serve\-bench " CALL
+Serve a simulated echo peer.
+The default command and data ports are 8300 and 8301.
+Supply both ports to override them.
+.TP
+.BI "\-\-serve\-virtual\-bw500 " "CALL PROFILE"
+Serve a BW500 bench station with a TCP waveform cable.
+The default command, data, and waveform ports are 8300, 8301, and 8302.
+Supply all three ports to override them.
+.TP
+.BI "\-\-serve\-virtual\-wide " "CALL BANDWIDTH"
+Serve a waveform cable station at 2300 or 2750 Hz.
+Port arguments follow the same rules as for
+.BR \-\-serve\-virtual\-bw500 .
+.TP
+.BI "\-\-virtual\-audio\-device " "AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE"
+Bridge a local waveform socket to the selected capture and playback devices
+on channel zero.
+Use independent audio routes for an isolated test.
+.SH OPERANDS
+.I FILE
+is a station JSON file described in
+.BR linkwise-station (5).
+.I PROFILE
+is a BW500 measurement profile in JSON.
+.I CALL
+is the local station callsign.
+Quote device names containing spaces.
+.SH EXIT STATUS
+.TP
+.B 0
+The operation succeeded.
+.TP
+.B 1
+An operation failed, including an invalid file or an audio or socket error.
+.TP
+.B 2
+The command line did not select a recognized operation.
+.SH EXAMPLES
+.EX
+linkwise-modemd --audio-devices
+linkwise-modemd --check-config station.json
+linkwise-modemd --check-station station.json
+linkwise-modemd --serve-station station.json
+.EE
+.SH SEE ALSO
+.BR linkwise-station (5)

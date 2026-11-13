@@ -81,6 +81,12 @@ def smoke(package, version, station):
     installed_files = (cli, modem, *guides)
     if system == "Windows":
         installed_files += (binaries / "Configure-Winlink.ps1", docs / "Winlink-Quick-Start.md")
+    else:
+        man_root = binaries.parent / "share/man"
+        man_pages = (man_root / "man1/linkwise-modemd.1", man_root / "man5/linkwise-station.5")
+        if system == "Linux":
+            man_pages = tuple(page.with_suffix(page.suffix + ".gz") for page in man_pages)
+        installed_files += man_pages
     mac_app = Path("/Applications/Linkwise Station.app")
     if system == "Darwin" and mac_app.exists():
         raise RuntimeError("Use a clean test host without the Linkwise Station app")

@@ -13,6 +13,7 @@ on:
       - '.github/workflows/modem-packages.yml'
       - 'packaging/**'
       - 'docs/install/**'
+      - 'docs/man/**'
       - 'rust/**'
       - 'rust-toolchain.toml'
       - 'tools/package-modem.py'

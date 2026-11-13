@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build a native Linkwise modem preview installer."""
 import argparse
+import gzip
 import hashlib
 import json
 import os
@@ -43,6 +44,19 @@ def stage(binaries, docs, binary_dir, suffix, guide):
         (docs / name).chmod(0o644)
 
 
+def stage_man_pages(directory, *, compress=False):
+    for name in ("linkwise-modemd.1", "linkwise-station.5"):
+        source = ROOT / "docs/man" / name
+        section = directory / ("man" + source.suffix[1:])
+        section.mkdir(parents=True, exist_ok=True)
+        destination = section / (name + ".gz" if compress else name)
+        if compress:
+            destination.write_bytes(gzip.compress(source.read_bytes(), mtime=0))
+        else:
+            shutil.copyfile(source, destination)
+        destination.chmod(0o644)
+
+
 def stage_linux_units(payload):
     for scope, source in (("system", "linkwise-modem.service"), ("user", "linkwise-modem-user.service")):
         directory = payload / "usr/lib/systemd" / scope
@@ -54,6 +68,7 @@ def build_deb(work, binary_dir, version, architecture, output):
     debian = work / "debian"
     payload = debian / "linkwise-modem"
     stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "", "ubuntu")
+    stage_man_pages(payload / "usr/share/man", compress=True)
     stage_linux_units(payload)
     (debian / "control").write_text(
         "Source: linkwise-modem\n\nPackage: linkwise-modem\nArchitecture: any\n",
@@ -108,6 +123,7 @@ def build_deb(work, binary_dir, version, architecture, output):
 def build_rpm(work, binary_dir, version, architecture, output):
     payload = work / "payload"
     stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "", "fedora")
+    stage_man_pages(payload / "usr/share/man")
     stage_linux_units(payload)
     shutil.copytree(ROOT / "packaging/selinux", work / "selinux")
     shutil.copyfile(ROOT / "packaging/systemd/80-linkwise-modem.preset", work / "80-linkwise-modem.preset")
@@ -125,6 +141,7 @@ def build_pkg(work, binary_dir, version, architecture, output, identity, applica
         payload / "usr/local/bin", payload / "usr/local/share/doc/linkwise-modem",
         binary_dir, "", "macos",
     )
+    stage_man_pages(payload / "usr/local/share/man")
     macos = ROOT / "packaging/macos"
     app = payload / "Applications/Linkwise Station.app"
     contents = app / "Contents"
