@@ -3,8 +3,14 @@
 mod bench_host;
 #[path = "linkwise-modemd/setup.rs"]
 mod setup;
+#[cfg(feature = "audio-device")]
+#[path = "linkwise-modemd/station.rs"]
+mod station;
 #[path = "linkwise-modemd/virtual_host.rs"]
 mod virtual_host;
+#[cfg(all(windows, feature = "audio-device"))]
+#[path = "linkwise-modemd/windows_service.rs"]
+mod windows_service;
 use linkwise::modem::{
     arq::Answer,
     runtime::{
@@ -18,15 +24,44 @@ use uuid::Uuid;
 
 type Modem = Handle<SimulatedDevice>;
 
-const USAGE: &str = "Usage: linkwise-modemd --version | --audio-devices | --check-config FILE | --check-station FILE | --simulate | --simulate-audio PROFILE | --serve-bench CALL [CONTROL_PORT DATA_PORT] | --serve-virtual-bw500 CALL PROFILE [CONTROL_PORT DATA_PORT AUDIO_PORT] | --serve-virtual-wide CALL BANDWIDTH [CONTROL_PORT DATA_PORT AUDIO_PORT] | --virtual-audio-device AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE";
+const USAGE: &str = "Usage: linkwise-modemd --version | --audio-devices | --check-config FILE | --check-station FILE | --serve-station FILE | --simulate | --simulate-audio PROFILE | --serve-bench CALL [CONTROL_PORT DATA_PORT] | --serve-virtual-bw500 CALL PROFILE [CONTROL_PORT DATA_PORT AUDIO_PORT] | --serve-virtual-wide CALL BANDWIDTH [CONTROL_PORT DATA_PORT AUDIO_PORT] | --virtual-audio-device AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    #[cfg(all(windows, feature = "audio-device"))]
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--windows-service")) {
+        if let Err(error) = windows_service::dispatch() {
+            eprintln!("Windows service dispatcher: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args == ["--help"] || args == ["-h"] {
         println!(
-            "{USAGE}\n\n--audio-devices lists native input and output names.\n--check-config validates the station settings and any configured profile.\n--check-station checks audio input, output format, and local port availability.\n--simulate and --simulate-audio run local modem simulations.\n--serve-bench serves a simulated echo peer over local TCP.\n--serve-virtual-bw500 and --serve-virtual-wide use a loopback waveform cable.\n--virtual-audio-device attaches isolated audio devices to that cable (audio-device build)."
+            "{USAGE}\n\n--audio-devices lists native input and output names.\n--check-config validates the station settings and any configured profile.\n--check-station checks audio input, output format, and local port availability.\n--serve-station runs the configured native modem or receive diagnostics.\n--simulate and --simulate-audio run local modem simulations.\n--serve-bench serves a simulated echo peer over local TCP.\n--serve-virtual-bw500 and --serve-virtual-wide use a loopback waveform cable.\n--virtual-audio-device attaches isolated audio devices to that cable (audio-device build)."
         );
+        return;
+    }
+    if let [mode, path] = args.as_slice()
+        && mode == "--serve-station"
+    {
+        #[cfg(feature = "audio-device")]
+        let result = station::serve(
+            std::path::Path::new(path),
+            std::future::pending(),
+            || Ok(()),
+        )
+        .await;
+        #[cfg(not(feature = "audio-device"))]
+        let result: Result<(), &str> = {
+            let _ = path;
+            Err("Use a Linkwise build with the audio-device feature")
+        };
+        if let Err(error) = result {
+            eprintln!("Station service failed: {error}");
+            std::process::exit(1);
+        }
         return;
     }
     let setup_result = match args.as_slice() {

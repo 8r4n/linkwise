@@ -1,7 +1,7 @@
 # Linkwise Modem Preview for macOS
 
-Linkwise provides command-line station checks and modem simulations. Live
-Winlink message transfer and radio PTT are still under development.
+Linkwise provides a two-way software modem, station diagnostics, and local
+modem simulations. See Station Setup for audio routing and transmit settings.
 
 ## Install or update
 
@@ -23,9 +23,25 @@ and notarized build.
 
 ## Set up your station
 
+Run `man 1 linkwise-modemd` for the command reference and
+`man 5 linkwise-station` for the station configuration format.
+
 Open `/usr/local/share/doc/linkwise-modem/Station-setup.md` for instructions
 on selecting devices and creating `station.json`. If capture is denied, check
 System Settings → Privacy & Security → Microphone for your terminal app.
+
+## Run the modem login agent
+
+On macOS 13 or later, save the station configuration under
+`~/Library/Application Support/Linkwise/station.json`, then run:
+
+```sh
+"/Applications/Linkwise Station.app/Contents/MacOS/LinkwiseStation" enable
+```
+
+Grant microphone access and approve the background item in System Settings
+if prompted. Use the same command with `status` to see registration state
+or `disable` to unregister the agent before uninstalling.
 
 ## Uninstall
 
@@ -35,7 +51,10 @@ package receipt:
 ```sh
 sudo rm -f /usr/local/bin/linkwise /usr/local/bin/linkwise-modemd \
   /usr/local/share/doc/linkwise-modem/Install.md \
-  /usr/local/share/doc/linkwise-modem/Station-setup.md
+  /usr/local/share/doc/linkwise-modem/Station-setup.md \
+  /usr/local/share/man/man1/linkwise-modemd.1 \
+  /usr/local/share/man/man5/linkwise-station.5
+sudo rm -rf "/Applications/Linkwise Station.app"
 sudo pkgutil --forget io.github.8r4n.linkwise.modem
 ```
 
