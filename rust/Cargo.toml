@@ -25,6 +25,10 @@ path = "src/bin/modem-demo.rs"
 required-features = ["demo"]
 
 [dependencies]
+aws-lc-rs = { version = "=1.19.0", default-features = false, features = ["fips"], optional = true }
+rustls = { version = "0.23.46", default-features = false, features = ["fips", "std"], optional = true }
+tokio-rustls = { version = "0.26", default-features = false, optional = true }
+tempfile = { version = "3", optional = true }
 async-trait = "0.1"
 axum = { version = "0.8", features = ["json"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
@@ -54,3 +58,4 @@ tokio = { version = "1", features = ["test-util"] }
 [features]
 audio-device = ["dep:cpal"]
 demo = ["dep:axum", "dep:sha2", "dep:tokio-stream"]
+secure-transfer = ["dep:aws-lc-rs", "dep:rustls", "dep:tokio-rustls", "dep:tempfile", "tokio/fs", "tokio/io-std"]

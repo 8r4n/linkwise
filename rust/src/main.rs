@@ -2,6 +2,8 @@ use std::{env, path::Path, sync::Arc};
 
 mod frame_cli;
 mod session_cli;
+#[cfg(feature = "secure-transfer")]
+mod secure_cli;
 mod wav_analysis;
 mod wav_synthesis;
 
@@ -24,6 +26,7 @@ Usage:
   linkwise decode-frame INPUT  Write one decoded payload as raw bytes
   linkwise transmit-frame LEVEL CONTROL INPUT  Play one BW500 frame
   linkwise send SOURCE DESTINATION INPUT [COMMAND_PORT DATA_PORT]  Send via local P2P modem
+  linkwise secure send|receive CONFIG FILE  Encrypted P2P transfer (requires secure-transfer feature)
   linkwise --help
   linkwise --version
 
@@ -48,6 +51,17 @@ async fn main() {
     use std::io::Write;
 
     let mut args: Vec<_> = env::args_os().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "secure") {
+        #[cfg(feature = "secure-transfer")]
+        {
+            if let Err(error) = secure_cli::run(&args[1..]).await {
+                fail(error.status, error.source);
+            }
+            return;
+        }
+        #[cfg(not(feature = "secure-transfer"))]
+        fail(2, "secure transfer support is unavailable in this build".into());
+    }
     if matches!(
         args.first().and_then(|arg| arg.to_str()),
         Some("encode-frame" | "decode-frame" | "transmit-frame" | "send")

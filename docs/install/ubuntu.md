@@ -3,6 +3,9 @@
 Linkwise provides a two-way software modem, station diagnostics, and local
 modem simulations. See Station Setup for audio routing and transmit settings.
 
+Encrypted P2P transfer is available in a source build with the
+`secure-transfer` feature. This installer omits the feature.
+
 ## Install or update
 
 Run `dpkg --print-architecture` to find your architecture. In the directory

@@ -1069,8 +1069,7 @@ impl Engine<'_> {
                 | Phase::Sent
                 | Phase::TurnReleased
                 | Phase::Received
-                | Phase::Collecting
-                    if self.phase != Phase::Collecting || self.first_responder_poll =>
+                | Phase::Collecting =>
                 {
                     let request = if local_caller {
                         Message::Bw500ResponderTurnRequest
@@ -1089,6 +1088,8 @@ impl Engine<'_> {
                         }
                         continue;
                     }
+                    // A peer may need another over to finish its stream write
+                    // even after our host has queued a response to the prefix.
                     self.first_responder_poll = false;
                     let grant = control::turn_grant(bandwidth, &link.called, !local_caller);
                     cable.send(grant).await?;

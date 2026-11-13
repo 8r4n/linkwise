@@ -1,4 +1,4 @@
-.TH LINKWISE 1 "2026-11-12" "Linkwise" "User Commands"
+.TH LINKWISE 1 "2026-11-13" "Linkwise" "User Commands"
 .SH NAME
 linkwise \- encode, decode, and transmit Linkwise modem frames
 .SH SYNOPSIS
@@ -18,6 +18,10 @@ linkwise \- encode, decode, and transmit Linkwise modem frames
 .B linkwise send
 .I source destination input
 .RI [ command-port data-port ]
+.br
+.B linkwise secure
+.RI { send | receive }
+.I config file
 .br
 .B linkwise
 .RI { analyze-wav | decode-wav }
@@ -75,6 +79,27 @@ Both custom ports must be supplied together.
 The source callsign must match the configured station.
 This command consumes inbound data to keep the transport flowing.
 .TP
+.B secure send, secure receive
+Transfer one payload between two Linkwise peers using mutual TLS 1.3
+with 256-bit AES-GCM traffic keys.
+Requires a source build with the
+.B secure-transfer
+feature. Standard modem installers omit this feature.
+Both peers require a separate JSON configuration with
+.B encryption.enabled
+set to
+.BR true .
+The default is disabled. The configuration specifies local and peer
+callsigns, loopback command and data ports, certificates, and a size limit.
+The receiver checks the byte count and SHA-256 digest before publishing
+a named file and refuses to overwrite an existing file.
+The sender checks the authenticated receipt.
+Both commands wait for the modem to report disconnection
+before returning success.
+See the encrypted P2P transfer guide in the source tree
+.RI (rust/docs/secure-transfer.md)
+for the configuration format and certificate setup.
+.TP
 .B analyze-wav
 Report burst candidates as a JSON object.
 .TP
@@ -104,6 +129,14 @@ payload fails before encoding or playback.
 For
 .BR send ,
 EOF ends the transfer. Empty input succeeds without opening a session.
+For
+.BR "secure send" ,
+a file operand of
+.B -
+reads standard input. For
+.BR "secure receive" ,
+it writes binary standard output, which may contain partial data if the
+transfer fails.
 .SH ENVIRONMENT
 .TP
 .B LINKWISE_AUDIO_INPUT
@@ -147,7 +180,8 @@ The selected operation completed.
 The operation failed, including I/O errors and a closed output pipe.
 .TP
 .B 2
-The command or its operands were invalid.
+The command or its operands were invalid, or the build lacks
+secure transfer support.
 .TP
 .B 130
 A live send, transmit, or receive command was interrupted by SIGINT
@@ -158,6 +192,8 @@ A live command was interrupted by SIGTERM on Unix.
 .SH SIGNALS
 An interrupted send closes both modem sockets.
 Delivery of bytes still awaiting acknowledgment is uncertain.
+For a secure transfer, the receiver may already have published the file
+if the session ends before the sender obtains the receipt.
 Interrupting live audio releases the device.
 A closed stdout pipe causes a quiet output failure.
 .SH EXAMPLES
@@ -192,6 +228,19 @@ LINKWISE_AUDIO_OUTPUT='Loopback Device' \\
 Replace the callsigns with your configured source and intended peer.
 .EX
 linkwise send W1AW K1ABC message.bin 2>send.log
+.EE
+.SS Send an encrypted file
+Using secure-enabled builds, start the first command on the receiving
+station and the second on the sending station. The two JSON files
+contain the respective station's secure transfer settings.
+.EX
+linkwise secure receive receiver.json received.bin
+linkwise secure send sender.json original.bin 2>secure-send.log
+.EE
+.SS Read an encrypted transfer payload from standard input
+With the receiver listening, use shell input redirection to send a file.
+.EX
+linkwise secure send sender.json - <original.bin
 .EE
 .SH SEE ALSO
 .BR linkwise-modemd (8),
