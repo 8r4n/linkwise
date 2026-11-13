@@ -33,6 +33,10 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: '1.27.4'
+          cache: false
       - if: matrix.scenario == 'file'
         run: cargo test --locked --manifest-path rust/Cargo.toml --features audio-device,secure-transfer
       - run: cargo build --locked --manifest-path rust/Cargo.toml --features audio-device,secure-transfer --bins
