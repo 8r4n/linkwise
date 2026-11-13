@@ -2417,6 +2417,40 @@ Refresh the presentation when a milestone, demo capability, or material
 readiness claim changes. Keep generated PDFs rebuilt from the \LaTeX{} sources
 so the presentation and notes do not diverge.
 
+\section{2026-11-13: Encrypted Linkwise peer transfers}
+\label{sec:encrypted-transfer-2026-11-13}
+
+\begin{enumerate}[leftmargin=*]
+  \item Linkwise added an opt-in foreground file transfer over the modem's
+        ordered DATA stream. Both endpoints require explicit enablement and
+        pinned peer certificates. The initial TLS 1.3 profile used AES-128-GCM.
+        The final profile requires \pathtext{TLS_AES_256_GCM_SHA384} and keeps
+        ephemeral P-256 key agreement. Rustls uses the AWS-LC FIPS provider.
+  \item Two Linkwise stations transferred a 514-byte binary fixture over
+        virtual BW500 audio. File and standard-stream runs matched the original
+        bytes and reported disconnection at both ends. The file's SHA-256 was
+        \pathtext{9282d676d1710366bad20218c54348eed46b704b5b284bd2573b8e1a520ecea4}.
+        The negative bench cases covered a wrong peer pin, a wrong DNS name,
+        an untrusted client certificate, a receiver size limit, and an existing
+        output file. An earlier sequential run encountered an intermittent
+        BW500 transmit-turn failure and ended without confirming delivery.
+  \item The demonstration replayed captured samples in SigPlot. The spectrum
+        view used an 8192-point Hann FFT within each burst and displayed RMS
+        average and peak hold relative to the strongest captured bin.
+  \item Review found that the modem could process a disconnect command before
+        transmitting the final TLS close notification. The sender now waits
+        for the receiver's TLS close notification, which confirms receipt of
+        the sender's notification. The local BW500 retest matched the payload
+        and both peers disconnected cleanly.
+\end{enumerate}
+
+All seven secure-transfer CI scenarios and all eight standard installer jobs
+passed before \href{https://github.com/8r4n/linkwise/pull/9}{PR~\#9} merged at
+\texttt{aecc81f}. The installer jobs exercised the standard modem packages.
+Secure CLI packaging, OS-enforced access controls for the local modem ports,
+and FIPS 140-3 qualification for the exact module build and operating
+environment remain open. The encrypted exchange used a virtual audio cable.
+
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]

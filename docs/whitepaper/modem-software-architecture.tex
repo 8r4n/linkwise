@@ -346,6 +346,41 @@ launch, simulation, and removal checks. The extracted macOS package
 executable ran successfully, and its bundled guide was checked. Native macOS
 capture awaits an input endpoint.
 
+\subsection{Optional encrypted Linkwise peer transfer}
+\label{sec:secure-peer-transfer}
+
+The foreground \texttt{linkwise secure send} and \texttt{linkwise secure receive}
+commands run TLS 1.3 over the modem's ordered DATA stream. A separate
+loopback command socket establishes and ends the modem session. Both
+endpoints explicitly enable encryption in their configuration, which defaults
+to disabled. Rustls uses the AWS-LC FIPS provider and requires
+\path{TLS_AES_256_GCM_SHA384}, with 256-bit AES-GCM traffic keys and ephemeral
+P-256 key agreement. Each endpoint validates the certificate chain and pins
+the peer's leaf certificate. The caller also checks the receiver's DNS name.
+Both endpoints require the Linkwise transfer protocol identifier.
+
+The application sends bounded records with acknowledgments for flow control.
+The receiver checks the byte count and SHA-256 digest before publishing a
+named output file without replacing an existing destination. Standard output
+streams bytes as they arrive and can contain partial data after a failure.
+The receiver returns the digest as an authenticated receipt. After the sender
+verifies it, both peers exchange TLS close notifications before the sender
+requests modem disconnect. This ordering prevents the control socket from
+ending a session while the sender's final TLS notification is still in transit.
+If the link fails after file publication but before receipt delivery, the
+sender can report an unconfirmed transfer even though the receiver has the
+complete file.
+
+The radio-free BW500 bench verified exact binary delivery, matching SHA-256,
+and clean disconnects. Negative tests exercised certificate and identity
+checks, transfer limits, and destination collisions.
+The feature is available in source builds and requires two Linkwise secure
+endpoints. Installer integration, access controls for the local modem ports,
+and deployment-specific FIPS 140-3 qualification remain open.
+See the \href{https://github.com/8r4n/linkwise/pull/9}{implementation and
+qualification record} and the
+\href{https://www.rfc-editor.org/rfc/rfc8446.html}{TLS 1.3 specification}.
+
 \section{DSP implementation pipeline}
 \label{sec:modem-dsp}
 
@@ -933,6 +968,10 @@ run scope appear in the 12 November entry of \path{lab-notes/lab-notes.tex}.
 
 \begin{longtable}{@{}p{0.24\textwidth}p{0.70\textwidth}@{}}
 \caption{Modem evidence and remaining qualification gates.}\label{tab:modem-evidence-gates}\\
+\toprule
+\textbf{Gate} & \textbf{Evidence and remaining checks}\\
+\midrule
+\endfirsthead
 \toprule
 \textbf{Gate} & \textbf{Evidence and remaining checks}\\
 \midrule
