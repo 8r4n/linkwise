@@ -1,0 +1,42 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { publishedRelease, repository, targets } from "../releases.mjs";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const release = await publishedRelease();
+---
+<BaseLayout title="Download the Linkwise modem" description="Find Linkwise modem installers and SHA-256 checksums for Windows, macOS, Ubuntu, and Fedora on x64 and ARM64.">
+  <div class="wrap section">
+    <h1>Download Linkwise</h1>
+    {release.status === "available" ? <p class="lede"><a href={release.release_url}>{release.preview ? "Preview" : "Release"} {release.tag}</a>. Verify the package SHA-256 before installing.</p> : <p class="lede">The first public preview is pending. Follow <a href={repository + "/releases"}>GitHub Releases</a> for availability.</p>}
+    <nav class="jump" aria-label="Choose your operating system">
+      {targets.map(({ id, label }) => <a href={"#" + id}>{label}</a>)}
+    </nav>
+    <p id="platform-suggestion" hidden></p>
+    <div class="cards">
+      {targets.map(target => <section class="card" id={target.id}>
+        <h2>{target.label}</h2><p>{target.requirement} · .{target.format} · x64 and ARM64</p>
+        {release.installers.filter(pkg => pkg.id === target.id).map(pkg => <div class="download">
+          <a href={pkg.url}>Download {target.label} {pkg.architecture} ↓</a>
+          <div><a href={pkg.checksum_url}>SHA-256 file</a><code>{pkg.sha256}</code></div>
+        </div>)}
+        <a href={base + "/install/" + target.guide + ".md"}>Install, verify, and uninstall →</a>
+      </section>)}
+    </div>
+    <p><a href={base + "/releases.json"}>Machine-readable release manifest</a></p>
+  </div>
+</BaseLayout>
+<script>
+  const platform = navigator.userAgent;
+  const hint = document.querySelector("#platform-suggestion");
+  const suggested = /Windows/i.test(platform) ? ["Windows", "windows"]
+    : /Macintosh/i.test(platform) && !/Mobile/i.test(platform) ? ["macOS", "macos"]
+    : null;
+  if (hint && suggested) {
+    const [label, anchor] = suggested;
+    const link = document.createElement("a");
+    link.href = "#" + anchor;
+    link.textContent = label;
+    hint.append("This browser appears to be on ", link, ". Confirm the architecture before downloading.");
+    hint.hidden = false;
+  }
+</script>

@@ -1,0 +1,55 @@
+name: Linkwise website
+on:
+  push:
+    branches: [main]
+    paths: ['website/**', 'docs/install/**', 'docs/media/modem/**', '.github/workflows/website.yml']
+  pull_request:
+    paths: ['website/**', 'docs/install/**', 'docs/media/modem/**', '.github/workflows/website.yml']
+  release:
+    types: [published]
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.event_name == 'release' && 'main' || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'release' || github.ref == 'refs/heads/main'
+        with:
+          path: website/dist
+
+  deploy:
+    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

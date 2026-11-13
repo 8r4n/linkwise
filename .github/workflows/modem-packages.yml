@@ -135,3 +135,48 @@ jobs:
           name: linkwise-fedora-${{ matrix.arch }}
           path: installer-artifacts/
           if-no-files-found: error
+
+  publish-preview:
+    if: startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-preview')
+    needs: [native, fedora]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: linkwise-*
+          path: release-assets
+          merge-multiple: true
+      - name: Verify and publish installers
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-preview$ ]]
+          version="${BASH_REMATCH[1]}"
+          cd release-assets
+          packages=(
+            "linkwise-modem-${version}-windows-x86_64.exe"
+            "linkwise-modem-${version}-windows-arm64.exe"
+            "linkwise-modem-${version}-macos-x86_64.pkg"
+            "linkwise-modem-${version}-macos-arm64.pkg"
+            "linkwise-modem_${version}_amd64.deb"
+            "linkwise-modem_${version}_arm64.deb"
+            "linkwise-modem-${version}-1.x86_64.rpm"
+            "linkwise-modem-${version}-1.aarch64.rpm"
+          )
+          assets=()
+          for package in "${packages[@]}"; do
+            checksum="$(sha256sum "$package")"
+            [[ "$(tr -d '\r' < "$package.sha256")" == "$checksum" ]]
+            assets+=("$package" "$package.sha256")
+          done
+          # Publish only after every asset is attached to the draft.
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --draft --prerelease --title "Linkwise modem $version preview" \
+            --notes "Preview installers for Windows, macOS, Ubuntu and Fedora. See the Linkwise site for setup and compatibility." \
+            "${assets[@]}"
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false

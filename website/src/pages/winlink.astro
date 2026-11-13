@@ -1,0 +1,28 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Button from "../components/Button.astro";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+<BaseLayout title="Winlink Express VARA HF P2P setup" description="Configure Winlink Express to use the Linkwise modem on Windows and verify a radio-free VARA HF P2P session.">
+  <article class="wrap section guide">
+    <span class="state verified">Radio-free P2P verified</span>
+    <h1>Linkwise with Winlink Express</h1>
+    <p class="lede">Winlink Express 1.8.6.0 received a 64-byte attachment from Pat through the installed Linkwise Windows ARM64 service. The SHA-256 matched and both peers disconnected cleanly.</p>
+    <h2>Configure VARA HF P2P</h2>
+    <ol>
+      <li>Install Linkwise for Windows and open <strong>Configure Linkwise for Winlink</strong>. Enter the same callsign you use in Express.</li>
+      <li>Choose <strong>Radio-free waveform test</strong>, select the BW500 measurement profile, and apply the settings. Connect an isolated waveform peer to the port shown by the wizard.</li>
+      <li>In Express, open <strong>VARA HF P2P → Settings → TNC Setup</strong>. Use <code>127.0.0.1</code> and command port <code>8300</code>, or the custom port shown by the wizard. DATA uses the next port.</li>
+      <li>Choose <strong>500 Hz</strong>, clear <strong>Automatically launch TNC when session is opened</strong>, and reopen the session. Express labels the connection <strong>VARA TNC</strong> because that is the selected session type.</li>
+    </ol>
+    <h2>Verify the connection</h2>
+    <p>Check the modem service with <code>Get-Service LinkwiseModem</code>, then confirm Express reports Ready and the configured loopback port. Send a test attachment to the isolated peer, compare SHA-256, and check both disconnect logs.</p>
+    <p>The verified configuration uses a radio-free BW500 peer. See the station guide for native audio and radio control.</p>
+    <div class="actions">
+      <Button href={base + "/downloads/#windows"}>Windows downloads ↓</Button>
+      <Button variant="outline" href={base + "/install/winlink-quick-start.md"}>Full Winlink instructions ↗</Button>
+    </div>
+    <h2>Winlink bench demonstration</h2>
+    <video controls preload="none" width="960" src={base + "/winlink-prbs9.mp4"}><a href={base + "/winlink-prbs9.mp4"}>Download the bench video</a></video>
+  </article>
+</BaseLayout>

@@ -1,0 +1,16 @@
+{
+  "name": "linkwise-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "check": "node scripts/check.mjs",
+    "prebuild": "node scripts/prepare.mjs",
+    "predev": "node scripts/prepare.mjs"
+  },
+  "dependencies": {
+    "astro": "5.18.2",
+    "@fontsource-variable/instrument-sans": "^5.2.0"
+  }
+}
