@@ -339,16 +339,20 @@ impl Engine<'_> {
     async fn host_command(&mut self, command: Command, cable: &mut Audio) -> io::Result<Reply> {
         let idle = self.phase == Phase::Handshake && self.deadline.is_none();
         match command {
-            Command::Version => Ok(Reply::Version(format!(
-                "LINKWISE {}BW{}",
-                if matches!(cable, Audio::Virtual(_)) {
-                    "VIRTUAL "
-                } else {
-                    ""
-                },
-                self.mode.width()
-            ))),
-            Command::MyCall(calls) if calls.as_slice() == [self.local] => Ok(Reply::Ok),
+            // VarAC checks the protocol version independently of the modem type.
+            // Keep the implementation name in the response and the package version in --version.
+            Command::Version => Ok(Reply::Version("VARA HF v4.8.8 Linkwise".into())),
+            Command::MyCall(calls)
+                if calls.as_slice() == [self.local]
+                    || (calls.len() == 2
+                        && calls[0] == self.local
+                        && calls[1].strip_suffix("-T") == Some(self.local)) =>
+            {
+                Ok(Reply::Ok)
+            }
+            // The connected DATA stream is already transparent. This backend
+            // has no KISS transmitter and therefore no KISS DCD gate.
+            Command::Chat(false) | Command::IgnoreKissDcd(_) if idle => Ok(Reply::Ok),
             Command::Bw500 if self.mode.bandwidth() == Hz500 => Ok(Reply::Ok),
             Command::Bw2300 if self.mode.bandwidth() == Bandwidth::Hz2300 => Ok(Reply::Ok),
             Command::Bw2750 if self.mode.bandwidth() == Bandwidth::Hz2750 => Ok(Reply::Ok),
@@ -356,8 +360,8 @@ impl Engine<'_> {
                 Ok(Reply::Ok)
             }
             Command::P2pSession | Command::ClearTxBuffer if idle => Ok(Reply::Ok),
-            Command::Listen(on) if idle => {
-                self.listen = on;
+            Command::Listen(_) | Command::Chat(true) if idle => {
+                self.listen = !matches!(command, Command::Listen(false));
                 self.reset()?;
                 Ok(Reply::Ok)
             }

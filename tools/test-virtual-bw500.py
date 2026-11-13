@@ -281,6 +281,16 @@ def exercise(
         peer_call = "W1A" if keyed_capture else "W1AW"
         caller_cmd, caller_data, caller_audio = attach(stack, modem, profile, "KN6MQS", bandwidth)
         peer_cmd, peer_data, peer_audio = attach(stack, modem, profile, peer_call, bandwidth)
+        if bandwidth == 500:
+            for startup in (
+                b"CHAT ON",
+                b"IGNOREKISSDCD ON",
+                f"MYCALL {peer_call} {peer_call}-T".encode(),
+            ):
+                peer_cmd.sendall(startup + b"\r")
+                assert read_line(peer_cmd) == b"OK\r"
+            peer_cmd.sendall(f"MYCALL {peer_call} W6WW-T\r".encode())
+            assert read_line(peer_cmd) == b"WRONG\r"
         peer_cmd.sendall(b"LISTEN ON\r")
         assert read_line(peer_cmd) == b"OK\r"
         caller_cmd.sendall(f"CONNECT KN6MQS {peer_call}\r".encode())
@@ -289,7 +299,7 @@ def exercise(
         request = waveform(caller_audio)
         peer_audio.sendall(request[:2])
         peer_cmd.sendall(b"VERSION\r")
-        assert read_line(peer_cmd) == f"VERSION LINKWISE VIRTUAL BW{bandwidth}\r".encode()
+        assert read_line(peer_cmd) == b"VERSION VARA HF v4.8.8 Linkwise\r"
         peer_audio.sendall(request[2:])
         for source, destination in [(peer_audio, caller_audio), (caller_audio, peer_audio)] * 2:
             destination.sendall(waveform(source))

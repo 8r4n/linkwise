@@ -8,6 +8,8 @@
 pub enum Command {
     MyCall(Vec<String>),
     Listen(bool),
+    Chat(bool),
+    IgnoreKissDcd(bool),
     Connect { source: String, destination: String },
     Abort,
     Disconnect,
@@ -77,9 +79,23 @@ fn parse(line: &[u8]) -> Result<Command, Wrong> {
         ["MYCALL", calls @ ..] if (1..=5).contains(&calls.len()) => Command::MyCall(
             calls
                 .iter()
-                .map(|value| call(value).ok_or(Wrong))
+                .map(|value| {
+                    if let Some(base) = value.strip_suffix("-T") {
+                        let base = call(base).ok_or(Wrong)?;
+                        if base.contains('-') {
+                            return Err(Wrong);
+                        }
+                        Ok(format!("{base}-T"))
+                    } else {
+                        call(value).ok_or(Wrong)
+                    }
+                })
                 .collect::<Result<_, _>>()?,
         ),
+        ["CHAT", "ON"] => Command::Chat(true),
+        ["CHAT", "OFF"] => Command::Chat(false),
+        ["IGNOREKISSDCD", "ON"] => Command::IgnoreKissDcd(true),
+        ["IGNOREKISSDCD", "OFF"] => Command::IgnoreKissDcd(false),
         ["LISTEN", "ON"] => Command::Listen(true),
         ["LISTEN", "OFF"] => Command::Listen(false),
         ["CONNECT", source, destination] => Command::Connect {
