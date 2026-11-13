@@ -163,6 +163,7 @@ impl Mode {
 
 struct Engine<'a> {
     local: &'a str,
+    log_sessions: bool,
     mode: &'a Mode,
     wide_lead: Option<wide_level4::Lead>,
     wide_level3: Option<wide_level4::LowerWaveform>,
@@ -197,6 +198,9 @@ struct Engine<'a> {
 
 impl Engine<'_> {
     fn reset(&mut self) -> io::Result<()> {
+        if self.session.is_some() {
+            self.session_log("Modem session closed");
+        }
         self.handshake = self.mode.handshake(self.local, self.listen)?;
         self.wide_lead = None;
         self.wide_rate = 4;
@@ -229,11 +233,21 @@ impl Engine<'_> {
             .map_err(io::Error::other)
     }
 
+    fn session_log(&self, message: &str) {
+        #[cfg(feature = "audio-device")]
+        if self.log_sessions {
+            super::station::log(false, message);
+        }
+        #[cfg(not(feature = "audio-device"))]
+        let _ = (self.log_sessions, message);
+    }
+
     fn connected(&self) -> io::Result<()> {
         let link = self
             .session
             .as_ref()
             .ok_or_else(|| io::Error::other("missing session"))?;
+        self.session_log("Modem session connected");
         self.notify(format!(
             "CONNECTED {} {} {}\r",
             link.caller,
@@ -1516,8 +1530,15 @@ async fn run(
     mut engine: Engine<'_>,
     mut cable: Audio,
     mut host: mpsc::Receiver<Request>,
+    stop: &mut tokio::sync::watch::Receiver<bool>,
 ) -> io::Result<()> {
     loop {
+        if *stop.borrow() {
+            if engine.session.is_some() {
+                engine.disconnect(&mut cable).await?;
+            }
+            return Ok(());
+        }
         let expiry = async {
             match engine.deadline {
                 Some(deadline) => tokio::time::sleep_until(deadline).await,
@@ -1525,6 +1546,9 @@ async fn run(
             }
         };
         tokio::select! {
+            result = stop.wait_for(|stopping| *stopping) => {
+                if result.is_err() { return Ok(()); }
+            },
             request = host.recv() => match request {
                 Some(Request::Command(command, reply)) => { let _ = reply.send(engine.host_command(command, &mut cable).await?); }
                 Some(Request::Data(bytes, reply)) => { let _ = reply.send(engine.host_data(&bytes)); }
@@ -1562,7 +1586,16 @@ pub async fn serve(args: &[String], wide: bool) -> Result<(), Box<dyn std::error
         let waveform = Box::new(Waveform::from_json(&profile)?);
         Mode::Bw500 { profile, waveform }
     };
-    serve_mode(call, mode, (control, data, audio), false, || Ok(())).await
+    let (_stop, stopped) = tokio::sync::watch::channel(false);
+    serve_mode(
+        call,
+        mode,
+        (control, data, audio),
+        false,
+        stopped,
+        || Ok(()),
+    )
+    .await
 }
 
 #[cfg(windows)]
@@ -1570,6 +1603,7 @@ pub(super) async fn serve_winlink_test(
     call: &str,
     profile: &std::path::Path,
     ports: (u16, u16, u16),
+    stop: tokio::sync::watch::Receiver<bool>,
     on_bound: impl FnOnce() -> io::Result<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let profile = super::setup::read_text(profile, 128 * 1024).map_err(io::Error::other)?;
@@ -1579,6 +1613,7 @@ pub(super) async fn serve_winlink_test(
         Mode::Bw500 { profile, waveform },
         ports,
         true,
+        stop,
         on_bound,
     )
     .await
@@ -1589,6 +1624,7 @@ async fn serve_mode(
     mode: Mode,
     (control, data, audio): (u16, u16, u16),
     _service: bool,
+    mut stop: tokio::sync::watch::Receiver<bool>,
     on_bound: impl FnOnce() -> io::Result<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let local = normalize_callsign(call)?;
@@ -1603,7 +1639,11 @@ async fn serve_mode(
         audio.local_addr()?
     );
     loop {
-        let (stream, _) = audio.accept().await?;
+        let (stream, _) = tokio::select! {
+            biased;
+            _ = stop.wait_for(|stopping| *stopping) => return Ok(()),
+            result = audio.accept() => result?,
+        };
         #[cfg(windows)]
         if _service {
             super::windows_service::log_event("Waveform peer attached", false);
@@ -1617,6 +1657,7 @@ async fn serve_mode(
                 input: Vec::new(),
             }),
             _service,
+            &mut stop,
         )
         .await;
         #[cfg(windows)]
@@ -1652,6 +1693,7 @@ async fn serve_audio(
     mode: &Mode,
     audio: Audio,
     _service: bool,
+    stop: &mut tokio::sync::watch::Receiver<bool>,
 ) -> io::Result<()> {
     let (send, host) = mpsc::channel(8);
     let (notices, control_rx) = mpsc::channel(8);
@@ -1661,8 +1703,14 @@ async fn serve_audio(
         #[cfg(windows)]
         report_attachment: std::sync::atomic::AtomicBool::new(_service),
     };
+    let log_sessions = match &audio {
+        Audio::Virtual(_) => _service,
+        #[cfg(feature = "audio-device")]
+        Audio::Native(_) => true,
+    };
     let engine = Engine {
         local,
+        log_sessions,
         mode,
         wide_lead: None,
         wide_level3: wide_level4::LowerWaveform::new_level3(mode.bandwidth()),
@@ -1696,7 +1744,7 @@ async fn serve_audio(
     };
     tokio::select! {
         result = listener.serve_one(&port, control_rx, data_rx) => result,
-        result = run(engine, audio, host) => result,
+        result = run(engine, audio, host, stop) => result,
     }
 }
 
@@ -1705,6 +1753,7 @@ pub(super) async fn serve_native(
     station: &super::setup::Station,
     path: &std::path::Path,
     bandwidth: u16,
+    mut stop: tokio::sync::watch::Receiver<bool>,
     on_bound: impl FnOnce() -> Result<(), String>,
 ) -> Result<(), String> {
     let mode = match bandwidth {
@@ -1742,7 +1791,12 @@ pub(super) async fn serve_native(
     on_bound()?;
     let mut delay = Duration::from_secs(1);
     loop {
-        match super::station::NativeAudio::open(&station.input, &station.output).await {
+        let audio = tokio::select! {
+            biased;
+            _ = stop.wait_for(|stopping| *stopping) => return Ok(()),
+            result = super::station::NativeAudio::open(&station.input, &station.output) => result,
+        };
+        match audio {
             Ok(audio) => {
                 delay = Duration::from_secs(1);
                 super::station::notify_manager(&format!(
@@ -1754,19 +1808,25 @@ pub(super) async fn serve_native(
                     &mode,
                     Audio::Native(Box::new(audio)),
                     cfg!(windows),
+                    &mut stop,
                 )
                 .await
                 {
                     Ok(()) => continue,
-                    Err(error) => eprintln!("BW{bandwidth} session ended: {error}"),
+                    Err(error) => {
+                        super::station::log(true, &format!("BW{bandwidth} session ended: {error}"))
+                    }
                 }
             }
             Err(error) => {
-                eprintln!("BW{bandwidth} audio unavailable: {error}");
+                super::station::log(true, &format!("BW{bandwidth} audio unavailable: {error}"));
                 super::station::notify_manager(&format!("STATUS=Degraded: {error}"));
             }
         }
-        tokio::time::sleep(delay).await;
+        tokio::select! {
+            _ = stop.wait_for(|stopping| *stopping) => return Ok(()),
+            _ = tokio::time::sleep(delay) => {}
+        }
         delay = (delay * 2).min(Duration::from_secs(30));
     }
 }

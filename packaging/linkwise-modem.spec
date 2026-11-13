@@ -2,7 +2,7 @@ Name: linkwise-modem
 Version: %{linkwise_version}
 Release: 1
 Summary: Linkwise modem preview
-License: LicenseRef-Unspecified
+License: Apache-2.0
 BuildRequires: systemd-rpm-macros, selinux-policy-devel, make
 Requires(post): policycoreutils
 Requires(postun): policycoreutils
@@ -22,7 +22,8 @@ install -Dm644 "%{_topdir}/payload/usr/lib/systemd/system/linkwise-modem.service
 install -Dm644 "%{_topdir}/payload/usr/lib/systemd/user/linkwise-modem.service" "%{buildroot}%{_userunitdir}/linkwise-modem.service"
 mkdir -p "%{buildroot}%{_docdir}"
 cp -a "%{_topdir}/payload/usr/share/doc/linkwise-modem" "%{buildroot}%{_docdir}/"
-install -Dm644 "%{_topdir}/payload/usr/share/man/man1/linkwise-modemd.1" "%{buildroot}%{_mandir}/man1/linkwise-modemd.1"
+install -Dm644 "%{_topdir}/payload/usr/share/man/man1/linkwise.1" "%{buildroot}%{_mandir}/man1/linkwise.1"
+install -Dm644 "%{_topdir}/payload/usr/share/man/man8/linkwise-modemd.8" "%{buildroot}%{_mandir}/man8/linkwise-modemd.8"
 install -Dm644 "%{_topdir}/payload/usr/share/man/man5/linkwise-station.5" "%{buildroot}%{_mandir}/man5/linkwise-station.5"
 
 install -Dm644 "%{_topdir}/selinux/linkwise_modem.pp" "%{buildroot}%{_datadir}/selinux/packages/linkwise_modem.pp"
@@ -59,8 +60,11 @@ fi
 %files
 %{_bindir}/linkwise
 %{_bindir}/linkwise-modemd
-%doc %{_docdir}/linkwise-modem/
-%{_mandir}/man1/linkwise-modemd.1*
+%license %{_docdir}/linkwise-modem/LICENSE
+%license %{_docdir}/linkwise-modem/THIRD-PARTY-NOTICES.txt
+%doc %{_docdir}/linkwise-modem/*.md
+%{_mandir}/man1/linkwise.1*
+%{_mandir}/man8/linkwise-modemd.8*
 %{_mandir}/man5/linkwise-station.5*
 %{_unitdir}/linkwise-modem.service
 %{_userunitdir}/linkwise-modem.service

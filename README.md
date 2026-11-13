@@ -357,6 +357,5 @@ The full proposed plan, exit criteria, blockers, and corpus policy are in the
 ## Project status and licensing
 
 Linkwise is research software and is not yet a functioning replacement modem.
-No project license has been selected in this repository yet. Before a public
-release, the project must review the licenses and trademarks covering Linkwise,
-reference software, captured data, dependencies, and distributed tooling.
+Linkwise-owned code is licensed under the Apache License 2.0.
+See [LICENSE](LICENSE). Installers include applicable third-party notices.

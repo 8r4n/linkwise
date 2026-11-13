@@ -20,3 +20,4 @@ pub mod mcp;
 pub mod modem;
 pub mod platform;
 pub mod radio;
+pub mod signals;

@@ -1,6 +1,11 @@
 //! Offline WAV replay for the bench receiver.
 
-use std::{error::Error, ops::Range, path::Path};
+use std::{
+    error::Error,
+    io::{BufReader, Read},
+    ops::Range,
+    path::Path,
+};
 
 use hound::{SampleFormat, WavReader};
 use linkwise::modem::{
@@ -16,21 +21,26 @@ pub(crate) struct Report {
     sample_count: u32,
     burst_candidates: Vec<Range<u64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    bw500_data_frames: Option<Vec<FrameReport>>,
+    pub(crate) bw500_data_frames: Option<Vec<FrameReport>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     truncated_energy_candidates: Option<usize>,
 }
 
 #[derive(Serialize)]
-struct FrameReport {
+pub(crate) struct FrameReport {
     level: u8,
     samples: Range<u64>,
-    payload_hex: String,
+    pub(crate) payload_hex: String,
     control: u8,
 }
 
 pub(crate) fn analyze(path: &Path, decode: bool) -> Result<Report, Box<dyn Error>> {
-    let mut wav = WavReader::open(path)?;
+    let input: Box<dyn Read> = if path == Path::new("-") {
+        Box::new(std::io::stdin().lock())
+    } else {
+        Box::new(std::fs::File::open(path)?)
+    };
+    let mut wav = WavReader::new(BufReader::new(input))?;
     let spec = wav.spec();
     if spec.channels != 1 || spec.sample_rate == 0 {
         return Err("expected a mono WAV with a nonzero sample rate".into());

@@ -27,14 +27,16 @@ pub async fn serve(
     service_stop: impl std::future::Future<Output = ()>,
     on_bound: impl FnOnce() -> Result<(), String>,
 ) -> Result<(), String> {
+    log(false, "Starting Linkwise modem station");
     let station = Station::load(path)?;
     if let Some(bandwidth) = station.bandwidth {
-        let result = tokio::select! {
-            result = stop_signal(service_stop) => result,
-            result = super::virtual_host::serve_native(&station, path, bandwidth, on_bound) => result,
-        };
-        notify_manager("STOPPING=1\nSTATUS=Stopping");
-        return result;
+        let (stop, stopped) = watch::channel(false);
+        return shutdown(
+            stop_signal(service_stop),
+            stop,
+            super::virtual_host::serve_native(&station, path, bandwidth, stopped, on_bound),
+        )
+        .await;
     }
     let waveform = station.waveform(path)?;
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, station.command_port))
@@ -84,17 +86,35 @@ pub async fn serve(
 }
 
 async fn stop_signal(service_stop: impl std::future::Future<Output = ()>) -> Result<(), String> {
-    #[cfg(unix)]
-    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        .map_err(|error| format!("Register stop handler: {error}"))?;
-    #[cfg(unix)]
-    let service_stop = async {
-        drop(service_stop);
-        terminate.recv().await;
-    };
     tokio::select! {
-        result = tokio::signal::ctrl_c() => result.map_err(|error| error.to_string()),
+        biased;
         _ = service_stop => Ok(()),
+        result = linkwise::signals::stop() => result.map(|_| ()).map_err(|error| error.to_string()),
+    }
+}
+
+pub(super) async fn shutdown(
+    signal: impl std::future::Future<Output = Result<(), String>>,
+    stop: watch::Sender<bool>,
+    station: impl std::future::Future<Output = Result<(), String>>,
+) -> Result<(), String> {
+    let mut station = std::pin::pin!(station);
+    tokio::select! {
+        biased;
+        result = signal => result?,
+        result = &mut station => return result,
+    }
+    notify_manager("STOPPING=1\nSTATUS=Stopping");
+    stop.send_replace(true);
+    match tokio::time::timeout(Duration::from_secs(3), station).await {
+        Ok(result) => result,
+        Err(_) => {
+            log(
+                true,
+                "Modem shutdown deadline elapsed; closing local resources",
+            );
+            Ok(())
+        }
     }
 }
 
@@ -341,6 +361,30 @@ fn capture(
     Ok(())
 }
 
+/// Foreground output is stderr. Installed services also use their native log.
+pub(super) fn log(error: bool, message: &str) {
+    if !error && std::env::var("LINKWISE_LOG_LEVEL").as_deref() == Ok("error") {
+        return;
+    }
+    eprintln!("linkwise-modemd: {message}");
+    #[cfg(target_os = "macos")]
+    if std::env::var_os("LINKWISE_UNIFIED_LOG").is_some()
+        && let Ok(message) = std::ffi::CString::new(message)
+    {
+        let level = if error {
+            libc::LOG_ERR
+        } else {
+            libc::LOG_NOTICE
+        };
+        // The format is fixed and message data is passed separately.
+        unsafe { libc::syslog(level, c"%s".as_ptr(), message.as_ptr()) };
+    }
+    #[cfg(windows)]
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--windows-service")) {
+        super::windows_service::log_event(message, error);
+    }
+}
+
 #[cfg(target_os = "linux")]
 pub(super) fn notify_manager(message: &str) {
     use std::os::{
@@ -384,3 +428,34 @@ pub(super) fn notify_manager(message: &str) {
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 pub(super) fn notify_manager(_: &str) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_notifies_station_and_drops_it_at_deadline() {
+        struct Cleanup<'a>(&'a std::cell::Cell<bool>);
+        impl Drop for Cleanup<'_> {
+            fn drop(&mut self) {
+                self.0.set(true);
+            }
+        }
+
+        let notified = std::cell::Cell::new(false);
+        let cleaned_up = std::cell::Cell::new(false);
+        let (stop, mut stopped) = watch::channel(false);
+        let start = tokio::time::Instant::now();
+        shutdown(std::future::ready(Ok(())), stop, async {
+            let _cleanup = Cleanup(&cleaned_up);
+            stopped.wait_for(|stopping| *stopping).await.unwrap();
+            notified.set(true);
+            std::future::pending().await
+        })
+        .await
+        .unwrap();
+        assert!(notified.get());
+        assert!(cleaned_up.get());
+        assert_eq!(start.elapsed(), Duration::from_secs(3));
+    }
+}

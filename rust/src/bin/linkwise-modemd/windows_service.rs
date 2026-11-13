@@ -77,13 +77,16 @@ fn run(_: Vec<OsString>) {
         let running = || report(&handle, ServiceState::Running, 0);
         let result = if let Some(audio_port) = station.winlink_test_audio_port {
             let profile = station.profile_path(path).ok_or("Missing BW500 profile")?;
-            runtime.block_on(async {
-                tokio::select! {
-                    _ = stop => Ok(()),
-                    result = super::virtual_host::serve_winlink_test(
+            let (notify, stopping) = tokio::sync::watch::channel(false);
+            runtime.block_on(super::station::shutdown(
+                async { stop.await; Ok(()) },
+                notify,
+                async {
+                    super::virtual_host::serve_winlink_test(
                         &station.callsign,
                         &profile,
                         (station.command_port, station.data_port, audio_port),
+                        stopping,
                         || {
                             running().map_err(std::io::Error::other)?;
                             log_event(&format!(
@@ -92,9 +95,9 @@ fn run(_: Vec<OsString>) {
                             ), false);
                             Ok(())
                         },
-                    ) => result.map_err(|error| error.to_string()),
-                }
-            })
+                    ).await.map_err(|error| error.to_string())
+                },
+            ))
         } else {
             runtime.block_on(super::station::serve(path, stop, || {
                 running().map_err(|error| error.to_string())

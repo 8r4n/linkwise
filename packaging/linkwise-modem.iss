@@ -21,6 +21,8 @@ InfoBeforeFile={#StageDir}\Install.md
 [Files]
 Source: "{#StageDir}\linkwise.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\linkwise-modemd.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\LICENSE"; DestDir: "{app}\docs"; Flags: ignoreversion
+Source: "{#StageDir}\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "{#StageDir}\Install.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "{#StageDir}\Station-setup.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 
