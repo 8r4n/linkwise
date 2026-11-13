@@ -8,11 +8,12 @@ from pathlib import Path
 import platform
 import re
 import subprocess
+import sys
 import tempfile
 
 PACKAGE = "linkwise-modem"
 INSTALLER_ID = "io.github.8r4n.linkwise.modem"
-GUIDES = ("Install.md", "Station-setup.md")
+GUIDES = ("Install.md", "Station-setup.md", "LICENSE", "THIRD-PARTY-NOTICES.txt")
 
 
 def run(*args, capture=False):
@@ -83,7 +84,7 @@ def smoke(package, version, station):
         installed_files += (binaries / "Configure-Winlink.ps1", docs / "Winlink-Quick-Start.md")
     else:
         man_root = binaries.parent / "share/man"
-        man_pages = (man_root / "man1/linkwise-modemd.1", man_root / "man5/linkwise-station.5")
+        man_pages = (man_root / "man1/linkwise.1", man_root / "man8/linkwise-modemd.8", man_root / "man5/linkwise-station.5")
         if system == "Linux":
             man_pages = tuple(page.with_suffix(page.suffix + ".gz") for page in man_pages)
         installed_files += man_pages
@@ -105,6 +106,8 @@ def smoke(package, version, station):
             raise RuntimeError("The installed binaries or guides are missing")
         if run(modem, "--version", capture=True).strip() != f"linkwise-modemd {version}":
             raise RuntimeError("The installed modem version does not match the package")
+        run(cli, "--help")
+        run(sys.executable, Path(__file__).with_name("test-modem-cli.py"), cli)
         run(modem, "--help")
         run(modem, "--check-config", station)
         run(modem, "--simulate")

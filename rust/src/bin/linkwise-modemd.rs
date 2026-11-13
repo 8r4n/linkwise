@@ -24,7 +24,7 @@ use uuid::Uuid;
 
 type Modem = Handle<SimulatedDevice>;
 
-const USAGE: &str = "Usage: linkwise-modemd --version | --audio-devices | --check-config FILE | --check-station FILE | --serve-station FILE | --simulate | --simulate-audio PROFILE | --serve-bench CALL [CONTROL_PORT DATA_PORT] | --serve-virtual-bw500 CALL PROFILE [CONTROL_PORT DATA_PORT AUDIO_PORT] | --serve-virtual-wide CALL BANDWIDTH [CONTROL_PORT DATA_PORT AUDIO_PORT] | --virtual-audio-device AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE";
+const USAGE: &str = "Usage: linkwise-modemd --help | --version | --audio-devices | --check-config FILE | --check-station FILE | --serve-station FILE | --simulate | --simulate-audio PROFILE | --serve-bench CALL [CONTROL_PORT DATA_PORT] | --serve-virtual-bw500 CALL PROFILE [CONTROL_PORT DATA_PORT AUDIO_PORT] | --serve-virtual-wide CALL BANDWIDTH [CONTROL_PORT DATA_PORT AUDIO_PORT] | --virtual-audio-device AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -65,7 +65,7 @@ async fn main() {
         return;
     }
     let setup_result = match args.as_slice() {
-        [mode] if mode == "--version" => {
+        [mode] if mode == "--version" || mode == "-V" => {
             println!("linkwise-modemd {}", env!("CARGO_PKG_VERSION"));
             return;
         }

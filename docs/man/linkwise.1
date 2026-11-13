@@ -1,0 +1,198 @@
+.TH LINKWISE 1 "2026-11-12" "Linkwise" "User Commands"
+.SH NAME
+linkwise \- encode, decode, and transmit Linkwise modem frames
+.SH SYNOPSIS
+.B linkwise
+.RB [ \-\-help | \-\-version ]
+.br
+.B linkwise encode-frame
+.I level control input output
+.RI [ format ]
+.br
+.B linkwise transmit-frame
+.I level control input
+.br
+.B linkwise decode-frame
+.I input
+.br
+.B linkwise send
+.I source destination input
+.RI [ command-port data-port ]
+.br
+.B linkwise
+.RI { analyze-wav | decode-wav }
+.I input
+.br
+.B linkwise render-wav
+.I request-json output-wav
+.br
+.B linkwise
+.RI { audio-inputs | audio-outputs }
+.br
+.B linkwise receive-audio
+.I seconds
+.SH DESCRIPTION
+With no arguments, start the MCP server on standard input and output.
+An optional
+.B \-\-
+before command operands ends option parsing.
+A path written as
+.B ./-
+refers to a literal file named
+.BR - .
+.SH COMMANDS
+.TP
+.B encode-frame
+Render a single BW500 DATA frame to a file or standard output.
+Levels 1, 2, and 3 require exactly 9, 22, and 34 payload bytes, respectively.
+Supply a control byte in decimal or hexadecimal with a
+.B 0x
+prefix.
+Input and output accept
+.B -
+for standard input and output.
+The default format is WAV. Specify
+.B pcm-f32le
+for raw little-endian IEEE float samples.
+Both formats use 48 kHz, mono, 32-bit samples.
+A named output file is overwritten after input validation.
+.TP
+.B transmit-frame
+Encode the same DATA frame and play it on the selected output device.
+Requires an audio-enabled build. This command generates audio without
+controlling PTT. Success means the device's presentation estimate elapsed.
+.TP
+.B decode-frame
+Read a 48 kHz mono WAV and write the payload of exactly one CRC-valid
+DATA frame as binary stdout. Zero or multiple frames produce an error.
+.TP
+.B send
+Open a P2P session through the local modem command and data ports.
+Send bytes from a file or standard input and wait for the modem to
+acknowledge the transmit queue and report disconnection.
+The default ports are 8300 and 8301.
+Both custom ports must be supplied together.
+The source callsign must match the configured station.
+This command consumes inbound data to keep the transport flowing.
+.TP
+.B analyze-wav
+Report burst candidates as a JSON object.
+.TP
+.B decode-wav
+Report burst candidates and CRC-valid DATA frames as a JSON object.
+Each frame includes its level, sample range, payload in hexadecimal,
+and control byte. Both WAV commands accept
+.B -
+for stdin and support 16-bit PCM and 32-bit float mono WAV input.
+Decoding requires 48 kHz.
+.TP
+.B render-wav
+Render a BW500 handshake stimulus from a JSON file to a WAV file.
+Write a JSON summary to stdout.
+.TP
+.B audio-inputs, audio-outputs
+List native audio device names as JSON arrays.
+.TP
+.B receive-audio
+Receive for 1 to 3600 seconds. Write one JSON object per burst candidate,
+with an array of decoded frames. Each frame includes its control byte.
+.SH STANDARD STREAMS
+Frame payloads and waveforms use binary streams. Reports use JSON.
+Diagnostics go to standard error.
+For a frame input, EOF ends the payload and an empty, short, or oversized
+payload fails before encoding or playback.
+For
+.BR send ,
+EOF ends the transfer. Empty input succeeds without opening a session.
+.SH ENVIRONMENT
+.TP
+.B LINKWISE_AUDIO_INPUT
+Exact input device name. Defaults to the system input.
+.TP
+.B LINKWISE_AUDIO_CHANNEL
+Zero-based input channel. Defaults to 0.
+.TP
+.B LINKWISE_AUDIO_OUTPUT
+Exact output device name. Required for
+.BR transmit-frame .
+.TP
+.B LINKWISE_AUDIO_OUTPUT_CHANNEL
+Zero-based output channel. Defaults to 0.
+.TP
+.B LINKWISE_BW500_PROFILE
+Optional level 4 measurement profile for decoding. Required for rendering
+a BW500 setup stimulus.
+.TP
+.B LINKWISE_RADIO_BACKEND
+MCP radio backend. Defaults to
+.BR simulated .
+Set to
+.B rigctld
+to use Hamlib.
+.TP
+.B LINKWISE_RIGCTLD_ADDR
+MCP rigctld endpoint. Defaults to
+.BR hamlib:4532 .
+.TP
+.B LINKWISE_RADIO_WRITES
+Enable MCP radio writes with
+.BR true .
+Requires station limits.
+.SH EXIT STATUS
+.TP
+.B 0
+The selected operation completed.
+.TP
+.B 1
+The operation failed, including I/O errors and a closed output pipe.
+.TP
+.B 2
+The command or its operands were invalid.
+.TP
+.B 130
+A live send, transmit, or receive command was interrupted by SIGINT
+or by Ctrl-C or Ctrl-Break on Windows.
+.TP
+.B 143
+A live command was interrupted by SIGTERM on Unix.
+.SH SIGNALS
+An interrupted send closes both modem sockets.
+Delivery of bytes still awaiting acknowledgment is uncertain.
+Interrupting live audio releases the device.
+A closed stdout pipe causes a quiet output failure.
+.SH EXAMPLES
+.SS Round trip without a radio
+Create a nine-byte payload that includes a NUL byte. Write a WAV and
+verify that decoding recovers the exact input.
+.EX
+printf '\e00012345678' >payload.bin
+linkwise encode-frame 1 0xa5 payload.bin tx.wav
+linkwise decode-frame tx.wav >received.bin
+cmp payload.bin received.bin
+.EE
+.SS Pipe the waveform and redirect diagnostics
+.EX
+linkwise encode-frame 1 0xa5 - - <payload.bin 2>encode.log |
+    linkwise decode-frame - >received.bin 2>decode.log
+cmp payload.bin received.bin
+.EE
+.SS Inspect the decoded control byte
+.EX
+linkwise decode-wav tx.wav | jq '.bw500_data_frames[].control'
+.EE
+.SS Play a frame through an isolated audio device
+Use the exact name reported by
+.BR audio-outputs .
+.EX
+linkwise audio-outputs
+LINKWISE_AUDIO_OUTPUT='Loopback Device' \\
+    linkwise transmit-frame 1 0xa5 - <payload.bin
+.EE
+.SS Send a file through the running modem
+Replace the callsigns with your configured source and intended peer.
+.EX
+linkwise send W1AW K1ABC message.bin 2>send.log
+.EE
+.SH SEE ALSO
+.BR linkwise-modemd (8),
+.BR linkwise-station (5)

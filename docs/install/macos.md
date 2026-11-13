@@ -51,8 +51,11 @@ package receipt:
 ```sh
 sudo rm -f /usr/local/bin/linkwise /usr/local/bin/linkwise-modemd \
   /usr/local/share/doc/linkwise-modem/Install.md \
+  /usr/local/share/doc/linkwise-modem/LICENSE \
+  /usr/local/share/doc/linkwise-modem/THIRD-PARTY-NOTICES.txt \
   /usr/local/share/doc/linkwise-modem/Station-setup.md \
-  /usr/local/share/man/man1/linkwise-modemd.1 \
+  /usr/local/share/man/man1/linkwise.1 \
+  /usr/local/share/man/man8/linkwise-modemd.8 \
   /usr/local/share/man/man5/linkwise-station.5
 sudo rm -rf "/Applications/Linkwise Station.app"
 sudo pkgutil --forget io.github.8r4n.linkwise.modem

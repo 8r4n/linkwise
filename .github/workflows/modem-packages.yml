@@ -11,13 +11,16 @@ on:
   pull_request:
     paths:
       - '.github/workflows/modem-packages.yml'
+      - 'LICENSE'
       - 'packaging/**'
       - 'docs/install/**'
       - 'docs/man/**'
       - 'rust/**'
       - 'rust-toolchain.toml'
       - 'tools/package-modem.py'
+      - 'tools/modem_licenses.py'
       - 'tools/smoke-test-package.py'
+      - 'tools/test-modem-cli.py'
       - 'tools/test-windows-station.ps1'
 
 permissions:
@@ -33,6 +36,8 @@ jobs:
           persist-credentials: false
       - run: cargo +stable install cargo-audit --version 0.22.2 --locked
       - run: cargo audit --file rust/Cargo.lock
+      - run: python3 tools/modem_licenses.py
+      - run: cargo test --locked --manifest-path rust/Cargo.toml --bin linkwise
 
   native:
     needs: dependency-audit
@@ -62,6 +67,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libasound2-dev pkg-config dpkg-dev debhelper
+      - name: Test station shutdown deadline
+        if: matrix.os == 'macos'
+        run: cargo test --locked --manifest-path rust/Cargo.toml --features audio-device --bin linkwise-modemd
       - name: Build and test Unix installer
         if: matrix.os != 'windows'
         env:

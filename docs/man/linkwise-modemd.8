@@ -1,4 +1,4 @@
-.TH LINKWISE-MODEMD 1 "2026-11-12" "Linkwise" "User Commands"
+.TH LINKWISE-MODEMD 8 "2026-11-12" "Linkwise" "System Administration"
 .SH NAME
 linkwise\-modemd \- run and diagnose a Linkwise software modem station
 .SH SYNOPSIS
@@ -53,7 +53,13 @@ Run the station in the foreground.
 A configured bandwidth enables transmit and receive using the configured
 devices and separate command and data sockets.
 Without a bandwidth, the command socket returns receive diagnostics as JSON.
-The station handles SIGINT and SIGTERM.
+The foreground station handles SIGINT and SIGTERM on Unix
+and Ctrl-C and Ctrl-Break on Windows.
+Installed Windows services handle Service Control Manager Stop and Shutdown.
+An active two-way station attempts a modem disconnect within three seconds,
+then releases its local resources.
+Restart the service to apply configuration changes.
+SIGKILL and SIGSTOP are handled by the operating system.
 .TP
 .B \-\-simulate
 Run a local modem exchange using simulated devices.
@@ -100,12 +106,52 @@ An operation failed, including an invalid file or an audio or socket error.
 .TP
 .B 2
 The command line did not select a recognized operation.
+.SH ENVIRONMENT
+.TP
+.B LINKWISE_LOG_LEVEL
+Set to
+.B error
+to suppress informational startup and session messages.
+The default emits both informational messages and errors.
 .SH EXAMPLES
+.SS Find USB audio devices
+List all device names first, then use a filter to narrow the list.
+Copy the complete input and output names into the station configuration.
 .EX
 linkwise-modemd --audio-devices
-linkwise-modemd --check-config station.json
-linkwise-modemd --check-station station.json
-linkwise-modemd --serve-station station.json
+linkwise-modemd --audio-devices | grep -i usb
+.EE
+.SS Validate a station configuration
+Quote paths containing spaces.
+Save the confirmation and diagnostics in separate files.
+.EX
+linkwise-modemd --check-config "Field Station/station.json" \e
+    >check.out 2>check.err
+.EE
+.SS Check audio and run a station
+Stop any service using the same devices or ports before running these commands.
+The second command stays in the foreground. Press Ctrl-C to stop it.
+.EX
+linkwise-modemd --check-station station.json &&
+    linkwise-modemd --serve-station station.json 2>station.log
+.EE
+.SS Read receive diagnostics as JSON
+Run the station without a
+.B bandwidth
+field, then query the default command port from a second terminal.
+With
+.BR jq (1)
+installed, extract the number of decoded frames.
+.EX
+nc 127.0.0.1 8300 | jq '.received_frames'
+.EE
+.SS Simulate an exchange without radio hardware
+Run the built-in simulation to exercise a local exchange.
+Capture its output and diagnostics together for troubleshooting.
+.EX
+linkwise-modemd --simulate >simulation.log 2>&1
 .EE
 .SH SEE ALSO
+.BR linkwise (1),
+
 .BR linkwise-station (5)

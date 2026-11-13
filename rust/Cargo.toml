@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Linkwise cross-platform radio control and modem research scaffold"
+license = "Apache-2.0"
 default-run = "linkwise"
 
 [lib]

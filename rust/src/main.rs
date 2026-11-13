@@ -1,5 +1,7 @@
 use std::{env, path::Path, sync::Arc};
 
+mod frame_cli;
+mod session_cli;
 mod wav_analysis;
 mod wav_synthesis;
 
@@ -18,6 +20,10 @@ Usage:
   linkwise audio-outputs     List output devices (requires audio-device feature)
   linkwise receive-audio SECONDS  Receive BW500 DATA as JSON lines
   linkwise render-wav REQUEST_JSON OUTPUT_WAV  Render a file-only BW500 handshake stimulus
+  linkwise encode-frame LEVEL CONTROL INPUT OUTPUT [wav|pcm-f32le]
+  linkwise decode-frame INPUT  Write one decoded payload as raw bytes
+  linkwise transmit-frame LEVEL CONTROL INPUT  Play one BW500 frame
+  linkwise send SOURCE DESTINATION INPUT [COMMAND_PORT DATA_PORT]  Send via local P2P modem
   linkwise --help
   linkwise --version
 
@@ -29,11 +35,42 @@ Environment:
   LINKWISE_AUDIO_CHANNEL=zero-based channel (default: 0)
   LINKWISE_BW500_PROFILE=path to verified level-4 measurement JSON (optional)
 
+Frame commands accept '-' for stdin or stdout where applicable.
+LEVEL is 1, 2, or 3. CONTROL is a decimal or 0x-prefixed byte.
+INPUT to encode-frame or transmit-frame must be exactly 9, 22, or 34 bytes.
+LINKWISE_AUDIO_OUTPUT names the playback device; LINKWISE_AUDIO_OUTPUT_CHANNEL defaults to 0.
+Use -- before operands to end option parsing.
+
 Receive commands report CRC-valid DATA frames, not established sessions.";
 
 #[tokio::main]
 async fn main() {
-    let mut args = env::args_os().skip(1);
+    use std::io::Write;
+
+    let mut args: Vec<_> = env::args_os().skip(1).collect();
+    if matches!(
+        args.first().and_then(|arg| arg.to_str()),
+        Some("encode-frame" | "decode-frame" | "transmit-frame" | "send")
+    ) {
+        if args.get(1).is_some_and(|arg| arg == "--") {
+            args.remove(1);
+        }
+        let result = if args.len() == 2 && matches!(args[1].to_str(), Some("--help" | "-h")) {
+            writeln!(std::io::stdout().lock(), "{USAGE}").map_err(frame_cli::Failure::operation)
+        } else if args[0] == "send" {
+            session_cli::run(&args[1..]).await
+        } else {
+            frame_cli::run(&args).await
+        };
+        if let Err(error) = result {
+            fail(error.status, error.source);
+        }
+        return;
+    }
+    if args.len() >= 3 && args[1] == "--" {
+        args.remove(1);
+    }
+    let mut args = args.into_iter();
     let arguments = (args.next(), args.next(), args.next());
     if args.next().is_some() {
         eprintln!("{USAGE}");
@@ -56,15 +93,18 @@ async fn main() {
             }
         }
         (Some(arg), None, None) if arg == "--help" || arg == "-h" => {
-            println!("{USAGE}");
+            output(format_args!("{USAGE}"));
         }
         (Some(arg), None, None) if arg == "--version" || arg == "-V" => {
-            println!("linkwise {}", env!("CARGO_PKG_VERSION"));
+            output(format_args!("linkwise {}", env!("CARGO_PKG_VERSION")));
         }
         #[cfg(feature = "audio-device")]
         (Some(arg), None, None) if arg == "audio-outputs" => {
             match linkwise::audio::playback::output_devices() {
-                Ok(devices) => println!("{}", serde_json::to_string_pretty(&devices).unwrap()),
+                Ok(devices) => output(format_args!(
+                    "{}",
+                    serde_json::to_string_pretty(&devices).unwrap()
+                )),
                 Err(error) => {
                     eprintln!("Audio enumeration failed: {error}");
                     std::process::exit(1);
@@ -74,7 +114,10 @@ async fn main() {
         #[cfg(feature = "audio-device")]
         (Some(arg), None, None) if arg == "audio-inputs" => {
             match linkwise::audio::device::input_devices() {
-                Ok(devices) => println!("{}", serde_json::to_string_pretty(&devices).unwrap()),
+                Ok(devices) => output(format_args!(
+                    "{}",
+                    serde_json::to_string_pretty(&devices).unwrap()
+                )),
                 Err(error) => {
                     eprintln!("Audio enumeration failed: {error}");
                     std::process::exit(1);
@@ -83,29 +126,34 @@ async fn main() {
         }
         #[cfg(feature = "audio-device")]
         (Some(arg), Some(seconds), None) if arg == "receive-audio" => {
-            if let Err(error) = receive_audio(&seconds.to_string_lossy()) {
-                eprintln!("Audio receive failed: {error}");
-                std::process::exit(1);
+            let seconds = seconds.to_string_lossy();
+            let result = tokio::select! {
+                biased;
+                event = linkwise::signals::stop() => Err(frame_cli::interruption(event, "audio receive interrupted")),
+                result = receive_audio(&seconds) => result.map_err(frame_cli::Failure::operation),
+            };
+            if let Err(error) = result {
+                fail(error.status, error.source);
             }
         }
         (Some(arg), Some(path), None) if arg == "analyze-wav" || arg == "decode-wav" => {
             match wav_analysis::analyze(Path::new(&path), arg == "decode-wav") {
-                Ok(report) => println!(
+                Ok(report) => output(format_args!(
                     "{}",
                     serde_json::to_string_pretty(&report).expect("serialize WAV report")
-                ),
+                )),
                 Err(error) => {
                     eprintln!("WAV analysis failed: {error}");
                     std::process::exit(1);
                 }
             }
         }
-        (Some(arg), Some(input), Some(output)) if arg == "render-wav" => {
-            match wav_synthesis::render(Path::new(&input), Path::new(&output)) {
-                Ok(count) => println!(
+        (Some(arg), Some(input), Some(destination)) if arg == "render-wav" => {
+            match wav_synthesis::render(Path::new(&input), Path::new(&destination)) {
+                Ok(count) => output(format_args!(
                     "{}",
                     serde_json::json!({"sample_rate_hz":48000, "samples":count})
-                ),
+                )),
                 Err(error) => {
                     eprintln!("WAV synthesis failed: {error}");
                     std::process::exit(1);
@@ -119,8 +167,26 @@ async fn main() {
     }
 }
 
+fn output(args: std::fmt::Arguments<'_>) {
+    use std::io::Write;
+    let mut stdout = std::io::stdout().lock();
+    if let Err(error) = writeln!(stdout, "{args}").and_then(|_| stdout.flush()) {
+        fail(1, error.into());
+    }
+}
+
+fn fail(status: i32, error: Box<dyn std::error::Error>) -> ! {
+    if !error
+        .downcast_ref::<std::io::Error>()
+        .is_some_and(|error| error.kind() == std::io::ErrorKind::BrokenPipe)
+    {
+        eprintln!("linkwise: {error}");
+    }
+    std::process::exit(status);
+}
+
 #[cfg(feature = "audio-device")]
-fn receive_audio(seconds: &str) -> Result<(), Box<dyn std::error::Error>> {
+async fn receive_audio(seconds: &str) -> Result<(), Box<dyn std::error::Error>> {
     use linkwise::audio::device::Capture;
     use std::{
         io::Write,
@@ -158,11 +224,11 @@ fn receive_audio(seconds: &str) -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     while Instant::now() < deadline && !failed.get() {
-        let wait = deadline
-            .saturating_duration_since(Instant::now())
-            .min(Duration::from_millis(250));
-        if let Some(block) = capture.read(wait)? {
+        if let Some(block) = capture.read(Duration::ZERO)? {
             receiver.push(&block.samples, &mut emit)?;
+            tokio::task::yield_now().await;
+        } else {
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
     if !failed.get() {

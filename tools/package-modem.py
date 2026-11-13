@@ -13,6 +13,8 @@ import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 
+from modem_licenses import notices
+
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ID = "io.github.8r4n.linkwise.modem"
 PROGRAMS = ("linkwise", "linkwise-modemd")
@@ -29,7 +31,7 @@ def run(*args, cwd=ROOT, capture=False, env=None):
     ).stdout
 
 
-def stage(binaries, docs, binary_dir, suffix, guide):
+def stage(binaries, docs, binary_dir, suffix, guide, third_party):
     binaries.mkdir(parents=True, exist_ok=True)
     docs.mkdir(parents=True, exist_ok=True)
     for program in PROGRAMS:
@@ -37,6 +39,7 @@ def stage(binaries, docs, binary_dir, suffix, guide):
         shutil.copyfile(binary_dir / name, binaries / name)
         (binaries / name).chmod(0o755)
     for source, name in (
+        (ROOT / "LICENSE", "LICENSE"),
         (ROOT / "docs/install" / f"{guide}.md", "Install.md"),
         (ROOT / "rust/docs/modem-setup.md", "Station-setup.md"),
     ):
@@ -44,8 +47,11 @@ def stage(binaries, docs, binary_dir, suffix, guide):
         (docs / name).chmod(0o644)
 
 
+    (docs / "THIRD-PARTY-NOTICES.txt").write_text(third_party, encoding="utf-8")
+
+
 def stage_man_pages(directory, *, compress=False):
-    for name in ("linkwise-modemd.1", "linkwise-station.5"):
+    for name in ("linkwise.1", "linkwise-modemd.8", "linkwise-station.5"):
         source = ROOT / "docs/man" / name
         section = directory / ("man" + source.suffix[1:])
         section.mkdir(parents=True, exist_ok=True)
@@ -64,10 +70,10 @@ def stage_linux_units(payload):
         shutil.copyfile(ROOT / "packaging/systemd" / source, directory / "linkwise-modem.service")
 
 
-def build_deb(work, binary_dir, version, architecture, output):
+def build_deb(work, binary_dir, version, architecture, output, third_party):
     debian = work / "debian"
     payload = debian / "linkwise-modem"
-    stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "", "ubuntu")
+    stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "", "ubuntu", third_party)
     stage_man_pages(payload / "usr/share/man", compress=True)
     stage_linux_units(payload)
     (debian / "control").write_text(
@@ -120,9 +126,9 @@ def build_deb(work, binary_dir, version, architecture, output):
     run("dpkg-deb", "--root-owner-group", "--build", payload, output)
 
 
-def build_rpm(work, binary_dir, version, architecture, output):
+def build_rpm(work, binary_dir, version, architecture, output, third_party):
     payload = work / "payload"
-    stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "", "fedora")
+    stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "", "fedora", third_party)
     stage_man_pages(payload / "usr/share/man")
     stage_linux_units(payload)
     shutil.copytree(ROOT / "packaging/selinux", work / "selinux")
@@ -135,11 +141,11 @@ def build_rpm(work, binary_dir, version, architecture, output):
     shutil.copyfile(next((work / "RPMS" / architecture).glob("*.rpm")), output)
 
 
-def build_pkg(work, binary_dir, version, architecture, output, identity, application_identity):
+def build_pkg(work, binary_dir, version, architecture, output, identity, application_identity, third_party):
     payload = work / "payload"
     stage(
         payload / "usr/local/bin", payload / "usr/local/share/doc/linkwise-modem",
-        binary_dir, "", "macos",
+        binary_dir, "", "macos", third_party,
     )
     stage_man_pages(payload / "usr/local/share/man")
     macos = ROOT / "packaging/macos"
@@ -187,8 +193,8 @@ def build_pkg(work, binary_dir, version, architecture, output, identity, applica
     )
 
 
-def build_exe(work, binary_dir, version, architecture, output, compiler, thumbprint):
-    stage(work, work, binary_dir, ".exe", "windows")
+def build_exe(work, binary_dir, version, architecture, output, compiler, thumbprint, third_party):
+    stage(work, work, binary_dir, ".exe", "windows", third_party)
     shutil.copy2(ROOT / "packaging/windows/Configure-Winlink.ps1", work)
     shutil.copy2(ROOT / "docs/install/winlink-quick-start.md", work / "Winlink-Quick-Start.md")
     if thumbprint:
@@ -241,6 +247,7 @@ def main():
     version = next(item["version"] for item in metadata["packages"] if item["name"] == "linkwise")
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         parser.error(f"expected a three-part numeric Cargo version, got {version}")
+    third_party = notices(args.cargo, target)
     build_env = os.environ.copy()
     if system == "Windows":
         # Keep the installer independent of a separately installed VC runtime.
@@ -278,13 +285,13 @@ def main():
         work = Path(directory)
         output = work / filename
         if args.format == "deb":
-            build_deb(work, binary_dir, version, deb_arch, output)
+            build_deb(work, binary_dir, version, deb_arch, output, third_party)
         elif args.format == "rpm":
-            build_rpm(work, binary_dir, version, rpm_arch, output)
+            build_rpm(work, binary_dir, version, rpm_arch, output, third_party)
         elif args.format == "pkg":
-            build_pkg(work, binary_dir, version, architecture, output, args.macos_installer_identity, args.macos_application_identity)
+            build_pkg(work, binary_dir, version, architecture, output, args.macos_installer_identity, args.macos_application_identity, third_party)
         else:
-            build_exe(work, binary_dir, version, windows_arch, output, args.iscc, args.windows_signing_thumbprint)
+            build_exe(work, binary_dir, version, windows_arch, output, args.iscc, args.windows_signing_thumbprint, third_party)
         if args.format == "pkg" and args.macos_notary_profile:
             run("xcrun", "notarytool", "submit", output, "--keychain-profile", args.macos_notary_profile, "--wait")
             run("xcrun", "stapler", "staple", output)

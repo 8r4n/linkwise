@@ -23,8 +23,8 @@ by passing `--macos-notary-profile`. The packager waits for notarization and
 validates the stapled ticket. On Windows, use `--windows-signing-thumbprint`
 with SignTool available to sign and verify both binaries and the installer.
 Regenerate the checksum after any signing or notarization step that changes
-the file. The Fedora package uses `LicenseRef-Unspecified` until the project
-specifies its distribution terms.
+the file. Packages include the Apache-2.0 license and dependency notices for the
+locked target build.
 
 ## Build all targets in GitHub Actions
 
