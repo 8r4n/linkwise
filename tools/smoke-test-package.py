@@ -49,7 +49,9 @@ def smoke(package, version, station):
         docs = Path("/usr/share/doc") / PACKAGE
         query = ("dpkg-query", "-W", PACKAGE)
         install = ("sudo", "-n", "apt-get", "-y", "install", package)
-        uninstall = ("sudo", "-n", "apt-get", "-y", "remove", PACKAGE)
+        # A package with maintainer scripts can remain in dpkg's database
+        # after removal. Purge the test install to clear its registration.
+        uninstall = ("sudo", "-n", "apt-get", "-y", "purge", PACKAGE)
     elif system == "Linux" and suffix == ".rpm":
         binaries = Path("/usr/bin")
         docs = Path("/usr/share/doc") / PACKAGE

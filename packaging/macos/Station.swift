@@ -21,7 +21,7 @@ func main() async throws {
         print(agent.status)
     case "receive":
         let config = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Linkwise/station.json")
+            .appendingPathComponent("Library/Application Support/Linkwise/station.json", isDirectory: false)
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
             logger.error("Grant microphone permission using the Linkwise Station enable command.")
             Foundation.exit(1)
