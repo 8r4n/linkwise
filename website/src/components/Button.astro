@@ -1,0 +1,4 @@
+---
+const { href, variant = "primary" } = Astro.props;
+---
+<a data-slot="button" class:list={["button", variant]} href={href}><slot /></a>

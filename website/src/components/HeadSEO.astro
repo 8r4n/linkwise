@@ -1,0 +1,19 @@
+---
+const { title, description } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const image = new URL(base + "/modem-demo.png", Astro.site);
+---
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{title} | Linkwise</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonical} />
+<link rel="sitemap" href={base + "/sitemap.xml"} />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Linkwise" />
+<meta property="og:title" content={title + " | Linkwise"} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonical} />
+<meta property="og:image" content={image} />
+<meta name="twitter:card" content="summary_large_image" />

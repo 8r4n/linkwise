@@ -20,7 +20,7 @@ with the newer file to update. The simulation runs locally without a radio.
 
 ## Set up your station
 
-Run `man 1 linkwise-modemd` for the command reference and
+Run `man 8 linkwise-modemd` for the command reference and
 `man 5 linkwise-station` for the station configuration format.
 
 Open `/usr/share/doc/linkwise-modem/Station-setup.md` for instructions on
