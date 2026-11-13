@@ -26,8 +26,8 @@ func main() async throws {
             logger.error("Grant microphone permission using the Linkwise Station enable command.")
             Foundation.exit(1)
         }
-        let binary = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/linkwise-modemd").path
-        let arguments = [binary, "--serve-station", config.path].map { strdup($0) } + [nil]
+        let binary = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/linkwise-modemd").path(percentEncoded: false)
+        let arguments = [binary, "--serve-station", config.path(percentEncoded: false)].map { strdup($0) } + [nil]
         setenv("LINKWISE_UNIFIED_LOG", "1", 1)
         _ = execv(binary, arguments)
         throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
