@@ -27,7 +27,13 @@ func main() async throws {
             Foundation.exit(1)
         }
         let binary = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/linkwise-modemd").path(percentEncoded: false)
-        let arguments = [binary, "--serve-station", config.path(percentEncoded: false)].map { strdup($0) } + [nil]
+        let paths: [String] = [binary, "--serve-station", config.path(percentEncoded: false)]
+        var arguments: [UnsafeMutablePointer<CChar>?] = paths.map { path in
+            path.withCString { strdup($0) }
+        }
+        defer { for argument in arguments { free(argument) } }
+        guard arguments.allSatisfy({ $0 != nil }) else { throw POSIXError(.ENOMEM) }
+        arguments.append(nil)
         setenv("LINKWISE_UNIFIED_LOG", "1", 1)
         _ = execv(binary, arguments)
         throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
