@@ -25,7 +25,8 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - run: cargo test --locked --manifest-path rust/Cargo.toml --lib winlink::
+      - run: |
+          cargo test --locked --manifest-path rust/Cargo.toml --lib winlink::
       - run: |
           rustup target add aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android
           for target in aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android; do
