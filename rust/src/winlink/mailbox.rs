@@ -157,7 +157,7 @@ impl Mailbox for DirectoryMailbox {
     }
 }
 
-fn message_filename(id: &str) -> Result<String> {
+pub(super) fn message_filename(id: &str) -> Result<String> {
     use std::fmt::Write as _;
     if !valid_mid(id) {
         return Err(invalid("invalid mailbox message ID"));

@@ -74,12 +74,13 @@ def test_imap_only(cli):
                 wire = (
                     f"Mid: {mid}\r\nDate: 2026/11/14 12:00\r\nType: Private\r\n"
                     f"From: KN6MQS\r\nTo: KN6MQS\r\nSubject: {mid}\r\n"
-                    "Body: 4\r\n\r\nTest\r\n"
+                    "Body: 4\r\nFile: 3 uid.bin\r\n\r\nTest\r\nABC\r\n"
                 ).encode()
                 (mailbox / "inbox" / f"{mid.encode().hex()}.b2f").write_bytes(wire)
                 assert reader.uid("fetch", str(uid), "(BODY.PEEK[HEADER])")[1][0][1].find(
                     f"Subject: {mid}\r\n".encode()
                 ) >= 0
+            original = reader.uid("fetch", "1", "(BODY.PEEK[])")[1][0][1]
             assert reader.check()[0] == "OK"
             assert reader.unselect()[0] == "OK"
             assert reader.select("INBOX") == ("OK", [b"2"])
@@ -98,6 +99,7 @@ def test_imap_only(cli):
             assert reopened.select("INBOX", readonly=True) == ("OK", [b"2"])
             assert reopened.response("UIDVALIDITY")[1] == validity
             assert reopened.response("UIDNEXT")[1] == [b"3"]
+            assert reopened.uid("fetch", "1", "(BODY.PEEK[])")[1][0][1] == original
             assert reopened.uid("fetch", "1", "(FLAGS)") == (
                 "OK", [br"1 (UID 1 FLAGS (\Seen))"]
             )

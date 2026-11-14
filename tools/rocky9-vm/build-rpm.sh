@@ -15,7 +15,7 @@ mkdir "$source"
 git -C "$repo" archive "$revision" | tar -xf - -C "$source"
 git -C "$repo" rev-parse "$revision^{commit}" > "$work/build-revision.txt"
 image=rockylinux@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6
-docker run --rm --platform linux/arm64 -v "$source:/src" \
+docker run --rm --interactive --platform linux/arm64 -v "$source:/src" \
     -e "LINKWISE_RPM_FLAGS=$rpm_flags" \
     -v "$here/signing-check.sh:/signing-check.sh:ro" -w /src "$image" bash -se <<'GUEST' 2>&1 | tee "$work/rocky-rpm-build.log"
 dnf -y install curl-minimal gcc gcc-c++ make python3 pkgconf-pkg-config alsa-lib-devel openssl-devel \

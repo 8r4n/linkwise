@@ -40,7 +40,8 @@ impl Inbox {
         DirectoryMailbox::open(root, limit)?;
         let state = root.join("imap-inbox");
         fs::create_dir_all(&state)?;
-        let generation = state.join("uidvalidity");
+        let generation = state.join("mime-uidvalidity");
+        fs::create_dir_all(state.join("mime"))?;
         if !generation.try_exists()? {
             let validity = next_validity(root)?;
             match super::mailbox::publish(&generation, validity.to_string().as_bytes()) {
@@ -121,11 +122,27 @@ impl Inbox {
         let mut total = self.total_bytes;
         for id in ids {
             let wire = mailbox.incoming(&id)?;
-            let message = match mime::export(&wire, limit) {
+            let cache = root
+                .join("imap-inbox/mime")
+                .join(super::mailbox::message_filename(&id)?);
+            let message = match fs::read(&cache) {
                 Ok(message) => message,
-                Err(error) if error.kind() == io::ErrorKind::InvalidData => {
-                    unrenderable.push(id);
-                    continue;
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    let rendered = match mime::export(&wire, limit) {
+                        Ok(message) => message,
+                        Err(error) if error.kind() == io::ErrorKind::InvalidData => {
+                            unrenderable.push(id);
+                            continue;
+                        }
+                        Err(error) => return Err(error),
+                    };
+                    match super::mailbox::publish(&cache, &rendered) {
+                        Ok(()) => rendered,
+                        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                            fs::read(&cache)?
+                        }
+                        Err(error) => return Err(error),
+                    }
                 }
                 Err(error) => return Err(error),
             };

@@ -24,5 +24,6 @@ restorecon -R /etc/linkwise /etc/linkwise-mail
 modprobe snd-aloop
 /usr/bin/linkwise-modemd --check-config /etc/linkwise/station.json
 systemctl enable --now linkwise-modem linkwise-mail-smtp linkwise-mail-imap
+systemctl restart linkwise-modem
 systemctl is-active linkwise-modem linkwise-mail-smtp linkwise-mail-imap
 ss -ltnp
