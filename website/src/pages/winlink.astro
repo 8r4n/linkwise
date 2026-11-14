@@ -17,7 +17,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     </ol>
     <h2>Verify the connection</h2>
     <p>Check the modem service with <code>Get-Service LinkwiseModem</code>, then confirm Express reports Ready and the configured loopback port. Send a test attachment to the isolated peer, compare SHA-256, and check both disconnect logs.</p>
-    <p>The verified configuration uses a radio-free BW500 peer. See the station guide for native audio and radio control.</p>
+    <p>The verified configuration uses a radio-free BW500 peer. It covers P2P attachment exchange. Over-the-air and Winlink gateway operation require separate qualification.</p>
     <div class="actions">
       <Button href={base + "/downloads/#windows"}>Windows downloads ↓</Button>
       <Button variant="outline" href={base + "/install/winlink-quick-start.md"}>Full Winlink instructions ↗</Button>

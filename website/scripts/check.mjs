@@ -17,7 +17,7 @@ assert.equal((await releaseManifest(mock([{ ...release, draft: true }]))).status
 
 const manifest = JSON.parse(await readFile("dist/releases.json", "utf8"));
 assert.equal(manifest.installers.length, manifest.status === "available" ? 8 : 0);
-for (const page of ["", "downloads/", "winlink/", "varac/"]) {
+for (const page of ["", "downloads/", "winlink/", "mail/"]) {
   const html = await readFile(`dist/${page}index.html`, "utf8");
   assert.ok(html.includes(`rel="canonical" href="https://8r4n.github.io/linkwise/${page}"`));
   assert.ok(html.includes("<h1>"));

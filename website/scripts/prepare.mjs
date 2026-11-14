@@ -18,16 +18,18 @@ await writeFile(new URL("llms.txt", publicDir), `# Linkwise
 
 > Open-source HF software modem preview for amateur radio.
 
+Native Rust peer-to-peer mail forwarding is in development. Virtual BW500 attachment delivery has been verified on the bench. Winlink Express is a P2P interoperability workflow.
+
 Read the manifest before selecting an installer. A pending manifest means there is no complete public installer release. Match the target OS, distro and architecture, verify the SHA-256, and use the linked installation and service verification instructions.
 
 - [Release manifest](${base}releases.json)
 - [Platform downloads](${base}downloads/)
 - [Winlink Express VARA HF P2P](${base}winlink/)
-- [VarAC compatibility status](${base}varac/)
+- [Native Rust mail forwarding status](${base}mail/)
 `);
 await writeFile(new URL("sitemap.xml", publicDir), `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${["", "downloads/", "winlink/", "varac/"].map(path => `  <url><loc>${base}${path}</loc></url>`).join("\n")}
+${["", "downloads/", "winlink/", "mail/"].map(path => `  <url><loc>${base}${path}</loc></url>`).join("\n")}
 </urlset>
 `);
 await writeFile(new URL(".nojekyll", publicDir), "");
