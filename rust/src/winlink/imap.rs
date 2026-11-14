@@ -172,7 +172,7 @@ impl Login {
         Ok(Self { username, password })
     }
 
-    fn matches(&self, username: &str, password: &str) -> bool {
+    pub(crate) fn matches(&self, username: &str, password: &str) -> bool {
         self.username == username && self.password == password
     }
 }

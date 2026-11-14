@@ -87,7 +87,7 @@ pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
         match options {
             [] => Ok((default_port, Transport::Plain)),
             [value] => Ok((port(value)?, Transport::Plain)),
-            [value, flag, certificate, key] if flag == "--tls" => {
+            [value, flag, certificate, key] if flag == "--tls" || flag == "--starttls" => {
                 let port = port(value)?;
                 #[cfg(feature = "mail-tls")]
                 {
@@ -102,16 +102,21 @@ pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
                 {
                     let _ = (port, certificate, key);
                     Err(Failure::usage(
-                        "--tls requires a build with the mail-tls feature",
+                        "TLS requires a build with the mail-tls feature",
                     ))
                 }
             }
-            _ => Err(Failure::usage("expected [PORT [--tls CERT.pem KEY.pem]]")),
+            _ => Err(Failure::usage(
+                "expected [PORT [--tls|--starttls CERT.pem KEY.pem]]",
+            )),
         }
     };
     if let [command, root, ports @ ..] = args
         && command == "imap"
     {
+        if ports.get(1).is_some_and(|flag| flag == "--starttls") {
+            return Err(Failure::usage("IMAP supports implicit TLS with --tls"));
+        }
         let (port, tls) = transport(ports, 1143)?;
         let login = match (
             std::env::var_os("LINKWISE_IMAP_USER"),
@@ -142,12 +147,36 @@ pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
         && command == "smtp"
     {
         let (port, tls) = transport(ports, 2525)?;
+        let starttls = ports.get(1).is_some_and(|flag| flag == "--starttls");
+        let login = match (
+            std::env::var_os("LINKWISE_SMTP_USER"),
+            std::env::var_os("LINKWISE_SMTP_PASSWORD"),
+        ) {
+            (None, None) => None,
+            (Some(user), Some(password)) => Some(
+                linkwise::winlink::imap::Login::new(
+                    user.into_string()
+                        .map_err(|_| Failure::usage("invalid SMTP username"))?,
+                    password
+                        .into_string()
+                        .map_err(|_| Failure::usage("invalid SMTP password"))?,
+                )
+                .map_err(Failure::operation)?,
+            ),
+            _ => {
+                return Err(Failure::usage(
+                    "set both LINKWISE_SMTP_USER and LINKWISE_SMTP_PASSWORD",
+                ));
+            }
+        };
         return linkwise::winlink::smtp::serve(
             root.into(),
             call(station)?,
             port,
             MESSAGE_LIMIT,
             tls,
+            starttls,
+            login,
         )
         .await
         .map_err(Failure::operation);

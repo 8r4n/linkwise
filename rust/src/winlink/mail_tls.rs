@@ -1,10 +1,7 @@
-//! Optional implicit TLS transport for the loopback mail bench.
+//! Optional TLS transport for the loopback mail bench.
 
 use std::io;
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
-};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 pub(crate) trait MailStream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> MailStream for T {}
@@ -37,7 +34,10 @@ impl Transport {
         Ok(Self::Tls(tokio_rustls::TlsAcceptor::from(Arc::new(config))))
     }
 
-    pub(crate) async fn accept(&self, socket: TcpStream) -> io::Result<Box<dyn MailStream>> {
+    pub(crate) async fn accept(
+        &self,
+        socket: impl MailStream + 'static,
+    ) -> io::Result<Box<dyn MailStream>> {
         match self {
             Self::Plain => Ok(Box::new(socket)),
             #[cfg(feature = "mail-tls")]

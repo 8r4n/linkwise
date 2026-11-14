@@ -10,6 +10,7 @@ on:
       - 'tools/mobile-preflight.sh'
       - 'tools/test-virtual-bw500.py'
       - 'tools/test-winlink-modem.py'
+      - 'tools/ios-thunderbird/**'
       - 'tools/fetch-modem-profile.py'
       - '.github/workflows/mobile-modem.yml'
   workflow_dispatch:
@@ -50,6 +51,12 @@ jobs:
       - run: |
           python3 tools/test-winlink-modem.py rust/target/debug/linkwise rust/target/debug/linkwise-modemd \
             reference/vara/fixtures/level4/bw500-level4.json --mail-bridge
+      - name: Validate TLS mail endpoint rejection paths
+        run: |
+          cargo build --locked --manifest-path rust/Cargo.toml --features mail-tls --bins
+          bench=$(mktemp -d)
+          bash tools/ios-thunderbird/make-certificates.sh "$bench/tls"
+          python3 tools/ios-thunderbird/bench.py "$bench/mailboxes" "$bench/tls" --preflight-only
       - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: '1.26.11'
