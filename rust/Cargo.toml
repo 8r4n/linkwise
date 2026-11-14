@@ -61,8 +61,13 @@ windows-sys = { version = "0.61", features = ["Win32_Security", "Win32_System_Ev
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { version = "0.10", optional = true }
+tokio-openssl = { version = "0.6", optional = true }
+
 [features]
 audio-device = ["dep:cpal"]
 demo = ["dep:axum", "dep:sha2", "dep:tokio-stream"]
+rocky-mail-tls = ["dep:openssl", "dep:tokio-openssl"]
 mail-tls = ["dep:rustls", "rustls/ring", "rustls/tls12", "dep:tokio-rustls"]
 secure-transfer = ["dep:aws-lc-rs", "dep:rustls", "rustls/fips", "dep:tokio-rustls", "dep:tempfile", "tokio/fs", "tokio/io-std"]

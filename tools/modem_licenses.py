@@ -11,7 +11,7 @@ TARGETS = (
 )
 REVIEWED = {
     "(MIT OR Apache-2.0) AND Unicode-3.0",
-    "Apache-2.0", "Apache-2.0 OR MIT", "Apache-2.0/MIT",
+    "Apache-2.0", "Apache-2.0 AND ISC", "Apache-2.0 OR ISC OR MIT", "Apache-2.0 OR MIT", "Apache-2.0/MIT",
     "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
 
     "BSD-2-Clause OR MIT OR Apache-2.0", "BSD-3-Clause", "ISC",
@@ -19,11 +19,11 @@ REVIEWED = {
 }
 
 
-def notices(cargo, target):
+def notices(cargo, target, features="audio-device"):
     metadata = json.loads(subprocess.check_output([
         cargo, "metadata", "--locked", "--format-version", "1",
         "--manifest-path", ROOT / "rust/Cargo.toml",
-        "--filter-platform", target, "--features", "audio-device",
+        "--filter-platform", target, "--features", features,
     ]))
     resolve = metadata["resolve"]
     nodes = {node["id"]: node for node in resolve["nodes"]}

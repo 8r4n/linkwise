@@ -1,9 +1,13 @@
 Name: linkwise-modem
 Version: %{linkwise_version}
-Release: 1
+Release: %{?linkwise_release}%{!?linkwise_release:1}
 Summary: Linkwise modem preview
 License: Apache-2.0
 BuildRequires: systemd-rpm-macros, selinux-policy-devel, make
+%if "%{?linkwise_release}" == "1.rockymail"
+Requires: openssl-fips-provider
+Requires(pre): shadow-utils
+%endif
 Requires(post): policycoreutils
 Requires(postun): policycoreutils
 %{?systemd_requires}
@@ -16,6 +20,11 @@ Station diagnostics and local modem simulations for amateur radio.
 make -C "%{_topdir}/selinux" -f /usr/share/selinux/devel/Makefile linkwise_modem.pp
 
 %install
+%if "%{?linkwise_release}" == "1.rockymail"
+for service in smtp imap; do
+    install -Dm644 "%{_topdir}/payload/usr/lib/systemd/system/linkwise-mail-$service.service" "%{buildroot}%{_unitdir}/linkwise-mail-$service.service"
+done
+%endif
 mkdir -p "%{buildroot}%{_prefix}"
 cp -a "%{_topdir}/payload/usr/bin" "%{buildroot}%{_prefix}/"
 install -Dm644 "%{_topdir}/payload/usr/lib/systemd/system/linkwise-modem.service" "%{buildroot}%{_unitdir}/linkwise-modem.service"
@@ -31,6 +40,12 @@ install -Dm644 "%{_topdir}/selinux/linkwise_modem_ports.cil" "%{buildroot}%{_dat
 install -Dm644 "%{_topdir}/80-linkwise-modem.preset" "%{buildroot}%{_presetdir}/80-linkwise-modem.preset"
 install -Dm644 "%{_topdir}/80-linkwise-modem.preset" "%{buildroot}%{_userpresetdir}/80-linkwise-modem.preset"
 
+%if "%{?linkwise_release}" == "1.rockymail"
+%pre
+getent group linkwise-mail >/dev/null || groupadd -r linkwise-mail || exit 1
+getent passwd linkwise-mail >/dev/null || useradd -r -g linkwise-mail -d /var/lib/linkwise-mail -s /sbin/nologin linkwise-mail || exit 1
+%endif
+
 %post
 if selinuxenabled; then
     semodule -X 200 -i %{_datadir}/selinux/packages/linkwise_modem.pp -i %{_datadir}/selinux/packages/linkwise_modem_ports.cil || exit 1
@@ -43,10 +58,16 @@ fi
 %systemd_user_post linkwise-modem.service
 
 %preun
+%if "%{?linkwise_release}" == "1.rockymail"
+%systemd_preun linkwise-mail-smtp.service linkwise-mail-imap.service
+%endif
 %systemd_preun linkwise-modem.service
 %systemd_user_preun linkwise-modem.service
 
 %postun
+%if "%{?linkwise_release}" == "1.rockymail"
+%systemd_postun_with_restart linkwise-mail-smtp.service linkwise-mail-imap.service
+%endif
 %systemd_postun_with_restart linkwise-modem.service
 %systemd_user_postun_with_restart linkwise-modem.service
 
@@ -58,6 +79,10 @@ if [ "$1" -eq 0 ] && selinuxenabled; then
 fi
 
 %files
+%if "%{?linkwise_release}" == "1.rockymail"
+%{_unitdir}/linkwise-mail-smtp.service
+%{_unitdir}/linkwise-mail-imap.service
+%endif
 %{_bindir}/linkwise
 %{_bindir}/linkwise-modemd
 %license %{_docdir}/linkwise-modem/LICENSE

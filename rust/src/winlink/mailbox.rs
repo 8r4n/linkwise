@@ -170,7 +170,7 @@ fn message_filename(id: &str) -> Result<String> {
     Ok(name)
 }
 
-fn publish(path: &Path, data: &[u8]) -> Result<()> {
+pub(super) fn publish(path: &Path, data: &[u8]) -> Result<()> {
     let directory = path.parent().expect("mailbox directory");
     let temporary = directory.join(format!(".{}.tmp", uuid::Uuid::new_v4()));
     let mut file = OpenOptions::new()

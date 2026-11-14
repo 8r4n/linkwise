@@ -34,6 +34,9 @@ pub fn import(raw: &[u8], limit: usize) -> Result<Vec<u8>> {
         .replace("\r\n", "\n")
         .replace('\r', "\n")
         .replace('\n', "\r\n");
+    // B2F requires a nonempty body. Represent an empty MIME text part as
+    // a blank line so attachment-only messages retain their payload.
+    let body = if body.is_empty() { "\r\n" } else { &body };
     let date = mail
         .date()
         .and_then(|date| DateTime::from_timestamp(date.to_timestamp(), 0))
@@ -68,7 +71,7 @@ pub fn import(raw: &[u8], limit: usize) -> Result<Vec<u8>> {
         cc: vec![],
         subject: mail.subject().unwrap_or_default(),
         mbo: None,
-        body: &body,
+        body,
         attachments,
     }
     .encode(limit)
@@ -152,6 +155,21 @@ fn mail_address(address: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attachment_only_mime_imports_with_a_blank_b2f_body() {
+        let source = b"From: N0CALL@winlink.org\r\nTo: W1AW@winlink.org\r\n\
+            Subject: Attachment only\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=bench\r\n\r\n\
+            --bench\r\nContent-Type: text/plain\r\n\r\n\r\n\
+            --bench\r\nContent-Type: application/octet-stream\r\n\
+            Content-Disposition: attachment; filename=bench.bin\r\n\
+            Content-Transfer-Encoding: base64\r\n\r\nAP8=\r\n--bench--\r\n";
+        let wire = import(source, 4096).unwrap();
+        let message = Message::decode(&wire, 4096).unwrap();
+        assert_eq!(message.body, "\r\n");
+        assert_eq!(message.attachments[0].bytes, b"\x00\xff");
+    }
 
     #[test]
     fn mime_round_trip_preserves_binary_attachment() {

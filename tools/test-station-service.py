@@ -33,12 +33,13 @@ def main():
     parser.add_argument("--output", required=True, help="isolated ALSA loopback playback PCM")
     parser.add_argument("--port", type=int, default=8300)
     parser.add_argument("--level", type=int, required=True)
+    parser.add_argument("--playback-timeout", type=float, default=15)
     args = parser.parse_args()
 
     # Play one continuous stream. Closing and reopening the writer can
     # renegotiate the loopback PCM format while the receiver is still open.
     initial = wait_for(args.port, lambda current: "received_frames" in current)
-    subprocess.run(["aplay", "-q", "-D", args.output, args.waveform], check=True, timeout=15)
+    subprocess.run(["aplay", "-q", "-D", args.output, args.waveform], check=True, timeout=args.playback_timeout)
     result = wait_for(
         args.port,
         lambda current: current["ready"]

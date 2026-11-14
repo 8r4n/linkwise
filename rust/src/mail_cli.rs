@@ -4,7 +4,7 @@ use std::{
     ffi::OsString,
     fs::File,
     io::{self, BufRead, BufReader, Read, Write},
-    net::{Ipv4Addr, TcpStream as BlockingTcp},
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream as BlockingTcp},
     time::Duration,
 };
 
@@ -89,7 +89,10 @@ pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
             [value] => Ok((port(value)?, Transport::Plain)),
             [value, flag, certificate, key] if flag == "--tls" || flag == "--starttls" => {
                 let port = port(value)?;
-                #[cfg(feature = "mail-tls")]
+                #[cfg(any(
+                    feature = "mail-tls",
+                    all(target_os = "linux", feature = "rocky-mail-tls")
+                ))]
                 {
                     let tls = Transport::from_pem(
                         certificate.as_os_str().as_ref(),
@@ -98,11 +101,14 @@ pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
                     .map_err(Failure::operation)?;
                     Ok((port, tls))
                 }
-                #[cfg(not(feature = "mail-tls"))]
+                #[cfg(not(any(
+                    feature = "mail-tls",
+                    all(target_os = "linux", feature = "rocky-mail-tls")
+                )))]
                 {
                     let _ = (port, certificate, key);
                     Err(Failure::usage(
-                        "TLS requires a build with the mail-tls feature",
+                        "TLS requires a build with mail-tls or rocky-mail-tls",
                     ))
                 }
             }
@@ -110,6 +116,16 @@ pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
                 "expected [PORT [--tls|--starttls CERT.pem KEY.pem]]",
             )),
         }
+    };
+    let mail_address = |variable, port| {
+        let address = match std::env::var(variable) {
+            Ok(value) => value.parse::<IpAddr>().map_err(|_| {
+                Failure::usage("LINKWISE_IMAP_BIND and LINKWISE_SMTP_BIND must be IP addresses")
+            })?,
+            Err(std::env::VarError::NotPresent) => Ipv4Addr::LOCALHOST.into(),
+            Err(_) => return Err(Failure::usage("invalid mail bind address")),
+        };
+        Ok(SocketAddr::new(address, port))
     };
     if let [command, root, ports @ ..] = args
         && command == "imap"
@@ -139,9 +155,15 @@ pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
                 ));
             }
         };
-        return linkwise::winlink::imap::serve(root.into(), port, MESSAGE_LIMIT, tls, login)
-            .await
-            .map_err(Failure::operation);
+        return linkwise::winlink::imap::serve(
+            root.into(),
+            mail_address("LINKWISE_IMAP_BIND", port)?,
+            MESSAGE_LIMIT,
+            tls,
+            login,
+        )
+        .await
+        .map_err(Failure::operation);
     }
     if let [command, root, station, ports @ ..] = args
         && command == "smtp"
@@ -172,7 +194,7 @@ pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
         return linkwise::winlink::smtp::serve(
             root.into(),
             call(station)?,
-            port,
+            mail_address("LINKWISE_SMTP_BIND", port)?,
             MESSAGE_LIMIT,
             tls,
             starttls,
