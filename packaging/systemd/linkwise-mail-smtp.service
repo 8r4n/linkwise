@@ -1,0 +1,23 @@
+[Unit]
+Description=Linkwise SMTP mail service
+After=network.target
+
+[Service]
+Type=simple
+User=linkwise-mail
+Group=linkwise-mail
+StateDirectory=linkwise-mail
+StateDirectoryMode=0700
+UMask=0077
+EnvironmentFile=/etc/linkwise-mail/smtp.env
+ExecStart=/usr/bin/linkwise mail smtp /var/lib/linkwise-mail ${LINKWISE_CALLSIGN} 1587 --starttls /etc/linkwise-mail/server.pem /etc/linkwise-mail/server.key
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+
+[Install]
+WantedBy=multi-user.target

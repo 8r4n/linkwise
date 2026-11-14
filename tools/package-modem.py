@@ -126,16 +126,22 @@ def build_deb(work, binary_dir, version, architecture, output, third_party):
     run("dpkg-deb", "--root-owner-group", "--build", payload, output)
 
 
-def build_rpm(work, binary_dir, version, architecture, output, third_party):
+def build_rpm(work, binary_dir, version, architecture, output, third_party, release="1"):
     payload = work / "payload"
-    stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "", "fedora", third_party)
+    stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "",
+          "rocky-server" if release == "1.rockymail" else "fedora", third_party)
     stage_man_pages(payload / "usr/share/man")
     stage_linux_units(payload)
+    if release == "1.rockymail":
+        for protocol in ("smtp", "imap"):
+            name = f"linkwise-mail-{protocol}.service"
+            shutil.copyfile(ROOT / "packaging/systemd" / name, payload / "usr/lib/systemd/system" / name)
     shutil.copytree(ROOT / "packaging/selinux", work / "selinux")
     shutil.copyfile(ROOT / "packaging/systemd/80-linkwise-modem.preset", work / "80-linkwise-modem.preset")
     run(
         "rpmbuild", "-bb", "--define", f"_topdir {work}", "--define",
-        f"linkwise_version {version}", "--target", architecture,
+        f"linkwise_version {version}", "--define", f"linkwise_release {release}",
+        "--target", architecture,
         ROOT / "packaging/linkwise-modem.spec",
     )
     shutil.copyfile(next((work / "RPMS" / architecture).glob("*.rpm")), output)
@@ -221,12 +227,15 @@ def main():
     parser.add_argument("format", choices=("pkg", "exe", "deb", "rpm"))
     parser.add_argument("--output-dir", type=Path, default=ROOT / "dist")
     parser.add_argument("--cargo", default="cargo")
+    parser.add_argument("--mail-tls", action="store_true", help="include system OpenSSL FIPS SMTP and IMAP TLS in a Rocky RPM")
     parser.add_argument("--iscc", default="ISCC.exe", help="path to the Inno Setup 6 compiler")
     parser.add_argument("--macos-installer-identity", help="Developer ID Installer certificate")
     parser.add_argument("--macos-application-identity", help="Developer ID Application certificate")
     parser.add_argument("--windows-signing-thumbprint", help="Authenticode certificate thumbprint")
     parser.add_argument("--macos-notary-profile", help="notarytool keychain profile")
     args = parser.parse_args()
+    if args.mail_tls and args.format != "rpm":
+        parser.error("--mail-tls is supported for RPM builds")
     if args.macos_notary_profile and not (args.macos_application_identity and args.macos_installer_identity):
         parser.error("macOS notarization requires both Developer ID signing identities")
     system = platform.system()
@@ -247,7 +256,8 @@ def main():
     version = next(item["version"] for item in metadata["packages"] if item["name"] == "linkwise")
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         parser.error(f"expected a three-part numeric Cargo version, got {version}")
-    third_party = notices(args.cargo, target)
+    features = "audio-device,rocky-mail-tls" if args.mail_tls else "audio-device"
+    third_party = notices(args.cargo, target, features)
     build_env = os.environ.copy()
     if system == "Windows":
         # Keep the installer independent of a separately installed VC runtime.
@@ -262,7 +272,7 @@ def main():
             )
     run(
         args.cargo, "build", "--locked", "--release", "--target", target, "--manifest-path", cargo_manifest,
-        "--features", "audio-device", "--bin", "linkwise", "--bin", "linkwise-modemd",
+        "--features", features, "--bin", "linkwise", "--bin", "linkwise-modemd",
         env=build_env,
     )
     binary_dir = Path(metadata["target_directory"]) / target / "release"
@@ -274,9 +284,10 @@ def main():
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     deb_arch, rpm_arch, windows_arch = ARCHITECTURES[architecture]
+    rpm_release = "1.rockymail" if args.mail_tls else "1"
     filenames = {
         "deb": f"linkwise-modem_{version}_{deb_arch}.deb",
-        "rpm": f"linkwise-modem-{version}-1.{rpm_arch}.rpm",
+        "rpm": f"linkwise-modem-{version}-{rpm_release}.{rpm_arch}.rpm",
         "pkg": f"linkwise-modem-{version}-macos-{architecture}.pkg",
         "exe": f"linkwise-modem-{version}-windows-{architecture}.exe",
     }
@@ -287,7 +298,7 @@ def main():
         if args.format == "deb":
             build_deb(work, binary_dir, version, deb_arch, output, third_party)
         elif args.format == "rpm":
-            build_rpm(work, binary_dir, version, rpm_arch, output, third_party)
+            build_rpm(work, binary_dir, version, rpm_arch, output, third_party, rpm_release)
         elif args.format == "pkg":
             build_pkg(work, binary_dir, version, architecture, output, args.macos_installer_identity, args.macos_application_identity, third_party)
         else:

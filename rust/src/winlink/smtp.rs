@@ -1,6 +1,6 @@
 //! Loopback SMTP submission for a single local Winlink station.
 
-use std::{io, net::Ipv4Addr, path::PathBuf, time::Duration};
+use std::{io, net::SocketAddr, path::PathBuf, time::Duration};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use tokio::{
@@ -26,7 +26,7 @@ const SESSION_TIMEOUT: Duration = Duration::from_secs(300);
 pub async fn serve(
     root: PathBuf,
     station: String,
-    port: u16,
+    address: SocketAddr,
     limit: usize,
     tls: Transport,
     starttls: bool,
@@ -37,9 +37,16 @@ pub async fn serve(
             "SMTP authentication and STARTTLS require a TLS configuration",
         ));
     }
+    if !address.ip().is_loopback()
+        && (login.is_none() || matches!(tls, super::mail_tls::Transport::Plain))
+    {
+        return Err(invalid(
+            "Non-loopback mail listeners require TLS and authentication",
+        ));
+    }
     let login = login.map(std::sync::Arc::new);
     DirectoryMailbox::open(&root, limit)?;
-    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await?;
+    let listener = TcpListener::bind(address).await?;
     let mut clients = JoinSet::new();
     loop {
         tokio::select! {
@@ -51,11 +58,14 @@ pub async fn serve(
                 let tls = tls.clone();
                 let login = login.clone();
                 clients.spawn(async move {
-                    let _ = timeout(SESSION_TIMEOUT, async {
+                    let result = timeout(SESSION_TIMEOUT, async {
                         let encrypted = !starttls && !matches!(tls, Transport::Plain);
                         let socket = if starttls { Transport::Plain.accept(socket).await? } else { tls.accept(socket).await? };
                         session(socket, root, &station, limit, starttls.then_some(tls), encrypted, login.as_deref()).await
                     }).await;
+                    if let Ok(Err(error)) = result {
+                        eprintln!("Linkwise SMTP session ended: {error}");
+                    }
                 });
             }
         }
@@ -92,7 +102,7 @@ async fn session(
                     encrypted && login.is_some(),
                 ) {
                     (true, true, _) => "250-localhost\r\n250 STARTTLS",
-                    (true, false, true) => "250-localhost\r\n250 AUTH LOGIN",
+                    (true, false, true) => "250-localhost\r\n250 AUTH PLAIN LOGIN",
                     _ => "250 localhost",
                 }
             }
@@ -125,6 +135,17 @@ async fn session(
                 // The pinned Thunderbird client starts AUTH immediately after STARTTLS.
                 authenticated =
                     authenticate(&mut stream, login.expect("login required"), initial).await?;
+                if authenticated {
+                    greeted = true;
+                    "235 2.7.0 Authentication successful"
+                } else {
+                    "535 5.7.8 Invalid credentials"
+                }
+            }
+            "AUTH" if encrypted && !authenticated && mechanism.eq_ignore_ascii_case("PLAIN") => {
+                authenticated =
+                    authenticate_plain(&mut stream, login.expect("login required"), initial)
+                        .await?;
                 if authenticated {
                     greeted = true;
                     "235 2.7.0 Authentication successful"
@@ -219,6 +240,35 @@ async fn authenticate(
             _ => false,
         },
     )
+}
+
+async fn authenticate_plain(
+    stream: &mut BufReader<Box<dyn MailStream>>,
+    login: &Login,
+    initial: &str,
+) -> io::Result<bool> {
+    let response = if initial.is_empty() {
+        reply(stream, "334 ").await?;
+        let Some(line) = read_line(stream, 512).await? else {
+            return Ok(false);
+        };
+        line[..line.len() - 2].to_vec()
+    } else {
+        initial.as_bytes().to_vec()
+    };
+    let Ok(decoded) = STANDARD.decode(response) else {
+        return Ok(false);
+    };
+    let Ok(credentials) = std::str::from_utf8(&decoded) else {
+        return Ok(false);
+    };
+    let mut fields = credentials.split('\0');
+    let (Some(identity), Some(username), Some(password), None) =
+        (fields.next(), fields.next(), fields.next(), fields.next())
+    else {
+        return Ok(false);
+    };
+    Ok((identity.is_empty() || identity == username) && login.matches(username, password))
 }
 
 fn queue(root: PathBuf, station: &str, target: &str, raw: &[u8], limit: usize) -> io::Result<()> {

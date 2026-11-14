@@ -17,7 +17,7 @@ import Testing
     let body = try Body(part: Part(parts: [text, attachment]))
     let sender = SMTPClient(.init(.startTLS, hostname: "localhost", username: "bench", password: "fixture", port: 12525))
     try await sender.send(.init(
-        sender: "KN6MQS@winlink.org", recipients: ["W1AW@winlink.org"],
+        sender: "KN6MQS@winlink.org", recipients: ["0000@winlink.org"],
         subject: "Thunderbird simulator attachment", body: body
     ))
     print("LINKWISE SMTP submission succeeded")

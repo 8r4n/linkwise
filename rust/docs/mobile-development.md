@@ -168,14 +168,18 @@ A client on the same host can submit to `127.0.0.1:2525` using
 `N0CALL@winlink.org` as its sender. This development endpoint uses
 plain SMTP on loopback. A successful reply confirms that the message
 was queued. Run a separate `mail exchange` to deliver it to the peer.
-Start read-only IMAP access with `linkwise mail imap ./mailbox`. The
+Start IMAP access with `linkwise mail imap ./mailbox`. The
 development listener uses `127.0.0.1:1143` and automatically authenticates
 local connections. Use it with a trusted local account. It supports
-listing and selecting INBOX, searching all messages, and fetching full
-MIME messages by sequence number or UID. Selecting INBOX or polling it
-with NOOP discovers new arrivals. Existing UIDs stay stable while the
-listener runs. Each restart changes UIDVALIDITY so clients discard
-previous UID mappings. The in-memory inbox is limited to 64 MiB.
+listing and selecting Inbox or Sent, setting or clearing the persistent
+read flag with STORE or UID STORE,
+checking mailbox status, searching messages, and fetching whole MIME
+messages or individual sections by sequence number or UID. Selecting INBOX or polling it
+with NOOP discovers new arrivals. Inbox UIDs and UIDVALIDITY persist
+across restarts in the mailbox's `imap-inbox` metadata directory.
+EXAMINE opens a mailbox read-only. Sent copies saved with APPEND retain their
+UIDs across restarts and do not queue radio traffic. The in-memory Inbox
+and the Sent archive each have a 64 MiB limit.
 
 For a client that uses implicit TLS, build the development CLI with
 `cargo build --locked --manifest-path rust/Cargo.toml --features mail-tls --bin linkwise`.
@@ -197,8 +201,8 @@ listener environment to require IMAP LOGIN over TLS. The listener
 rejects credentials configured without TLS. Test credentials can
 contain ASCII letters, digits, and `@._-+`. Without those variables
 the IMAP listener uses its preauthenticated greeting. SMTP accepts
-submissions from the configured callsign. Both listeners bind to
-IPv4 loopback.
+submissions from the configured callsign. Both listeners default to IPv4 loopback. Non-loopback binds require TLS
+and authentication.
 Run the full mail bridge test over two virtual BW500 modems:
 
 ```sh
@@ -212,8 +216,10 @@ SMTP, then transfers it in a Winlink P2P exchange. It checks that IMAP
 detects the arrival on the open connection, retrieves the exact
 attachment, and reports the same UIDVALIDITY. It also checks attachment
 SHA-256 in both directions and clean modem disconnection. Mobile CI runs
-this test with Python mail clients. Apple Mail and Android mail client
-support still requires qualification.
+this test with Python mail clients. Gmail for Android passed an attachment
+round trip on the emulator with a trusted Linkwise CA and two virtual BW500
+modems. See the [Rocky validation notes](../../docs/architecture/rocky-thunderbird-validation.md#gmail-attachment-round-trip-with-mime-section-retrieval).
+Apple Mail on an iPhone and Gmail over physical radio remain unverified.
 
 ## Thunderbird for iOS simulator
 

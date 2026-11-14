@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 BENCH = runpy.run_path(str(Path(__file__).with_name("test-virtual-bw500.py")))
-CALLS = ("KN6MQS", "W1AW")
+CALLS = ("KN6MQS", "0000")
 
 
 def openssl(directory, *args):

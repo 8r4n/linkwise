@@ -25,6 +25,8 @@ integration.
 - [MCP interface design](mcp-interface-design.md) — proposed resources, tools,
   schemas, errors, and control contracts, including policy-gated PTT key-up
   and always-available key-down.
+- [NIAP evaluation-readiness plan](niap-evaluation-readiness.md) — proposed
+  scope, engineering phases, evidence and acceptance criteria.
 - [Safety, security, and reliability](safety-security-reliability.md) — safe
   states, hazards, invariants, authorization, leases, and failure handling.
 - [Architecture whitepaper source](../whitepaper/linkwise-architecture-whitepaper.tex)

@@ -2,6 +2,7 @@
 """Run the isolated Linkwise side of the Thunderbird iOS simulator test."""
 
 import argparse
+import base64
 from contextlib import ExitStack
 import hashlib
 import imaplib
@@ -43,7 +44,10 @@ def check_rejections(tls, mailbox):
         else:
             raise AssertionError("SMTP accepted a bad password")
         assert sender.mail(f"{CALLER}@winlink.org")[0] == 530
-        assert sender.login("bench", "fixture")[0] == 235
+        for identity, password, expected in (("other", "fixture", 535), ("", "wrong", 535),
+                                              ("", "fixture", 235)):
+            response = base64.b64encode(f"{identity}\0bench\0{password}".encode()).decode()
+            assert sender.docmd("AUTH", "PLAIN " + response)[0] == expected
         assert sender.mail(f"{PEER}@winlink.org")[0] == 553
         assert sender.mail(f"{CALLER}@winlink.org")[0] == 250
         assert sender.rcpt(f"{PEER}@winlink.org")[0] == 250
@@ -93,9 +97,9 @@ def relay_hf(source, target, worker):
         print(f"HF relay ended: {error}", flush=True)
 
 
-def run(work, tls, hf_worker=None, snr=None, seed=17, preflight_only=False):
+def run(work, tls, hf_worker=None, snr=None, seed=17, preflight_only=False, binaries=None):
     work.mkdir()
-    binaries = REPO / "rust/target/debug"
+    binaries = binaries or REPO / "rust/target/debug"
     profile = REPO / "reference/vara/fixtures/level4/bw500-level4.json"
     with ExitStack() as stack:
         ports = [BENCH["BENCH"]["start_station"](stack, binaries / "linkwise-modemd", profile, call, 500)
@@ -134,6 +138,8 @@ def run(work, tls, hf_worker=None, snr=None, seed=17, preflight_only=False):
             else:
                 raise TimeoutError(f"Mail listener on {port} did not start")
         check_rejections(tls, work / CALLER)
+        if any(process.poll() is not None for process in (sender, reader)):
+            raise RuntimeError("A mail listener exited during preflight. Check for conflicting ports.")
         if preflight_only:
             return
         print("BENCH READY", flush=True)
@@ -167,8 +173,9 @@ if __name__ == "__main__":
     parser.add_argument("--hf-worker", type=Path, help="framed PCM GNU Radio channel worker")
     parser.add_argument("--snr", type=int, choices=(32, 22))
     parser.add_argument("--seed", type=int, default=17)
+    parser.add_argument("--binaries", type=Path, help="directory containing Linkwise bench binaries")
     parser.add_argument("--preflight-only", action="store_true")
     args = parser.parse_args()
     if bool(args.hf_worker) != bool(args.snr):
         parser.error("--hf-worker and --snr are used together")
-    run(args.work, args.tls, args.hf_worker, args.snr, args.seed, args.preflight_only)
+    run(args.work, args.tls, args.hf_worker, args.snr, args.seed, args.preflight_only, args.binaries)

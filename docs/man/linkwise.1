@@ -1,4 +1,4 @@
-.TH LINKWISE 1 "2026-11-13" "Linkwise" "User Commands"
+.TH LINKWISE 1 "2026-11-14" "Linkwise" "User Commands"
 .SH NAME
 linkwise \- operate the Linkwise modem
 .SH SYNOPSIS
@@ -22,13 +22,19 @@ linkwise \- operate the Linkwise modem
 .B linkwise mail queue
 .I mailbox envelope
 .br
+.B linkwise mail import
+.I mailbox input
+.br
+.B linkwise mail export
+.I mailbox message-id
+.br
 .B linkwise mail smtp
 .I mailbox callsign
-.RI [ port ]
+.RI [ "port [\-\-tls cert key | \-\-starttls cert key]" ]
 .br
 .B linkwise mail imap
 .I mailbox
-.RI [ port ]
+.RI [ "port [\-\-tls cert key]" ]
 .br
 .B linkwise mail
 .RI { exchange | listen }
@@ -99,10 +105,20 @@ This command consumes inbound data to keep the transport flowing.
 Queue a Winlink B2F envelope of up to 1 MiB in a private mailbox directory.
 Use a local filesystem with hard-link support.
 .TP
+.B mail import, mail export
+Import an RFC 5322/MIME file into the transmit queue with
+.BR "mail import" .
+Export a received message as MIME to standard output with
+.BR "mail export" ,
+using its B2F message ID as the final operand.
+.TP
 .B mail smtp
 Accept local SMTP submissions and queue them for B2F peer-to-peer forwarding.
-The listener binds to IPv4 loopback and defaults to port 2525.
-With the mail-tls build feature, append
+The listener defaults to IPv4 loopback on port 2525.
+Set
+.B LINKWISE_SMTP_BIND
+to override the bind address.
+With TLS support in the build, append
 .B PORT --tls CERT.pem KEY.pem
 for implicit TLS or
 .B PORT --starttls CERT.pem KEY.pem
@@ -111,13 +127,22 @@ Set both
 .B LINKWISE_SMTP_USER
 and
 .B LINKWISE_SMTP_PASSWORD
-to require AUTH LOGIN after TLS.
+to require SMTP authentication over TLS.
+Non-loopback listeners require TLS and authentication.
 The authenticated account can submit only as the configured station.
 .TP
 .B mail imap
-Expose a read-only inbox over local IMAP.
-The listener binds to IPv4 loopback and defaults to port 1143.
-With the mail-tls build feature, append
+Expose the Inbox and the Sent archive over IMAP.
+Clients can set or clear the persistent read flag with
+.B STORE
+or
+.BR "UID STORE" .
+EXAMINE opens either mailbox in read-only mode.
+The listener defaults to IPv4 loopback on port 1143.
+Set
+.B LINKWISE_IMAP_BIND
+to override the bind address.
+With TLS support in the build, append
 .B PORT --tls CERT.pem KEY.pem
 to use implicit TLS.
 Local connections are automatically authenticated by default.
@@ -126,8 +151,18 @@ Set both
 and
 .B LINKWISE_IMAP_PASSWORD
 to require IMAP LOGIN over TLS.
+Non-loopback listeners require TLS and authentication.
 Select the inbox or poll with NOOP to discover newly received mail.
-Message UIDs stay stable until the listener restarts.
+Inbox UIDs persist across listener restarts.
+Keep the
+.B imap-inbox
+metadata directory with the mailbox when making a backup.
+IMAP clients can fetch complete messages or individual MIME sections.
+Sent copies saved with APPEND retain their UIDs across restarts.
+The Sent archive is capped at 64 MiB and is stored under
+.B imap-sent
+in the mailbox directory.
+Saving a Sent copy has no effect on the transmit queue.
 .TP
 .B mail exchange, mail listen
 Call a peer or listen for a specified peer through the local modem.
@@ -298,6 +333,13 @@ linkwise send W1AW K1ABC message.bin 2>send.log
 linkwise mail queue ./mailbox message.b2f
 linkwise mail exchange ./mailbox N0CALL W1AW
 .fi
+.SS Import and export MIME mail
+Import an email for the next peer exchange.
+Export a received message by its B2F message ID.
+.EX
+linkwise mail import ./mailbox outgoing.eml
+linkwise mail export ./mailbox TEST123 >received.eml
+.EE
 .SS Send an encrypted file
 Using secure-enabled builds, start the first command on the receiving
 station and the second on the sending station. The two JSON files

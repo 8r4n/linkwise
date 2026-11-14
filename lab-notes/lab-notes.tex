@@ -2585,6 +2585,188 @@ the impaired-run logs, and \pathtext{recovery-once.log}.
 The stock attachment UI, reverse-direction simulator exchange, and
 physical iPhone qualification remain open.
 
+
+\section{Rocky 9 HF-only security assessment, 13 November 2026}
+\label{sec:rocky-hf-assessment-2026-11-13}
+
+A distinct Rocky 9.8 ARM64 guest was built under UTM on Apple silicon.
+The 32 GiB virtual disk used LUKS2 for seven data mounts and swap.
+EFI and \pathtext{/boot} remained outside LUKS. The first boot exposed a
+missing boot filesystem UUID in the FIPS boot arguments. After adding
+the UUID to GRUB, a cold boot unlocked the disk and started Linkwise
+automatically. The setting was captured in Kickstart. The refreshed DNF
+check found no pending updates. The guest had 407 RPMs after removing
+four unused packages. Compilers and package-building tools ran outside
+the guest.
+
+The evaluated package was Linkwise 0.1.0-1 ARM64 at source revision
+\pathtext{a2d01b73a88c0968995b767001684ad0f533fddc}. The SHA-256 of the
+bench-signed RPM was
+\hashtext{3886d7f57b27bcce}{a0544a4fedb49666}{c5458ec3b0de2952}{4143fce77b430b29}.
+The Rocky verifier accepted the RPM with the bench key enrolled and
+rejected both an altered RPM and the signed RPM with no enrolled key.
+The installed binary matched the package. The service ran under a
+dynamic nonroot identity in \texttt{linkwise\_modem\_t}. A directed
+read of a synthetic protected file produced an enforcing SELinux denial.
+
+\begin{longtable}{@{}lrrrr@{}}
+\toprule
+Rocky STIG run & Pass & Fail & Unchecked & Inapplicable \\
+\midrule
+\endhead
+Initial profile scan & 180 & 249 & 10 & 38 \\
+After initial hardening & 390 & 39 & 10 & 38 \\
+After additional local controls & 394 & 34 & 10 & 38 \\
+After login audit verification & 396 & 32 & 10 & 38 \\
+After user namespace restriction & 397 & 31 & 10 & 38 \\
+\bottomrule
+\end{longtable}
+
+The full Rocky profile remained unmodified. The native DISA RHEL 9 V2R10
+scan returned 393 inapplicable results on Rocky. Both login audit rules
+loaded in immutable mode and produced directed records for
+\pathtext{/var/log/faillock} and \pathtext{/var/log/lastlog}. The
+unprivileged user namespace restriction persisted across cold boot.
+GRUB denied an unauthenticated boot edit and normal boot succeeded.
+Both automated GRUB checks remained failed, and authorized recovery
+was still untested.
+
+The receive-only daemon rejected four malformed configurations and
+answered 600 loopback status queries, including 300 carrying injected
+commands. It stopped cleanly in one second and decoded three BW500 level-1
+frames after restarting. A separate network namespace reached SSH as a
+positive control while both modem ports remained unreachable from that
+namespace. The daemon sustained 45.21 seconds of deterministic noise
+while answering 872 ready-status requests. It used a peak sampled
+13.3 MiB under the 128 MiB limit, kept the same process ID and decoded
+three known frames afterward.
+
+A second test temporarily restricted the daemon to loopback with no
+default routes. DNS, SMTP and remote audit probes were unreachable from
+that namespace, and the daemon decoded three BW500 frames. The bench
+SSH and network configuration was restored afterward. These results
+cover the receive-only service. The production host topology and any
+transmit or HF mail assessment still require separate evidence.
+
+For the HF-only production profile, the project owner designated all
+31 failed and 10 unchecked Rocky findings as not applicable. The register
+preserves the original scan verdicts. Independent acceptance and per-rule
+rationale remain open. The internal Common Criteria assessment withheld a
+pass. UTM reported Secure Boot unsupported. FIPS mode was active, but
+the installed OpenSSL provider identity differed from NIST certificate
+5116 and the exact environmental coverage remained unverified.
+A production-signed upgrade and a fresh provisioning replay remain open.
+
+The reproduction scripts are in \pathtext{tools/rocky9-vm/}. The
+architecture evidence is in \pathtext{docs/architecture/}, including
+\pathtext{niap-rocky9-assessment.md}, \pathtext{niap-evaluator-report.md},
+\pathtext{niap-acceptance-gates.md} and
+\pathtext{niap-rocky-stig-findings.md}. The private host evidence directory
+contains the raw scans, boot traces and test logs.
+
+\section{2026-11-14 -- Gmail attachment round trip on Rocky 9}
+
+Gmail for Android on the Play-enabled emulator accepted the Linkwise
+private CA in Android's user trust store and used standard TLS
+validation. The initial test sent a 1,400-byte attachment across two
+virtual BW500 modems. The receiving mailbox had the original bytes and
+both modems disconnected cleanly. Gmail initially displayed only the
+subject and headers.
+
+The IMAP trace showed rejected \texttt{STATUS} and
+\texttt{CREATE "Sent"} commands. Linkwise added \texttt{STATUS} and
+an append-only Sent archive separate from the transmit queue. Tests
+verified that archived UIDs and attachment bytes survived a listener
+restart and that oversized or interrupted appends were rejected.
+With Sent available, Gmail's queued message reached Rocky, but Gmail
+still displayed only headers on receipt.
+
+A fresh Gmail account read plain-text and multipart fixtures from
+Dovecot and downloaded the reference attachment with the expected
+checksum. The reference trace showed \texttt{BODYSTRUCTURE},
+\texttt{BODY.PEEK[TEXT]}, and numbered MIME section requests. Linkwise
+added those responses. The mail bridge regression verified section
+retrieval, whole-message retrieval, and exact decoded attachment bytes.
+All 17 Winlink Rust tests passed.
+
+The development-signed ARM64 RPM passed the package smoke test and
+was installed on Rocky with signature checking enabled. Gmail sent
+\texttt{Rocky-Gmail-MIME-BW500} over implicit TLS. The harness verified
+clean disconnects at both virtual BW500 endpoints and published the
+receiving peer's copy to the test IMAP inbox. Gmail displayed the body
+and saved the attachment. The original and downloaded files matched
+byte for byte. Both had SHA-256
+\begin{quote}\small\ttfamily
+5af8f01f9fb8310f3815941a0629b40b45dd0b15f380640d02fc3f69073efd8b
+\end{quote}
+
+The CLI manual now covers MIME import and export, TLS and bind options,
+and Sent archive behavior. All three manual pages passed \texttt{mandoc}
+lint and rendering. The Rocky and mobile guides document the tested
+configuration. The installed RPM predates those manual edits.
+Physical HF operation and Gmail against the packaged SMTP unit's
+STARTTLS configuration remain unverified.
+
+See \pathtext{docs/architecture/rocky-thunderbird-validation.md} for
+the signed RPM checksum and test details. The private evidence
+directory contains the logs under \pathtext{mail-bench/gmail-mime-rpm}
+and \pathtext{mail-bench/gmail-reference}.
+
+\section{2026-11-14 -- Apple Mail TLS and persistent IMAP state}
+
+Apple Mail on the Mac mini (macOS 27.2.1, build 26B131) rejected the
+Rocky test server's certificate before trust was configured. After
+the operator approved SSL trust scoped to \texttt{localhost} in the
+login keychain, Connection Doctor reported successful IMAP and SMTP
+login over implicit TLS. The default macOS trust store then accepted
+the certificate for the matching hostname. A separate verification
+with the root supplied explicitly rejected a mismatched hostname.
+
+The TLS login succeeded while the inbox remained empty. A trace showed
+that Apple Mail requested \texttt{BODY.PEEK[HEADER]} and Linkwise
+rejected it. After the fix returned the complete header section with
+its terminating blank line, Apple Mail displayed the fixture body and
+attachment from the signed Rocky build. Saving and hashing the
+attachment in Apple Mail and sending from Apple Mail over virtual
+BW500 remain unverified.
+
+The next IMAP increment bounded command parsing, preserved quoted
+arguments, recovered from malformed commands on the same connection,
+and added \texttt{CHECK} and \texttt{UNSELECT}. Inbox UID metadata now
+survives listener restarts. Existing mailboxes receive a new
+\texttt{UIDVALIDITY} on the first start with persistent metadata.
+\texttt{STORE} and \texttt{UID STORE} now persist the \texttt{\textbackslash Seen}
+flag for Inbox and Sent. Flag fetches, read/unread searches, and unseen
+counts reflect the saved state. \texttt{EXAMINE} blocks flag changes.
+All 18 Winlink Rust tests and the loopback IMAP regression passed.
+
+For current testing, \texttt{KN6MQS} is the station call and
+\texttt{0000} is the fake peer. A virtual BW500 mail-bridge run checked
+attachment SHA-256 in both directions and verified both clean
+disconnects. Before SMTP submission the container had only loopback
+connectivity, no outbound route, and an unreachable SMTP probe.
+No physical RF was used.
+
+The development-signed ARM64 RPM passed the package smoke test and
+was reinstalled on Rocky with signature checking enabled. The modem,
+IMAP, and SMTP units were active afterward. SELinux was enforcing,
+kernel FIPS mode was enabled, and both mail units listened on
+loopback. Using the installed binary with a disposable mailbox over
+trusted TLS, the Rocky restart test verified stable UIDVALIDITY,
+persistent read state, rejection of flag changes under
+\texttt{EXAMINE}, and clearing the flag after \texttt{SELECT}. That
+deployment test sent no email. The installed RPM SHA-256 was
+\begin{quote}\small\ttfamily
+d664247b141596b407ba2d4650aa7ad8771a3fd53967f494087040d80fa23b82
+\end{quote}
+
+The CLI manual and mobile guide document persistent UIDs and read
+state. Automatic read marking on body fetch, additional flags,
+writable folders, copy, move, expunge, and full IMAP command
+coverage remain open. Evidence is under
+\pathtext{mail-bench/apple-mail-ca} and
+\pathtext{mail-bench/imap-seen-rpm} in the private Rocky evidence directory.
+
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]
