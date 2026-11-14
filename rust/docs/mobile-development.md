@@ -215,6 +215,16 @@ SHA-256 in both directions and clean modem disconnection. Mobile CI runs
 this test with Python mail clients. Apple Mail and Android mail client
 support still requires qualification.
 
+## Thunderbird for iOS simulator
+
+The [simulator procedure](../../tools/ios-thunderbird/README.md) exercises
+Thunderbird's SMTP STARTTLS and IMAP implicit TLS directly against Linkwise.
+For SMTP, set both `LINKWISE_SMTP_USER` and `LINKWISE_SMTP_PASSWORD` and
+start `linkwise mail smtp MAILBOX CALLSIGN PORT --starttls CERT.pem KEY.pem`.
+The TLS listener maps submissions to the configured station and requires
+successful authentication before accepting its sender address. The simulator
+procedure uses a disposable CA and loopback sockets.
+
 ## Release qualification
 
 - Connect the mailbox to the mail bridge and mobile applications.

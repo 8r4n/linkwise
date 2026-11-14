@@ -923,6 +923,7 @@ dependencies = [
  "async-trait",
  "aws-lc-rs",
  "axum",
+ "base64",
  "chrono",
  "cpal",
  "hound",

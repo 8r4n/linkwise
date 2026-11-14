@@ -2530,6 +2530,61 @@ The responder-to-caller SHA-256 digest matched
 \par\noindent
 \hashtext{4ae9679fd60c9615}{7422bb4118982607}{2af3aa64d98a90f2}{f3a3156a939b8911}.
 
+\section{2026-11-13 -- Thunderbird on the iPhone simulator}
+\label{sec:thunderbird-ios-2026-11-13}
+
+The public TestFlight beta was full. The upstream Thunderbird iOS source
+at \texttt{a8de4c4} built with Xcode 27.2 and launched on an iPhone 17
+simulator running iOS 27.2. The compose attachment button was a placeholder.
+A Swift test supplied a 1,400-byte binary fixture directly to Thunderbird's
+MIME and SMTP libraries and retrieved it with the IMAP library.
+
+The initial loopback exchange used an SMTP authentication adapter and a
+local Thunderbird change to honor plaintext IMAP. The next iteration removed
+both workarounds. Linkwise gained SMTP STARTTLS and \texttt{AUTH LOGIN}.
+The final simulator test used unmodified Thunderbird protocol libraries,
+SMTP STARTTLS, implicit IMAP TLS, and a short-lived bench CA installed in the
+simulator. On clean virtual BW500, SMTP submitted the message, the forwarder
+confirmed its queue entry, IMAP retrieved exactly one copy, and both modems
+disconnected cleanly. The original and received attachment SHA-256 matched:
+
+\noindent
+\hashtext{5af8f01f9fb8310f}{3815941a0629b40b}{45dd0b15f380640d}{02fc3f69073efd8b}.
+
+The endpoint checks rejected plaintext authentication, bad credentials,
+a mismatched SMTP sender, oversized and interrupted SMTP submissions,
+untrusted certificates, and hostname mismatches. All 16 focused Rust
+mail tests passed. The endpoint preflight passed locally and was added
+to the mobile CI workflow.
+
+\begin{longtable}{@{}llp{0.62\linewidth}@{}}
+\toprule
+HF profile & Seed & Result \\
+\midrule
+\endhead
+32 dB & 17 & IMAP retrieved the exact attachment. The modem exchange ended
+with unconfirmed bytes, so it failed the clean-disconnect criterion. \\
+32 dB & 23 & DATA acknowledgment timed out. The message remained queued. \\
+22 dB & 18, 24 & The modem disconnected before B2F exchange. Both messages
+remained queued. \\
+\bottomrule
+\end{longtable}
+
+These trials used the combined GNU Radio profiles from
+Section~\ref{sec:bw500-hf-pairings-2026-11-13}. All four accepted SMTP
+submission. A clean-channel retry of the 32 dB seed 23 message delivered
+exactly one matching copy, confirmed the sender queue entry, and
+disconnected cleanly at both ends. An additional empty exchange on the
+same modems timed out in a separate attempt.
+
+The reproduction guide and test sources are under
+\pathtext{tools/ios-thunderbird/}. The local bench directory
+\pathtext{linkwise-thunderbird-ios.Gcf5AC/} contains the simulator result
+bundle, the clean-run transcript,
+the impaired-run logs, and \pathtext{recovery-once.log}.
+The stock attachment UI, reverse-direction simulator exchange, and
+physical iPhone qualification remain open.
+
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]

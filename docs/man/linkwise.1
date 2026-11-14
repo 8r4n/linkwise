@@ -100,11 +100,19 @@ Queue a Winlink B2F envelope of up to 1 MiB in a private mailbox directory.
 Use a local filesystem with hard-link support.
 .TP
 .B mail smtp
-Accept local SMTP submissions and queue them for Winlink P2P.
+Accept local SMTP submissions and queue them for B2F peer-to-peer forwarding.
 The listener binds to IPv4 loopback and defaults to port 2525.
 With the mail-tls build feature, append
 .B PORT --tls CERT.pem KEY.pem
-to use implicit TLS.
+for implicit TLS or
+.B PORT --starttls CERT.pem KEY.pem
+for SMTP STARTTLS.
+Set both
+.B LINKWISE_SMTP_USER
+and
+.B LINKWISE_SMTP_PASSWORD
+to require AUTH LOGIN after TLS.
+The authenticated account can submit only as the configured station.
 .TP
 .B mail imap
 Expose a read-only inbox over local IMAP.

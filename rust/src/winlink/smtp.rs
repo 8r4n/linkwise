@@ -2,6 +2,7 @@
 
 use std::{io, net::Ipv4Addr, path::PathBuf, time::Duration};
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
     net::TcpListener,
@@ -9,7 +10,14 @@ use tokio::{
     time::timeout,
 };
 
-use super::{Message, invalid, mailbox::DirectoryMailbox, mime};
+use super::{
+    Message,
+    imap::Login,
+    invalid,
+    mail_tls::{MailStream, Transport},
+    mailbox::DirectoryMailbox,
+    mime,
+};
 
 const CLIENT_LIMIT: usize = 8;
 const SESSION_TIMEOUT: Duration = Duration::from_secs(300);
@@ -20,8 +28,16 @@ pub async fn serve(
     station: String,
     port: u16,
     limit: usize,
-    tls: super::mail_tls::Transport,
+    tls: Transport,
+    starttls: bool,
+    login: Option<Login>,
 ) -> io::Result<()> {
+    if (starttls || login.is_some()) && matches!(tls, Transport::Plain) {
+        return Err(invalid(
+            "SMTP authentication and STARTTLS require a TLS configuration",
+        ));
+    }
+    let login = login.map(std::sync::Arc::new);
     DirectoryMailbox::open(&root, limit)?;
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await?;
     let mut clients = JoinSet::new();
@@ -33,9 +49,12 @@ pub async fn serve(
                 let root = root.clone();
                 let station = station.clone();
                 let tls = tls.clone();
+                let login = login.clone();
                 clients.spawn(async move {
                     let _ = timeout(SESSION_TIMEOUT, async {
-                        session(tls.accept(socket).await?, root, &station, limit).await
+                        let encrypted = !starttls && !matches!(tls, Transport::Plain);
+                        let socket = if starttls { Transport::Plain.accept(socket).await? } else { tls.accept(socket).await? };
+                        session(socket, root, &station, limit, starttls.then_some(tls), encrypted, login.as_deref()).await
                     }).await;
                 });
             }
@@ -44,11 +63,15 @@ pub async fn serve(
 }
 
 async fn session(
-    socket: impl AsyncRead + AsyncWrite + Unpin,
+    socket: Box<dyn MailStream>,
     root: PathBuf,
     station: &str,
     limit: usize,
+    mut upgrade: Option<Transport>,
+    mut encrypted: bool,
+    login: Option<&Login>,
 ) -> io::Result<()> {
+    let mut authenticated = login.is_none();
     let mut stream = BufReader::new(socket);
     let (mut greeted, mut sender, mut recipient) = (false, false, None);
     reply(&mut stream, "220 localhost Linkwise SMTP").await?;
@@ -56,19 +79,64 @@ async fn session(
         let command = std::str::from_utf8(&line[..line.len() - 2])
             .map_err(|_| invalid("invalid SMTP command"))?;
         let (verb, args) = command.split_once(' ').unwrap_or((command, ""));
+        let (mechanism, initial) = args.split_once(' ').unwrap_or((args, ""));
         let response = match verb.to_ascii_uppercase().as_str() {
             "QUIT" => return reply(&mut stream, "221 Closing connection").await,
             "EHLO" | "HELO" if !args.is_empty() => {
                 greeted = true;
                 sender = false;
                 recipient = None;
-                "250 localhost"
+                match (
+                    verb.eq_ignore_ascii_case("EHLO"),
+                    upgrade.is_some(),
+                    encrypted && login.is_some(),
+                ) {
+                    (true, true, _) => "250-localhost\r\n250 STARTTLS",
+                    (true, false, true) => "250-localhost\r\n250 AUTH LOGIN",
+                    _ => "250 localhost",
+                }
             }
             "NOOP" => "250 OK",
             "RSET" => {
                 sender = false;
                 recipient = None;
                 "250 OK"
+            }
+            "STARTTLS" if greeted && args.is_empty() && upgrade.is_some() => {
+                if !stream.buffer().is_empty() {
+                    return reply(&mut stream, "554 STARTTLS cannot be pipelined").await;
+                }
+                reply(&mut stream, "220 Ready to start TLS").await?;
+                stream = BufReader::new(
+                    upgrade
+                        .take()
+                        .expect("upgrade checked")
+                        .accept(stream.into_inner())
+                        .await?,
+                );
+                encrypted = true;
+                greeted = false;
+                sender = false;
+                recipient = None;
+                continue;
+            }
+            "STARTTLS" => "503 STARTTLS unavailable in this session state",
+            "AUTH" if encrypted && !authenticated && mechanism.eq_ignore_ascii_case("LOGIN") => {
+                // The pinned Thunderbird client starts AUTH immediately after STARTTLS.
+                authenticated =
+                    authenticate(&mut stream, login.expect("login required"), initial).await?;
+                if authenticated {
+                    greeted = true;
+                    "235 2.7.0 Authentication successful"
+                } else {
+                    "535 5.7.8 Invalid credentials"
+                }
+            }
+            "AUTH" if !encrypted => "538 5.7.11 Encryption required",
+            "AUTH" if login.is_some() && authenticated => "503 Already authenticated",
+            "AUTH" => "504 Unsupported authentication mechanism",
+            "MAIL" if !authenticated || upgrade.is_some() => {
+                "530 5.7.0 Authentication or STARTTLS required"
             }
             "MAIL" if greeted => {
                 sender = false;
@@ -116,6 +184,41 @@ async fn session(
         reply(&mut stream, response).await?;
     }
     Ok(())
+}
+
+async fn authenticate(
+    stream: &mut BufReader<Box<dyn MailStream>>,
+    login: &Login,
+    initial: &str,
+) -> io::Result<bool> {
+    let username = if initial.is_empty() {
+        reply(stream, "334 VXNlcm5hbWU6").await?;
+        let Some(line) = read_line(stream, 512).await? else {
+            return Ok(false);
+        };
+        line[..line.len() - 2].to_vec()
+    } else {
+        initial.as_bytes().to_vec()
+    };
+    if username == b"*" {
+        return Ok(false);
+    }
+    reply(stream, "334 UGFzc3dvcmQ6").await?;
+    let Some(password) = read_line(stream, 512).await? else {
+        return Ok(false);
+    };
+    let decode = |encoded: &[u8]| {
+        STANDARD
+            .decode(encoded)
+            .ok()
+            .and_then(|value| String::from_utf8(value).ok())
+    };
+    Ok(
+        match (decode(&username), decode(&password[..password.len() - 2])) {
+            (Some(username), Some(password)) => login.matches(&username, &password),
+            _ => false,
+        },
+    )
 }
 
 fn queue(root: PathBuf, station: &str, target: &str, raw: &[u8], limit: usize) -> io::Result<()> {
