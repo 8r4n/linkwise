@@ -49,14 +49,18 @@ jobs:
             --modem rust/target/debug/linkwise-modemd \
             --profile reference/vara/fixtures/level4/bw500-level4.json
       - run: |
-          python3 tools/test-winlink-modem.py rust/target/debug/linkwise rust/target/debug/linkwise-modemd \
+          docker run --rm --network none --volume "$PWD:/work:ro" --workdir /work linkwise-hf-bench \
+            /usr/bin/python3 tools/test-winlink-modem.py rust/target/debug/linkwise rust/target/debug/linkwise-modemd \
             reference/vara/fixtures/level4/bw500-level4.json --mail-bridge
       - name: Validate TLS mail endpoint rejection paths
         run: |
           cargo build --locked --manifest-path rust/Cargo.toml --features mail-tls --bins
-          bench=$(mktemp -d)
-          bash tools/ios-thunderbird/make-certificates.sh "$bench/tls"
-          python3 tools/ios-thunderbird/bench.py "$bench/mailboxes" "$bench/tls" --preflight-only
+          docker run --rm --network none --volume "$PWD:/work:ro" --workdir /work linkwise-hf-bench \
+            bash -ec '
+              bench=$(mktemp -d)
+              bash tools/ios-thunderbird/make-certificates.sh "$bench/tls"
+              python3 tools/ios-thunderbird/bench.py "$bench/mailboxes" "$bench/tls" --preflight-only
+            '
       - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version: '1.26.11'
