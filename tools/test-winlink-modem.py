@@ -88,6 +88,11 @@ def test_imap_only(cli):
             )
             assert reader.uid("search", None, "SEEN") == ("OK", [b"1"])
             assert reader.uid("search", None, "UNSEEN") == ("OK", [b"2"])
+            assert reader.uid("fetch", "2", "(BODY.PEEK[])")[0] == "OK"
+            assert reader.uid("search", None, "UNSEEN") == ("OK", [b"2"])
+            assert reader.uid("fetch", "2", "(BODY[TEXT])")[0] == "OK"
+            assert reader.uid("search", None, "UNSEEN") == ("OK", [b""])
+            assert reader.append("Sent", r"(\Seen)", None, b"Subject: Sent\r\n\r\nTest\r\n")[0] == "OK"
         with contextlib.ExitStack() as restarted:
             reopened = mail_client(restarted, cli, "imap", mailbox, imaplib.IMAP4)
             assert reopened.select("INBOX", readonly=True) == ("OK", [b"2"])
@@ -96,11 +101,15 @@ def test_imap_only(cli):
             assert reopened.uid("fetch", "1", "(FLAGS)") == (
                 "OK", [br"1 (UID 1 FLAGS (\Seen))"]
             )
-            assert reopened.status("INBOX", "(UNSEEN)") == ("OK", [b"INBOX (UNSEEN 1)"])
+            assert reopened.status("INBOX", "(UNSEEN)") == ("OK", [b"INBOX (UNSEEN 0)"])
+            assert reopened.status("Sent", "(UNSEEN)") == ("OK", [b"Sent (UNSEEN 0)"])
             assert reopened.uid("store", "1", "-FLAGS", r"(\Seen)")[0] == "NO"
             assert reopened.select("INBOX") == ("OK", [b"2"])
             assert reopened.store("1", "-FLAGS.SILENT", r"(\Seen)") == ("OK", [None])
-            assert reopened.status("INBOX", "(UNSEEN)") == ("OK", [b"INBOX (UNSEEN 2)"])
+            assert reopened.status("INBOX", "(UNSEEN)") == ("OK", [b"INBOX (UNSEEN 1)"])
+            assert reopened.select("INBOX", readonly=True)[0] == "OK"
+            assert reopened.uid("fetch", "1", "(RFC822)")[0] == "OK"
+            assert reopened.uid("search", None, "UNSEEN") == ("OK", [b"1"])
             for uid, mid in enumerate(("ZZTEST", "AATEST"), 1):
                 status, parts = reopened.uid("fetch", str(uid), "(BODY.PEEK[HEADER])")
                 assert status == "OK"

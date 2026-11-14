@@ -687,6 +687,7 @@ async fn session(
                 if end != *b"\r\n" {
                     return Err(invalid("invalid APPEND terminator"));
                 }
+                let append_seen = !options.is_empty();
                 let (archive, root) = (Arc::clone(sent.0), sent.1.to_owned());
                 let saved = tokio::task::spawn_blocking(move || {
                     let mut archive = archive
@@ -696,10 +697,12 @@ async fn session(
                     if archive.total_bytes + mime.len() > 64 * 1024 * 1024 {
                         return Err(invalid("Sent archive is full"));
                     }
-                    super::mailbox::publish(
-                        &root.join((archive.messages.len() + 1).to_string()),
-                        &mime,
-                    )
+                    let uid = archive.next_uid;
+                    let flag = seen_state(&root, "Sent", uid);
+                    // Set the flag before the message becomes visible. A retry
+                    // can replace an orphaned flag left by an interrupted append.
+                    set_seen(&flag, append_seen)?;
+                    super::mailbox::publish(&root.join(uid.to_string()), &mime)
                 })
                 .await?;
                 if saved.is_ok() {
@@ -881,7 +884,10 @@ async fn session(
                 }
             }
             ("FETCH", [set, items @ ..]) if selected.is_some() => {
-                fetch(&mut stream, &messages, &seen, set, items, uid).await?
+                let folder = selected.expect("selected mailbox");
+                let (mailbox, root) = if folder == "Sent" { sent } else { inbox };
+                let mark_seen = (!read_only).then_some((mailbox, root, folder));
+                fetch(&mut stream, &messages, &seen, set, items, uid, mark_seen).await?
             }
             _ => "BAD Unsupported command or state",
         };
@@ -928,6 +934,7 @@ async fn fetch(
     set: &str,
     items: &[&str],
     uid: bool,
+    mark_seen: Option<(&Arc<Mutex<Inbox>>, &Path, &str)>,
 ) -> io::Result<&'static str> {
     let Some(ranges) = message_ranges(
         set,
@@ -994,6 +1001,41 @@ async fn fetch(
             .any(|item| *item == "BODYSTRUCTURE" || body_section(item).is_some())
             .then(|| mail_parser::MessageParser::default().parse(&message.mime))
             .flatten();
+        let mut is_seen = seen[index - 1];
+        let mut changed = false;
+        let reads_body = attributes.iter().any(|item| {
+            if matches!(*item, "RFC822" | "BODY[]")
+                || header_fields(item).is_some() && item.starts_with("BODY[")
+            {
+                return true;
+            }
+            item.starts_with("BODY[")
+                && body_section(item)
+                    .and_then(|section| mime.as_ref().and_then(|mail| section_part(mail, section)))
+                    .is_some()
+        });
+        if reads_body && let Some((mailbox, root, folder)) = mark_seen {
+            let mailbox = Arc::clone(mailbox);
+            let path = seen_state(root, folder, message.uid);
+            let updated = tokio::task::spawn_blocking(move || {
+                let _guard = mailbox
+                    .lock()
+                    .map_err(|_| io::Error::other("IMAP mailbox lock poisoned"))?;
+                let was_seen = path.try_exists()?;
+                if !was_seen {
+                    set_seen(&path, true)?;
+                }
+                Ok::<_, io::Error>(!was_seen)
+            })
+            .await?;
+            match updated {
+                Ok(was_changed) => {
+                    is_seen = true;
+                    changed = was_changed;
+                }
+                Err(_) => return Ok("NO Could not save message flags"),
+            }
+        }
         send(stream, &format!("* {index} FETCH (")).await?;
         for (position, item) in attributes.iter().enumerate() {
             if position != 0 {
@@ -1044,7 +1086,7 @@ async fn fetch(
                     }
                 }
                 "UID" => send(stream, &format!("UID {}", message.uid)).await?,
-                "FLAGS" => send(stream, &format!("FLAGS {}", flags(seen[index - 1]))).await?,
+                "FLAGS" => send(stream, &format!("FLAGS {}", flags(is_seen))).await?,
                 "RFC822.SIZE" => {
                     send(stream, &format!("RFC822.SIZE {}", message.mime.len())).await?
                 }
@@ -1058,6 +1100,9 @@ async fn fetch(
                     stream.write_all(&message.mime).await?;
                 }
             }
+        }
+        if changed && !attributes.contains(&"FLAGS") {
+            send(stream, &format!(" FLAGS {}", flags(is_seen))).await?;
         }
         send(stream, ")\r\n").await?;
     }
