@@ -1,6 +1,7 @@
 use std::{env, path::Path, sync::Arc};
 
 mod frame_cli;
+mod mail_cli;
 mod session_cli;
 #[cfg(feature = "secure-transfer")]
 mod secure_cli;
@@ -26,6 +27,12 @@ Usage:
   linkwise decode-frame INPUT  Write one decoded payload as raw bytes
   linkwise transmit-frame LEVEL CONTROL INPUT  Play one BW500 frame
   linkwise send SOURCE DESTINATION INPUT [COMMAND_PORT DATA_PORT]  Send via local P2P modem
+  linkwise mail queue MAILBOX ENVELOPE
+  linkwise mail import MAILBOX MESSAGE.eml
+  linkwise mail export MAILBOX MESSAGE_ID
+  linkwise mail smtp MAILBOX CALLSIGN [PORT [--tls CERT.pem KEY.pem]]
+  linkwise mail imap MAILBOX [PORT [--tls CERT.pem KEY.pem]]
+  linkwise mail exchange|listen MAILBOX LOCAL PEER [COMMAND_PORT DATA_PORT]
   linkwise secure send|receive CONFIG FILE  Encrypted P2P transfer (requires secure-transfer feature)
   linkwise --help
   linkwise --version
@@ -64,13 +71,15 @@ async fn main() {
     }
     if matches!(
         args.first().and_then(|arg| arg.to_str()),
-        Some("encode-frame" | "decode-frame" | "transmit-frame" | "send")
+        Some("encode-frame" | "decode-frame" | "transmit-frame" | "send" | "mail")
     ) {
         if args.get(1).is_some_and(|arg| arg == "--") {
             args.remove(1);
         }
         let result = if args.len() == 2 && matches!(args[1].to_str(), Some("--help" | "-h")) {
             writeln!(std::io::stdout().lock(), "{USAGE}").map_err(frame_cli::Failure::operation)
+        } else if args[0] == "mail" {
+            mail_cli::run(&args[1..]).await
         } else if args[0] == "send" {
             session_cli::run(&args[1..]).await
         } else {

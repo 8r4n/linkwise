@@ -12,6 +12,8 @@ TARGETS = (
 REVIEWED = {
     "(MIT OR Apache-2.0) AND Unicode-3.0",
     "Apache-2.0", "Apache-2.0 OR MIT", "Apache-2.0/MIT",
+    "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+
     "BSD-2-Clause OR MIT OR Apache-2.0", "BSD-3-Clause", "ISC",
     "MIT", "MIT OR Apache-2.0", "MIT/Apache-2.0", "Unlicense OR MIT",
 }
@@ -49,6 +51,9 @@ def notices(cargo, target):
             path for path in directory.iterdir() if path.is_file()
             and path.name.lower().startswith(("license", "notice", "copying", "copyright", "unlicense"))
         }
+        license_directory = directory / "LICENSES"
+        if license_directory.is_dir():
+            files.update(path for path in license_directory.iterdir() if path.is_file())
         if package["license_file"]:
             files.add(directory / package["license_file"])
         if not files:

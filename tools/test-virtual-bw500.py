@@ -78,7 +78,7 @@ def attach(stack, modem, profile, callsign, bandwidth):
     return connect_station(stack, start_station(stack, modem, profile, callsign, bandwidth))
 
 
-def establish_bw500(caller, peer, peer_call="W1AW", caller_call="KN6MQS"):
+def establish_bw500(caller, peer, peer_call="W1AW", caller_call="KN6MQS", relay=waveform):
     caller_cmd, _, caller_audio = caller
     peer_cmd, _, peer_audio = peer
     peer_cmd.sendall(b"LISTEN ON\r")
@@ -86,7 +86,7 @@ def establish_bw500(caller, peer, peer_call="W1AW", caller_call="KN6MQS"):
     caller_cmd.sendall(f"CONNECT {caller_call} {peer_call}\r".encode())
     assert read_line(caller_cmd) == b"OK\r"
     for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 3:
-        destination.sendall(waveform(source))
+        destination.sendall(relay(source))
     assert read_line(caller_cmd) == read_line(peer_cmd) == f"CONNECTED {caller_call} {peer_call} 500\r".encode()
 
 
@@ -172,20 +172,20 @@ def reconnect_after_channel_loss(modem, profile):
     print("Command, DATA, and audio loss each allowed a fresh session without stale bytes.")
 
 
-def disconnect_after_drain(modem, profile):
+def disconnect_after_drain(modem, profile, relay=waveform):
     with contextlib.ExitStack() as stack:
         caller_cmd, caller_data, caller_audio = caller = attach(stack, modem, profile, "KN6MQS", 500)
         peer_cmd, peer_data, peer_audio = peer = attach(stack, modem, profile, "W1AW", 500)
-        establish_bw500(caller, peer)
+        establish_bw500(caller, peer, relay=relay)
         caller_data.sendall(b"FQ\r")
         assert read_line(caller_cmd) == b"BUFFER 3\r"
         caller_cmd.sendall(b"DISCONNECT\r")
         assert read_line(caller_cmd) == b"OK\r"
         for source, destination in [(caller_audio, peer_audio), (peer_audio, caller_audio)] * 3:
-            destination.sendall(waveform(source))
+            destination.sendall(relay(source))
         assert read_exact(peer_data, 3) == b"FQ\r"
         assert read_line(caller_cmd) == b"BUFFER 0\r"
-        peer_audio.sendall(waveform(caller_audio))
+        peer_audio.sendall(relay(caller_audio))
         assert read_line(caller_cmd) == read_line(peer_cmd) == b"DISCONNECTED\r"
     print("Disconnect drained queued DATA and closed at both ends.")
 
@@ -274,7 +274,7 @@ def exercise(
     stock_turn_release=None, stock_frame_nak=None, stock_rate_increase=None,
     stock_intermediate_query_ack=None, turn_after_lost_ack=False, corrupt_after_prefix=False,
     query_intermediate=False, stock_wide_nak=None, stock_short_turn_request=None,
-    late_write=False, replenish=False,
+    late_write=False, replenish=False, drop_turn_grant=False,
 ):
     with contextlib.ExitStack() as stack:
         keyed_capture = stock_rate_increase or stock_intermediate_query_ack or stock_wide_nak or stock_turn_release
@@ -302,6 +302,13 @@ def exercise(
         assert read_line(caller_cmd) == f"BUFFER {len(payload)}\r".encode()
         for index, (source, destination) in enumerate([(caller_audio, peer_audio), (peer_audio, caller_audio)] * 2):
             exchange = waveform(source)
+            if drop_turn_grant and index == 3:
+                # Lose the first grant. The receiver must grant the repeated
+                # request without publishing or acknowledging any DATA.
+                caller_audio.settimeout(18)
+                peer_audio.sendall(waveform(caller_audio))
+                caller_audio.settimeout(None)
+                exchange = waveform(peer_audio)
             destination.sendall(exchange)
             if index == 1:
                 poll_ack = exchange
@@ -616,6 +623,7 @@ if __name__ == "__main__":
         corrupt_first=True, query_after_loss=True,
     )
     exercise(args.modem, args.profile, bytes(range(200)), 4, crossed_turns=True)
+    exercise(args.modem, args.profile, bytes(range(200)), 4, drop_turn_grant=True)
     exercise(args.modem, args.profile, bytes(range(84)), 1)
     exercise(args.modem, args.profile, bytes(range(164)), 3)
     exercise(args.modem, args.profile, bytes(4096), 4, replenish=True)

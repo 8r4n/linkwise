@@ -2451,6 +2451,85 @@ Secure CLI packaging, OS-enforced access controls for the local modem ports,
 and FIPS 140-3 qualification for the exact module build and operating
 environment remain open. The encrypted exchange used a virtual audio cable.
 
+\section{2026-11-13 -- BW500 HF pairing and multipath tests}
+\label{sec:bw500-hf-pairings-2026-11-13}
+
+The radio-free bench compared Linkwise and stock VARA HF 4.9.1 in both
+caller and responder roles. Each trial sent the same 203-byte payload,
+6-byte reverse reply, and 203-byte caller continuation. Stock endpoints
+used Windows ARM64 guests with WASAPI and VB-CABLE. The relay captured
+complete stock bursts before applying the channel and paced playback
+into stock receivers. Two-Linkwise trials were paced by burst duration.
+
+GNU Radio 3.10.9.2 applied a two-path Rician channel ($K=10$) and Gaussian
+noise referenced to the input RMS of each burst. Each profile was applied
+in both directions, with independent channel state and the same initial
+seed per direction. The 32 dB profile used a 1 ms delayed path at $-9$ dB,
+0.5 Hz Doppler spread, and seed 17. The 22 dB profile used a 2 ms delayed
+path at $-4$ dB, 1 Hz spread, and seed 18.
+
+\begin{longtable}{@{}l p{0.31\linewidth} p{0.33\linewidth}@{}}
+\toprule
+Caller $\to$ responder & 32 dB & 22 dB \\
+\midrule
+\endhead
+VARA $\to$ VARA & Connection timeout & Connection timeout \\
+Linkwise $\to$ Linkwise & Connected in 9.28 s, then DATA timed out &
+  Connection timeout \\
+VARA $\to$ Linkwise & 72.04 s transfer, 5.98 s disconnect &
+  Connection timeout \\
+Linkwise $\to$ VARA & 77.92 s transfer, 1.91 s disconnect &
+  Connection timeout \\
+\bottomrule
+\end{longtable}
+
+Both mixed passes matched the directional SHA-256 digests and reported
+\texttt{DISCONNECTED} at both ends after the explicit disconnect command.
+Transfer time includes the final transmit queue drain. The failed trials
+delivered no complete payload to the host and did not demonstrate clean
+teardown. Stock-to-stock also timed out in the buffered control with the
+channel effects disabled. Its HF results are inconclusive. The earlier
+transparent streaming stock control had completed in 75.19 s.
+
+\subsection{Echo suppression and failure stages}
+
+With the profiles otherwise fixed, reducing the delayed path to $-120$ dB
+let Linkwise-to-Linkwise finish at both SNRs. The 32 dB transfer took
+63.56 s and the 22 dB transfer took 63.46 s. Both delivered the exact
+412 bytes and confirmed clean disconnects. Earlier echo-suppressed attempts
+during Docker worker startup failures were excluded. The passing trials
+were run after Docker restarted and GNU Radio startup was verified.
+
+At 32 dB with the echo present, the caller queue fell from 203 to 160 bytes
+before an acknowledgment timeout. The receiver releases the buffered
+payload after a closing frame. The trace leaves open whether the next DATA
+frame or its acknowledgment was lost. At 22 dB, the Linkwise responder
+transmitted a handshake reply in the two-Linkwise trial. In the mixed
+trials, stock replied to the Linkwise caller, and Linkwise emitted no
+reply to repeated stock calls. Echo suppression isolated the delayed path
+as a cause in the two-Linkwise trials. The mixed directions were tested
+with the echo present.
+
+The proposed follow-up is to replay the failed controls and DATA bursts,
+then test receive-side timing and frequency acquisition for handshake and
+ACK bursts and pilot-based channel compensation for level-4 DATA. Use
+existing on-air formats and stock-observed recovery sequences. Check false
+control detections, retries, exact payloads and clean disconnects across
+multiple seeds. Qualify a stock-to-stock relay with a clean control before
+comparing full-matrix completion rates or transfer times.
+
+The host runner is \pathtext{tools/test-vara-interop.py}. Local evidence
+is archived under \pathtext{vara-hf.xZtPyB/} in the Linkwise Android Demo
+lab directory. The archive contains the framed-PCM channel worker, run
+manifests, command transcripts, raw PCM, and received payload files.
+The caller-to-responder SHA-256 digest matched
+\par\noindent
+\hashtext{8e3785ff76361732}{f067b07a932a139a}{85d26791e35dd3d4}{f908164d89544db3}.
+
+The responder-to-caller SHA-256 digest matched
+\par\noindent
+\hashtext{4ae9679fd60c9615}{7422bb4118982607}{2af3aa64d98a90f2}{f3a3156a939b8911}.
+
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]

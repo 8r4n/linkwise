@@ -14,12 +14,10 @@ how the design fails safely. All diagrams are authored in PlantUML under
 [`diagrams/`](diagrams/); update those sources rather than hand-editing
 rendered output.
 
-Linkwise is proposed as a local-first, AI-assisted Winlink link manager with a
-separable VARA-compatible modem research effort. The design does not assume a
-particular Winlink client automation API, VARA command behavior, radio PTT
-capability, or propagation accuracy. Adapters must advertise capabilities;
-unsupported operations return an explicit result rather than being emulated
-silently.
+Linkwise is a local-first radio messaging system. The primary path uses
+a Linkwise-owned Rust mail forwarder and a separate VARA-compatible modem.
+AI-assisted station control operates through the policy and safety boundaries
+described below.
 
 ### Design principles
 
@@ -32,7 +30,7 @@ silently.
 2. **Safety and domain decisions are deterministic.** Eligibility,
    authorization, resource locking, interlocks, and PTT limits are ordinary
    versioned code. A model recommendation is never a permit.
-3. **Adapters isolate outside protocols.** Hamlib, modem, Winlink client,
+3. **Adapters isolate outside protocols.** Hamlib, modem, mail-client and gateway interfaces,
    propagation feeds, persistence, and simulated devices implement narrow
    ports owned by the application/domain.
 4. **Every observation is qualified.** Values carry source, observation time,
@@ -59,9 +57,53 @@ adapter, MCP SDK, radio backend, database, or LLM provider.
 | Inbound interface | MCP discovery, schema validation, identity/permission mapping, request limits, response envelopes | Implement link scoring, safety policy, or driver protocols |
 | Application/use cases | `RefreshInventory`, `RankCandidates`, `PrepareCandidate`, `RequestAuthorization`, `StartSession`, `AbortSession`; orchestration and transaction boundaries | Trust a previous tool read as authorization; let long network calls block safety work |
 | Domain core | Candidate eligibility, scoring, station/session state machines, policy decisions, limits, leases, event semantics | Perform I/O, read environment variables as policy, invoke an LLM |
-| Outbound ports | Stable contracts for radio, PTT, modem, Winlink, evidence, persistence, clock, and notifications | Encode provider-specific wire formats |
-| Infrastructure adapters | Hamlib/rigctld, VARA or Linkwise modem, supported Winlink client, VOACAP/data providers, local storage, simulator | Bypass domain policy or claim unsupported capabilities |
+| Outbound ports | Stable contracts for radio, PTT, modem, mail forwarding, evidence, persistence, clock, and notifications | Encode provider-specific wire formats |
+| Infrastructure adapters | Hamlib/rigctld, VARA or Linkwise modem, SMTP/IMAP, optional gateway integrations, VOACAP/data providers, local storage, simulator | Bypass domain policy or claim unsupported capabilities |
 | Device / external systems | Transceiver, audio/PTT hardware, RMS/CMS, published forecasts and observations | Be treated as transactionally reliable or fully observable |
+
+### Rust mail forwarding
+
+```text
+Mail client -> SMTP submission -> Local outbox
+                                   |
+                             Rust B2F forwarder
+                                   |
+                          Modem command and DATA ports
+                                   |
+                            BW500 link to peer
+
+Inbound B2F -> Verified local inbox -> IMAP or mail export
+```
+
+Linkwise implements the mail-forwarding functions previously assigned to an
+external Winlink client. The Rust engine owns B2F envelopes, proposal
+negotiation, compression, integrity checking, and exchange termination.
+The mailbox owns persistence and duplicate detection by message ID. The
+modem owns the ordered DATA stream and link lifecycle. The station
+controller retains authorization and PTT control. Mail content stays at
+the mail and forwarding boundaries.
+
+The current bench implementation under `rust/src/winlink/` supports direct
+P2P exchange, a directory mailbox, and a loopback SMTP/IMAP bridge. The
+[development guide](../../rust/docs/mobile-development.md) documents the
+virtual BW500 tests with two Linkwise stations and interoperability with
+Pat and Winlink Express. The current CLI runs one exchange at a time.
+
+The proposed service adds a scheduler that leases one mailbox and modem
+session per exchange, persists per-recipient attempts, and retries deferred
+or ambiguous transfers with bounded backoff. Validate and durably commit
+inbound messages before confirming receipt. Use a stable message ID to
+avoid duplicate publication after interrupted acknowledgment. Track local
+submission, peer acceptance, and final delivery evidence separately. Keep
+message bodies and authentication material out of operational logs.
+
+Direct peers are the first routing target. Multi-hop forwarding and an
+Internet mail relay require explicit routing policy, loop prevention, and
+independent qualification. Winlink Express and Pat remain compatibility
+peers. RMS/CMS connectivity is outside the verified P2P path. Any future
+Winlink network integration needs its own adapter, authorization and
+end-to-end tests. Production mail-client endpoints need authenticated TLS
+and device-specific qualification.
 
 ### Process and trust boundaries
 
@@ -162,14 +204,14 @@ cancellation. Its key handlers are:
   autonomous runtime profile.
 - `StartSession`: revalidate handle, automatically issued local-policy grant,
   lease, inventory age, radio
-  readback, client/modem readiness, and interlocks. For a host-mediated native
-  session, persist the operation and arm its expected client reservation
-  before asking the supported Winlink client to begin; its matching `CONNECT`
-  starts the backend within that operation, not a second attempt. Session grants
+  readback, forwarder/modem readiness, and interlocks. For a host-mediated
+  session, persist the operation and arm its expected host reservation before
+  starting the Rust forwarder. Its matching `CONNECT` consumes the reservation
+  and starts the backend within that operation. Session grants
   are automatic within the installed envelope; no interactive approval is
   requested while autonomous operation is active.
 - `ObserveSession` / `AbortSession`: collect state and progress without
-  conflating gateway contact, modem connection, client acceptance, and
+  conflating gateway contact, modem connection, peer acceptance, and
   recipient delivery; abort is idempotent and prioritizes PTT release.
 
 Operations that wait on the network are asynchronous and must not hold a
@@ -256,7 +298,7 @@ features.
 | `RadioControlPort` / Hamlib adapter | Enumerate all backend-reported capabilities and state; read/set each supported typed control (frequency/VFO, mode/filter, power, antenna, levels, split, memory, functions, and backend extensions as supported); return per-control support, bounds, and readback. Translate rigctld replies/errors; never bypass policy or own PTT authorization. |
 | `PttControlPort` / PTT arbiter + qualified driver | Expose PTT observation, authorized assert, and unconditional idempotent release. Assert independently checks session or approved test context, lease, config revision, permit, limits, route health, and watchdog. Report requested and observed state separately. |
 | `ModemSessionPort` / native, external VARA, or simulated backend | Observe capabilities, lifecycle and qualified link metrics; accept bounded internal start/stop requests. The native adapter owns one session actor. Every keying request routes to the PTT arbiter; model cannot sequence modem bursts. |
-| `WinlinkClientPort` / client adapter | Expose only documented inventory/queue/session operations supported by that client. Return `Unsupported` for absent features; do not silently scrape a GUI. A client event is not proof of recipient delivery. |
+| `MailForwardingPort` / Rust forwarder | Start, observe, and abort a bounded exchange for an authorized peer and queue scope. Report peer acceptance separately from recipient delivery. |
 | `GatewayDirectoryPort` | Fetch source version, records, status/report timestamps, pagination and warnings. Normalize identity without collapsing multiple channels under one gateway. |
 | `PropagationProviderPort` | Accept explicit path, time, frequency, antenna/station and model settings; return a typed forecast with model/version/input provenance and uncertainty. |
 | `ObservationProviderPort` | Return measured/reported observations with source, location/footprint, report age and quality; do not promote them to transmit authorization. |
@@ -287,8 +329,8 @@ ports. Existing `host::ModemPort` is an inbound command/data boundary; it is
 not the outbound `ModemSessionPort`. Both are bound through station admission
 to one native session actor. The first intended profile is BW500 with
 compression off; supported host commands and on-air modes require separate,
-versioned qualification manifests. Client message/mailbox protocols stay in
-the Winlink client. No body bytes or protocol deadlines depend on MCP.
+versioned qualification manifests. The Rust forwarder owns the B2F and mailbox protocols. MCP exposes
+exchange status and bounded control operations.
 
 Standalone `CONNECT` obtains local policy authorization and an exclusive lease.
 Managed start arms a bounded reservation for an expected client association;
@@ -440,13 +482,13 @@ trait ModemSessionPort {
         -> AdapterResult<()>;
 }
 
-trait WinlinkClientPort {
-    async fn capabilities(&self) -> AdapterResult<ClientCapabilities>;
-    async fn begin_session(&self, request: ClientSessionRequest)
-        -> AdapterResult<ClientSessionId>;
-    async fn observe(&self, id: ClientSessionId)
-        -> AdapterResult<Observed<ClientSessionState>>;
-    async fn abort(&self, id: ClientSessionId) -> AdapterResult<()>;
+trait MailForwardingPort {
+    async fn capabilities(&self) -> AdapterResult<ForwardingCapabilities>;
+    async fn begin_session(&self, request: ForwardingSessionRequest)
+        -> AdapterResult<ForwardingSessionId>;
+    async fn observe(&self, id: ForwardingSessionId)
+        -> AdapterResult<Observed<ForwardingSessionState>>;
+    async fn abort(&self, id: ForwardingSessionId) -> AdapterResult<()>;
 }
 ```
 
@@ -511,7 +553,7 @@ change, modem/client activity, or timeout.
 Session start rechecks all conditions; no earlier rank or prepare response
 substitutes for current state. A session grant is human-approved or produced
 by a preconfigured local bounded-auto policy, never by the model itself. The
-Winlink client and modem own protocol sequencing. A modem keying request
+Rust forwarder and modem own protocol sequencing. A modem keying request
 passes through the local PTT arbiter, which rechecks session, lease, config,
 one-use permit, continuous-key-up/duty budget, and watchdog state before
 assertion. Release occurs at the local limit and on abort, timeout, fault, or
@@ -618,7 +660,7 @@ Implementation sequence:
 3. Serialized capability-driven CAT control with leases, per-operation
    policy, readback, compensation, extension schemas, and fault behavior;
    candidate preparation is validated as a common use case.
-4. Documented Winlink client and modem session adapters; policy-authorized
+4. Rust forwarding service and qualified modem session adapters; policy-authorized
    automatic session start, autonomous retry/recovery, and always-available
    emergency stop.
 5. Qualified PTT driver/arbiter and watchdog under inhibited or
@@ -653,8 +695,8 @@ physical protection.
 
 ## 10. Open design decisions
 
-Before implementation freeze, resolve: exact supported Winlink client and
-documented automation API; modem command/transport evidence; radio-backend
+Before implementation freeze, resolve: per-recipient routing and retry policy,
+mail-client authentication, and optional gateway contracts; modem command/transport evidence; radio-backend
 capability and PTT route; hardware independent watchdog/inhibit design;
 policy thresholds and station-profile schema; database/event-retention
 settings; autonomous service identity and capability restrictions; source-specific freshness and

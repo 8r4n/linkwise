@@ -42,7 +42,7 @@ package "Ports (owned by application/domain)" as Ports {
   interface "RadioControlPort" as RadioPort
   interface "PttControlPort" as PttPort
   interface "ModemSessionPort" as ModemPort
-  interface "WinlinkClientPort" as WinlinkPort
+  interface "MailForwardingPort" as ForwardingPort
   interface "GatewayDirectoryPort" as DirectoryPort
   interface "EvidenceProviderPort" as EvidencePort
   interface "HistoryRepository / AuditWriter" as StorePort
@@ -52,7 +52,7 @@ package "Infrastructure adapters" as Adapters {
   component "Hamlib / rigctld adapter" as Hamlib
   component "Qualified PTT driver" as PttDriver
   component "VARA / Linkwise modem adapter" as Modem
-  component "Winlink client adapter" as Winlink
+  component "Rust mail forwarder" as Forwarder
   component "RMS directory adapter" as Directory
   component "VOACAP + observation adapters" as Evidence
   component "Local event store" as Store
@@ -85,7 +85,7 @@ Eligibility --> DirectoryPort
 Utility --> EvidencePort
 Refresh --> DirectoryPort
 StationActor --> RadioPort
-Session --> WinlinkPort
+Session --> ForwardingPort
 Session --> ModemPort
 Ptt --> PttPort
 Outcomes --> StorePort
@@ -96,14 +96,14 @@ Rank --> StorePort
 Hamlib ..|> RadioPort
 PttDriver ..|> PttPort
 Modem ..|> ModemPort
-Winlink ..|> WinlinkPort
+Forwarder ..|> ForwardingPort
 Directory ..|> DirectoryPort
 Evidence ..|> EvidencePort
 Store ..|> StorePort
 Hamlib --> Hardware : CAT / rigctld
 PttDriver --> Hardware : qualified key/release path
 Modem --> Hardware : audio; PTT via arbiter only
-Winlink --> External : documented client path
+Forwarder --> ModemPort : command and DATA
 Directory --> External : source API/feed
 Evidence --> External : forecast/observation APIs
 

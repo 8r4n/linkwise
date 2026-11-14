@@ -4,7 +4,8 @@ This guide explains the current Rust radio-control implementation for
 contributors. It describes what the code does today; proposed modem, session,
 and safety-supervisor behavior is not implied by the architecture names.
 For an MCP client's call sequence and JSON examples, see
-[the MCP usage guide](mcp-usage.md).
+[the MCP usage guide](mcp-usage.md). For mobile toolchains, Winlink protocol work, and
+the GNU Radio bench, see the [mobile development guide](mobile-development.md).
 
 ## Crate boundaries
 

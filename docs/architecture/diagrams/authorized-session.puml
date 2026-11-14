@@ -10,7 +10,7 @@ participant "StartSession" as UC
 participant "Station command actor" as Actor
 participant "Policy / grant store" as Policy
 participant "Radio + lease" as Radio
-participant "Winlink client" as Winlink
+participant "Rust mail forwarder" as Forwarder
 participant "Modem adapter" as Modem
 participant "PTT arbiter" as PTT
 participant "Local watchdog" as Watchdog
@@ -27,10 +27,10 @@ Policy -> Audit : append(AutonomousGrantIssued, scope, expiry, policyRevision)
 Policy --> Actor : one-use authorization or deny
 alt any binding stale / invalid
   Actor -> Audit : append(SessionStartDenied, rule IDs)
-  Actor --> UC : denied; no client start
+  Actor --> UC : denied; no forwarding start
 else all checks pass
-  Actor -> Winlink : begin_session(channel, queue scope, deadline)
-  Winlink --> Actor : clientSessionId
+  Actor -> Forwarder : begin_session(channel, queue scope, deadline)
+  Forwarder --> Actor : forwardingSessionId
   Actor -> Modem : begin(sessionId, bounded parameters)
   Modem --> Actor : modemSessionId / ready
   Actor -> Audit : append(SessionStarted, IDs, config hash)
@@ -54,11 +54,11 @@ else all checks pass
       PTT -> Audit : append(PttTransition, timings, result)
     end
   end
-  Winlink -> UC : transfer/session terminal event
+  Forwarder -> UC : transfer/session terminal event
   opt autonomous abort / timeout / fault
     UC -> PTT : release(Abort)
     UC -> Modem : stop(sessionId, Abort)
-    UC -> Winlink : abort(clientSessionId)
+    UC -> Forwarder : abort(forwardingSessionId)
   end
   UC -> Audit : append(SessionTerminal, outcome, correlationId)
 end
@@ -66,7 +66,7 @@ end
 Operator -> EStop : activate (only human runtime control)
 EStop -> Radio : independent TX inhibit + PTT release
 EStop -> UC : latched emergency-stop event (if software reachable)
-UC -> Winlink : abort current client session
+UC -> Forwarder : abort current forwarding session
 UC -> Audit : append(EmergencyStop, observed state)
 
 note over PTT,Watchdog

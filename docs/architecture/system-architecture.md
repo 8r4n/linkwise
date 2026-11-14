@@ -2,7 +2,7 @@
 
 **Document ID:** LINKWISE-SAD-001  
 **Version:** 0.1, proposed  
-**Status:** Architecture proposal; not implemented
+**Status:** Architecture baseline with a Rust P2P forwarding implementation in bench testing
 
 ## 1. Purpose and scope
 
@@ -12,16 +12,18 @@ radio, VARA/Linkwise, and Winlink. It captures system context, stakeholder
 concerns, architecture views, design decisions, and traceability to the
 requirements in [requirements-and-use-cases.md](requirements-and-use-cases.md).
 
-The system has two separable product concerns:
+The system has three separable product concerns:
 
 1. A modem implementation interoperable with an unmodified VARA HF installation.
-2. A policy-controlled communications orchestrator that selects, prepares,
-   monitors, and learns from Winlink radio links using AI-assisted planning.
+2. A Linkwise-owned Rust mail forwarder that provides local mail submission,
+   durable queues, and peer-to-peer store-and-forward over the modem.
+3. A policy-controlled communications orchestrator that selects, prepares,
+   and monitors radio links for configured peers and optional gateways.
 
-The architecture does not assert that a VARA protocol, waveform, Winlink
-automation interface, or real-time propagation predictor has already been
-implemented. Unknown modem behavior remains gated on lawful reference evidence
-and repeatable interoperability tests.
+The primary mail path runs entirely on Linkwise at both stations. Open B2F
+provides compatibility with Pat and Winlink Express in P2P mode. Winlink
+gateway access is a separate integration with its own qualification. See the
+[Rust forwarding design](software-design.md#rust-mail-forwarding).
 
 ## 2. System context
 
@@ -45,10 +47,10 @@ leases, audit, or safety supervision.
 └─────┬──────────────┬──────────────────┬──────────────────┬────────────┘
       │              │                  │                  │
       ▼              ▼                  ▼                  ▼
- Hamlib/rigctld   VARA or Linkwise   Winlink client   Evidence sources
+ Hamlib/rigctld   VARA or Linkwise   Rust forwarding   Evidence sources
       │              │                  │            VOACAP / RMS /
       ▼              ▼                  ▼            PSK Reporter / GIRO
-     Radio       audio/PTT path       Winlink CMS       DX Maps / logs
+     Radio       audio/PTT path       Local mailbox       DX Maps / logs
 ```
 
 An installation may co-locate all processes or use separate machines. Network
@@ -63,8 +65,7 @@ provided.
 | AI host and model | Interpret goals, inspect station state, use CAT/PTT tools, and request link workflows | Untrusted planner; every actuation is schema- and policy-validated and auditable |
 | Hamlib `rigctld` | All status and control operations advertised by the configured radio backend | Full CAT capability is exposed through typed Linkwise tools; exact controls vary by radio/backend and remain subject to station policy |
 | VARA HF | Existing interoperability reference modem | External process; proprietary behavior is not assumed |
-| Linkwise modem | Future native modem implementation | Planned; must implement a verified external interface |
-| Winlink client (initial adapter target: Pat where supported) | Message queue and RMS session orchestration | API/client-specific; no universal control API assumed |
+| Pat / Winlink Express | Optional external Open B2F P2P peers and compatibility references | Qualify each supported peer and modem pairing |
 | Winlink RMS directory | Gateway/channel and reporting-status source | Time-sensitive inventory, not proof of current RF reachability |
 | VOACAP | Statistical path-planning evidence | Monthly/statistical prediction, not an event forecast |
 | PSK Reporter / DX Maps | Reported digital activity and spots | Observational, coverage-biased evidence |
@@ -104,7 +105,7 @@ The system is divided into five trust-relevant layers:
    ranks gateway candidates, and coordinates adapters.
 3. **Policy/safety:** deterministic authorization, limits, lease ownership,
    channel-state gates, watchdogs, and fail-safe transitions.
-4. **Adapters:** Hamlib, VARA/Linkwise, Winlink-client, propagation-source,
+4. **Adapters:** Hamlib, VARA/Linkwise, mail-client, optional gateway, propagation-source,
    persistence, and qualified audio/PTT interfaces, called through the PTT
    arbiter for all keying operations.
 5. **Hardware/external services:** radio, gateway network, data sources.
@@ -123,7 +124,7 @@ Proposed Rust workspace boundaries (create when implementation needs them):
 | `linkwise-hamlib` | rigctld client and capability normalization | Winlink or propagation policy |
 | `linkwise-ptt` | PTT arbitration, qualified backend drivers, key-up budget and watchdog | Unscoped key-up or policy authorization |
 | `linkwise-modem` | VARA-compatible modem interfaces and future DSP | Radio CAT transport |
-| `linkwise-winlink` | Client adapter, channel/session/message operations | Direct PTT or arbitrary rig control |
+| Rust mail forwarding | B2F sessions, durable mailbox, message routing and delivery state | Direct PTT or arbitrary rig control |
 | `linkwise-winlink-inventory` | Source sync, normalized channel inventory, snapshot counts and freshness | Inferring RF reachability from directory status |
 | `linkwise-link-history` | Idempotent session/transfer event ingestion and KPI aggregation | Treating CMS acceptance as recipient delivery |
 | `linkwise-propagation` | Gateway inventory, forecast/observation normalization | Transmission authorization |
@@ -132,8 +133,8 @@ Proposed Rust workspace boundaries (create when implementation needs them):
 | `linkwise-store` | History, provenance, event/audit persistence | Mutable control authority |
 | `linkwise-sim` (development/test only) | Virtual-time station, gateway, queue, and latent RF scenarios; deterministic replay and policy evaluation | Production control, real PTT, agent access to evaluator truth |
 
-These names are design placeholders; the existing `rust/` crate remains a
-single scaffold until dependencies and interfaces are proven.
+These names describe logical boundaries. The current P2P implementation
+lives in `rust/src/winlink/` within the existing Rust crate.
 
 The simulation harness substitutes adapters beneath the same domain and tool
 contracts used by the live link manager. It separates agent-visible evidence
@@ -159,13 +160,13 @@ remain platform-specific and must be established before radio deployment.
 Minimum deployed configuration:
 
 - One autonomous station workstation running OLM, AI host, radio control, modem, and
-  Winlink client.
+  Linkwise mail forwarder.
 - A radio connected by CAT/USB and an audio/PTT interface.
 - Network connectivity for channel metadata and optional propagation sources.
 - A physical or hardware-level emergency transmit inhibit accessible to the
   operator.
 
-If the model, internet connection, propagation data, or Winlink service becomes
+If the model, internet connection, propagation data, or an optional gateway becomes
 unavailable, the control stack completes only bounded safe work, then
 continues with a qualified deterministic fallback or remains receive-only.
 Loss of cloud AI must not block the independent emergency stop. No manual
@@ -285,7 +286,7 @@ radio configuration is locked except for emergency abort/recovery.
 | --- | --- | --- | --- |
 | ADR-001 | Use MCP as an AI-facing tool boundary; do not add an LLM dependency to core | Proposed | Allows multiple MCP clients and keeps control policy testable |
 | ADR-002 | Keep Hamlib/rigctld as the radio adapter boundary | Proposed | Reuse multi-vendor radio abstraction; capability differs by backend |
-| ADR-003 | Separate modem, Winlink client, and rig control adapters | Proposed | They have distinct lifecycle and failure modes |
+| ADR-003 | Separate modem, mail forwarding, and rig control | Current direction | Rust owns P2P forwarding and the mailbox. External clients serve as interoperability peers. |
 | ADR-004 | Require deterministic policy gate for all side effects | Proposed | Model output cannot override limits or authorization |
 | ADR-005 | First optimize gateway portfolio for one radio, one active session | Proposed | Honest resource model; multi-radio scheduling is a later extension |
 | ADR-006 | Keep evidence provenance and confidence with every ranking feature | Proposed | Supports diagnosis and prevents stale/model data being treated as fact |
@@ -300,7 +301,7 @@ radio configuration is locked except for emergency abort/recovery.
 | Policy engine | Same host as session controller; mandatory in all modes | Safety and authorization |
 | Hamlib adapter | OLM process connected to local rigctld | Radio state/configuration |
 | Modem adapter | Local process or explicitly trusted host | Modem state and session control |
-| Winlink adapter | Supported Winlink client process/API | Gateway sessions/messages |
+| Mail forwarder | Local Rust process or embedded library using the modem command/DATA boundary | P2P sessions and durable delivery state |
 | Winlink inventory/history service | Local OLM process; source-specific refresh policy | Labeled inventory counts and attempt/transfer metrics |
 | Evidence collector | OLM plus network-accessed data services | Freshness/provenance |
 | Audit store | Local persistent store | Reconstructable decisions |
@@ -308,9 +309,8 @@ radio configuration is locked except for emergency abort/recovery.
 
 ## 8. Open issues
 
-1. Confirm a documented and maintainable automation API for each intended
-   Winlink client. The initial platform strategy may use Pat where supported;
-   do not assume Winlink Express UI automation is a stable interface.
+1. Qualify the Rust forwarder as a supervised service with durable retries,
+   per-recipient state, and authenticated mail-client access.
 2. Characterize rigctld behavior and capability discovery for target radios,
    especially PTT and power reporting.
 3. Specify which VARA TCP commands are documented and supported by the
@@ -321,8 +321,8 @@ radio configuration is locked except for emergency abort/recovery.
    assuming every radio supplies a reliable busy/channel-clear signal.
 6. Establish data retention, privacy, and external service terms for gateway,
    propagation, and session data.
-7. Select a documented Winlink client/listing integration and confirm which
-   session and message-transfer outcomes it can expose.
+7. Define the optional gateway adapter and verify network access, gateway
+   protocol requirements, and delivery evidence separately from P2P.
 
 ## 9. Template lineage
 

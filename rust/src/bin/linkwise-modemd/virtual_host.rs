@@ -24,6 +24,8 @@ use tokio::{
     time::{Instant, timeout},
 };
 
+const BW500_TURN_RETRIES: u8 = 2;
+const BW500_TURN_RETRY_DELAY: Duration = Duration::from_secs(4);
 const PHASE_TIMEOUT: Duration = Duration::from_secs(12);
 const FINAL_ACK_WAIT: Duration = Duration::from_secs(3);
 const FINAL_QUERY_DELAY: Duration = Duration::from_millis(3200);
@@ -184,6 +186,7 @@ struct Engine<'a> {
     retry_on_confirm: bool,
     returned_turn: bool,
     caller_requested_turn: bool,
+    turn_retries: u8,
     initial_poll: bool,
     first_responder_poll: bool,
     closed_at_level3: bool,
@@ -218,6 +221,7 @@ impl Engine<'_> {
         self.retry_on_confirm = false;
         self.returned_turn = false;
         self.caller_requested_turn = false;
+        self.turn_retries = 0;
         self.initial_poll = false;
         self.first_responder_poll = false;
         self.closed_at_level3 = false;
@@ -278,7 +282,12 @@ impl Engine<'_> {
 
     fn transition(&mut self, phase: Phase) {
         self.phase = phase;
-        self.deadline = Some(Instant::now() + PHASE_TIMEOUT);
+        let timeout = if phase == Phase::TurnGrant && self.mode.bandwidth() == Hz500 {
+            BW500_TURN_RETRY_DELAY
+        } else {
+            PHASE_TIMEOUT
+        };
+        self.deadline = Some(Instant::now() + timeout);
     }
 
     async fn establish(&mut self, mut action: Option<Action>, cable: &mut Audio) -> io::Result<()> {
@@ -498,6 +507,7 @@ impl Engine<'_> {
     async fn start_delivery(&mut self, cable: &mut Audio) -> io::Result<()> {
         self.plan_delivery()?;
         self.caller_requested_turn = false;
+        self.turn_retries = 0;
         let link = self.session.as_ref().expect("sending requires a session");
         if self.initial_poll {
             cable
@@ -641,6 +651,21 @@ impl Engine<'_> {
                 Phase::IntermediateQueryLong
             };
             self.deadline = Some(Instant::now() + FINAL_QUERY_DELAY);
+            return Ok(());
+        }
+        if self.phase == Phase::TurnGrant
+            && self.mode.bandwidth() == Hz500
+            && self.turn_retries < BW500_TURN_RETRIES
+            && let Some(link) = &self.session
+        {
+            let request = if link.caller == self.local {
+                Message::Bw500CallerTurnRequest
+            } else {
+                Message::Bw500ResponderTurnRequest
+            };
+            cable.send(request.synthesize(&link.caller)).await?;
+            self.turn_retries += 1;
+            self.transition(Phase::TurnGrant);
             return Ok(());
         }
         if !self.pending.is_empty() {
@@ -1069,8 +1094,7 @@ impl Engine<'_> {
                 | Phase::Sent
                 | Phase::TurnReleased
                 | Phase::Received
-                | Phase::Collecting =>
-                {
+                | Phase::Collecting => {
                     let request = if local_caller {
                         Message::Bw500ResponderTurnRequest
                     } else {
@@ -1732,6 +1756,7 @@ async fn serve_audio(
         retry_on_confirm: false,
         returned_turn: false,
         caller_requested_turn: false,
+        turn_retries: 0,
         initial_poll: false,
         first_responder_poll: false,
         closed_at_level3: false,

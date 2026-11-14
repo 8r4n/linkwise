@@ -104,10 +104,10 @@ package "Outbound ports" {
     +begin(request): Result<ModemSessionId>
     +stop(id, cause): Result<void>
   }
-  interface WinlinkClientPort {
-    +capabilities(): Result<ClientCapabilities>
-    +beginSession(request): Result<ClientSessionId>
-    +observe(id): Result<Observed<ClientSessionState>>
+  interface MailForwardingPort {
+    +capabilities(): Result<ForwardingCapabilities>
+    +beginSession(request): Result<ForwardingSessionId>
+    +observe(id): Result<Observed<ForwardingSessionState>>
     +abort(id): Result<void>
   }
   interface EvidenceProviderPort {
@@ -128,7 +128,7 @@ package "Concrete adapters (replaceable)" {
   class HamlibRigctldAdapter
   class PttHardwareAdapter
   class VaraAdapter
-  class WinlinkClientAdapter
+  class RustMailForwarder
   class VoacapAndObservationAdapter
   class SqliteEventStore
 }
@@ -138,11 +138,11 @@ RankCandidates ..> InventoryRepository : reads
 RankCandidates ..> Ranking
 PrepareCandidate ..> RadioControlPort : config/readback
 PrepareCandidate ..> PreparedHandle : issues after verification
-StartSession ..> WinlinkClientPort : starts bounded session
+StartSession ..> MailForwardingPort : starts bounded session
 StartSession ..> ModemSessionPort : coordinates lifecycle
 StartSession ..> AuthorizationGrant : consumes/revalidates
 AbortSession ..> PttControlPort : release first
-AbortSession ..> WinlinkClientPort : stop/abort
+AbortSession ..> MailForwardingPort : stop/abort
 AbortSession ..> DomainEvent : records
 SessionAggregate "1" o-- "0..*" TransmitPermit : active permit ledger
 PreparedHandle --> GatewayCandidate : binds candidate
@@ -155,7 +155,7 @@ DomainEvent --> SessionAggregate : lifecycle reference
 HamlibRigctldAdapter ..|> RadioControlPort
 PttHardwareAdapter ..|> PttControlPort
 VaraAdapter ..|> ModemSessionPort
-WinlinkClientAdapter ..|> WinlinkClientPort
+RustMailForwarder ..|> MailForwardingPort
 VoacapAndObservationAdapter ..|> EvidenceProviderPort
 SqliteEventStore ..|> InventoryRepository
 SqliteEventStore ..|> AuditWriter

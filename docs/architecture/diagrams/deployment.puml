@@ -19,6 +19,9 @@ node "Autonomous station workstation" as Workstation {
     component "Application + domain core" as Core
     component "Safety supervisor + PTT arbiter" as Safety
     database "Local state, evidence, audit" as Store
+    component "Rust mail forwarder" as Forwarder
+    database "Local inbox and outbox" as Mailbox
+    Forwarder --> Mailbox : durable message state
     MCPServer --> Core : typed commands / snapshots
     Core --> Safety : authorize / release / monitor
     Core --> Store : transactional events / queries
@@ -28,7 +31,6 @@ node "Autonomous station workstation" as Workstation {
   node "Radio control" as RadioControl {
     component "rigctld / Hamlib" as Rigctld
     component "VARA HF or Linkwise modem" as Modem
-    component "Winlink client" as Winlink
   }
 
   node "Station hardware" as Station {
@@ -41,7 +43,8 @@ node "Autonomous station workstation" as Workstation {
   MCPClient --> MCPServer : stdio pipe
   Core --> Rigctld : local TCP / Hamlib protocol
   Core --> Modem : documented local control interface
-  Core --> Winlink : supported client adapter/API
+  Core --> Forwarder : bounded forwarding session
+  Forwarder --> Modem : command and DATA
   Rigctld --> Radio : CAT / USB
   Modem --> Audio : baseband audio
   Modem --> Safety : scoped PTT request only
@@ -53,10 +56,8 @@ node "Autonomous station workstation" as Workstation {
 
 Owner --> EStop : emergency stop only
 
-cloud "Winlink RMS / CMS" as WinlinkNet
 cloud "RMS directory and\nstatus feeds" as RmsDirectory
 cloud "VOACAP / spots / GIRO\n(optional evidence sources)" as Evidence
-Winlink --> WinlinkNet : Winlink session / transfer
 Core --> RmsDirectory : bounded metadata refresh / HTTPS
 Core --> Evidence : bounded forecast/observation requests
 
