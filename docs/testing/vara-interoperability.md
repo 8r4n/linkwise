@@ -28,7 +28,15 @@ python3 tools/test-vara-interop.py linkwise-caller /path/to/new/mixed-run \
   --modem rust/target/debug/linkwise-modemd --profile "$profile"
 ```
 
-Use `linkwise-responder` to substitute the listener. Select `--bandwidth
+Use `linkwise-responder` to substitute the listener. Use `linkwise` with
+`--modem` and `--profile` for a two-Linkwise baseline using the same
+host payloads. Add `--verify-disconnect` to each case for consistent
+teardown criteria. The JSON report includes connection, transfer and
+disconnect timing, directional payload hashes, and recorded audio duration.
+Use `--pace-virtual` to delay delivery by each burst’s sample duration.
+Without it, the two-Linkwise relay can process audio faster than real time.
+Stock bridge recordings include idle audio. Account for those differences
+before comparing timing or recorded duration across routes. Select `--bandwidth
 2300` or `--bandwidth 2750` for a wide case. The default payloads are
 203 → 6 → 203 bytes at BW500 and 13 → 6 → 13 bytes at wide bandwidths.
 Use `--payload-length 203` to exercise wide multi-frame transmit as caller
@@ -56,6 +64,20 @@ A disconnected bridge, audio fault, or missed injection needs investigation
 before counting a run toward sign-off.
 
 ## Impairment fixtures
+
+For the GNU Radio HF comparison, use `--hf-snr 32` or `--hf-snr 22`
+with `--hf-worker` pointing to the framed-PCM worker from the lab
+evidence. Build the image with
+`docker build -t linkwise-hf-bench containers/hf-bench`. Both directions
+use the same profile and independently initialized channel state. The
+32 dB profile uses a 1 ms echo at −9 dB, 0.5 Hz Doppler spread and seed 17.
+The 22 dB profile uses a 2 ms echo at −4 dB, 1 Hz Doppler spread and seed 18.
+Both use Rician K = 10 and set noise from the input RMS of each burst.
+Use `--pace-virtual` for the two-Linkwise case. Stock audio is captured
+as complete bursts before applying the channel, then played at real time
+into a stock receiver. This adds relay delay to stock routes. Transfer
+times include the relay and the final transmit queue drain.
+
 
 - `--replace-burst ORIGINAL_F32 REPLACEMENT_WAV` replaces one Linkwise
   burst guarded by the SHA-256 of the original audio. Use the 200-byte BW500

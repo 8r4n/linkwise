@@ -1,8 +1,9 @@
 # Linkwise system design documents
 
-These documents describe the proposed architecture for AI-assisted radio and
-Winlink link management. They are design baselines, not descriptions of
-implemented functionality. The current Rust crate is still a scaffold.
+These documents describe Linkwise-owned Rust mail forwarding, modem
+interoperability, and AI-assisted station control. The software design
+identifies the implemented P2P bench components and the proposed service
+integration.
 
 ## Document set
 
@@ -11,6 +12,8 @@ implemented functionality. The current Rust crate is still a scaffold.
 - [Software design](software-design.md) — layered runtime, component
   responsibilities, typed software ports, transaction flows, session/PTT
   state machines, data model, and deployment design, with PlantUML sources.
+  See [Rust mail forwarding](software-design.md#rust-mail-forwarding) for
+  the current direction and delivery boundaries.
 - [Requirements and use cases](requirements-and-use-cases.md) — prioritized
   system requirements, actors, use cases, and proposed verification methods.
 - [Winlink link inventory and tracking](winlink-link-tracking-design.md) — the

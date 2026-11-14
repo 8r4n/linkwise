@@ -1,0 +1,62 @@
+name: Mobile modem foundations
+
+on:
+  pull_request:
+    paths:
+      - 'rust/**'
+      - 'rust-toolchain.toml'
+      - 'containers/hf-bench/**'
+      - 'tools/*hf-channel.py'
+      - 'tools/mobile-preflight.sh'
+      - 'tools/test-virtual-bw500.py'
+      - 'tools/test-winlink-modem.py'
+      - 'tools/fetch-modem-profile.py'
+      - '.github/workflows/mobile-modem.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: cargo test --locked --manifest-path rust/Cargo.toml --lib winlink::
+      - run: |
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android
+          for target in aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android; do
+            cargo check --locked --manifest-path rust/Cargo.toml --lib --target "$target"
+          done
+  hf-channel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: docker build --tag linkwise-hf-bench containers/hf-bench
+      - run: cargo build --locked --manifest-path rust/Cargo.toml --bins
+      - run: python3 tools/fetch-modem-profile.py
+      - run: |
+          docker run --rm --volume "$PWD:/work:ro" --workdir /work linkwise-hf-bench \
+            /usr/bin/python3 tools/test-hf-channel.py \
+            --modem rust/target/debug/linkwise-modemd \
+            --profile reference/vara/fixtures/level4/bw500-level4.json
+      - run: |
+          python3 tools/test-winlink-modem.py rust/target/debug/linkwise rust/target/debug/linkwise-modemd \
+            reference/vara/fixtures/level4/bw500-level4.json --mail-bridge
+      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: '1.26.11'
+          cache: false
+      - run: GOBIN="$RUNNER_TEMP/pat" go install github.com/la5nta/pat@v1.0.1
+      - run: |
+          docker run --rm --network none --volume "$PWD:/work:ro" --workdir /work \
+            --volume "$RUNNER_TEMP/pat:/pat:ro" linkwise-hf-bench \
+            /usr/bin/python3 tools/test-winlink-modem.py \
+            rust/target/debug/linkwise rust/target/debug/linkwise-modemd \
+            reference/vara/fixtures/level4/bw500-level4.json --pat /pat/pat

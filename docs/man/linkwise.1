@@ -1,6 +1,6 @@
 .TH LINKWISE 1 "2026-11-13" "Linkwise" "User Commands"
 .SH NAME
-linkwise \- encode, decode, and transmit Linkwise modem frames
+linkwise \- operate the Linkwise modem
 .SH SYNOPSIS
 .B linkwise
 .RB [ \-\-help | \-\-version ]
@@ -17,7 +17,23 @@ linkwise \- encode, decode, and transmit Linkwise modem frames
 .br
 .B linkwise send
 .I source destination input
-.RI [ command-port data-port ]
+.RI [ "command-port data-port" ]
+.br
+.B linkwise mail queue
+.I mailbox envelope
+.br
+.B linkwise mail smtp
+.I mailbox callsign
+.RI [ port ]
+.br
+.B linkwise mail imap
+.I mailbox
+.RI [ port ]
+.br
+.B linkwise mail
+.RI { exchange | listen }
+.I mailbox local peer
+.RI [ "command-port data-port" ]
 .br
 .B linkwise secure
 .RI { send | receive }
@@ -78,6 +94,46 @@ The default ports are 8300 and 8301.
 Both custom ports must be supplied together.
 The source callsign must match the configured station.
 This command consumes inbound data to keep the transport flowing.
+.TP
+.B mail queue
+Queue a Winlink B2F envelope of up to 1 MiB in a private mailbox directory.
+Use a local filesystem with hard-link support.
+.TP
+.B mail smtp
+Accept local SMTP submissions and queue them for Winlink P2P.
+The listener binds to IPv4 loopback and defaults to port 2525.
+With the mail-tls build feature, append
+.B PORT --tls CERT.pem KEY.pem
+to use implicit TLS.
+.TP
+.B mail imap
+Expose a read-only inbox over local IMAP.
+The listener binds to IPv4 loopback and defaults to port 1143.
+With the mail-tls build feature, append
+.B PORT --tls CERT.pem KEY.pem
+to use implicit TLS.
+Local connections are automatically authenticated by default.
+Set both
+.B LINKWISE_IMAP_USER
+and
+.B LINKWISE_IMAP_PASSWORD
+to require IMAP LOGIN over TLS.
+Select the inbox or poll with NOOP to discover newly received mail.
+Message UIDs stay stable until the listener restarts.
+.TP
+.B mail exchange, mail listen
+Call a peer or listen for a specified peer through the local modem.
+Exchange queued and incoming B2F messages in one session.
+The default loopback command and data ports are 8300 and 8301.
+Supply both port overrides together.
+Run one exchange at a time per mailbox.
+Incoming envelopes are stored under
+.B inbox
+using the lowercase hexadecimal encoding of the message ID as the filename,
+with a
+.B .b2f
+suffix.
+Success requires B2F termination and a modem disconnection notice.
 .TP
 .B secure send, secure receive
 Transfer one payload between two Linkwise peers using mutual TLS 1.3
@@ -229,6 +285,11 @@ Replace the callsigns with your configured source and intended peer.
 .EX
 linkwise send W1AW K1ABC message.bin 2>send.log
 .EE
+.SS Exchange queued Winlink mail
+.nf
+linkwise mail queue ./mailbox message.b2f
+linkwise mail exchange ./mailbox N0CALL W1AW
+.fi
 .SS Send an encrypted file
 Using secure-enabled builds, start the first command on the receiving
 station and the second on the sending station. The two JSON files

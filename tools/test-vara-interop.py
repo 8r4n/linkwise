@@ -24,6 +24,7 @@ PCM_WINDOW = SAMPLE_RATE // 100
 PCM_TICK = SAMPLE_RATE // 50
 CALLSIGNS = ("KN6MQS", "W1A")
 BASE_PORTS = (28760, 28770)
+HF_PROFILES = {32: (1, 0.5, -9, 17), 22: (2, 1, -4, 18)}
 RETURN_PAYLOAD = b"F> 79\r"
 
 
@@ -100,11 +101,14 @@ class Trial:
         self.closed = set()
         self.transport_fault = None
         self.disconnected = [False, False]
+        self.measurements = {}
         self.fault_injected = False
         self.stock_retry_seen = False
         self.rate_reply_injected = False
         self.phase = "bridge setup"
         self.tearing_down = False
+        self.hf_workers = {}
+        self.expected_streams = None
 
     def log(self, *items):
         with self.log_lock:
@@ -118,7 +122,7 @@ class Trial:
             if self.args.bandwidth == 500
             else ["--serve-virtual-wide", CALLSIGNS[role], str(self.args.bandwidth)]
         )
-        stderr = stack.enter_context((self.args.output / "linkwise.stderr").open("w"))
+        stderr = stack.enter_context((self.args.output / f"linkwise-{role}.stderr").open("w"))
         process = subprocess.Popen(
             [str(self.args.modem), *mode, "0", "0", "0"],
             stdout=subprocess.PIPE, stderr=stderr, text=True,
@@ -150,7 +154,21 @@ class Trial:
         (self.args.output / f"{name}-{index:02}.f32").write_bytes(pcm)
         self.log(name, "burst", index, len(pcm) // 4)
 
-    def stock_to_linkwise(self, source, target, role):
+    def impair(self, pcm, role):
+        if role not in self.hf_workers:
+            return pcm
+        process = self.hf_workers[role]
+        header = struct.pack(">I", len(pcm) // 4)
+        process.stdin.write(header + pcm)
+        process.stdin.flush()
+        if process.stdout.read(4) != header:
+            raise BenchFault("GNU Radio returned an invalid PCM header")
+        result = process.stdout.read(len(pcm))
+        if len(result) != len(pcm):
+            raise BenchFault("GNU Radio returned a truncated PCM record")
+        return result
+
+    def stock_bursts(self, source, role):
         history = deque(maxlen=5)
         active = []
         quiet = 0
@@ -171,12 +189,17 @@ class Trial:
                     if quiet >= 10 or len(active) >= 590:
                         burst = b"".join(active)
                         self.save_burst(role, index, burst)
-                        if not self.drop_stock_ack(role, index, burst):
-                            write_pcm(target, self.stock_data_fault(role, index, burst))
+                        yield index, burst
                         index += 1
                         active.clear()
                         quiet = 0
                 history.append(window)
+
+    def stock_to_linkwise(self, source, target, role):
+        for index, burst in self.stock_bursts(source, role):
+            if not self.drop_stock_ack(role, index, burst):
+                pcm = self.stock_data_fault(role, index, burst)
+                write_pcm(target, self.impair(pcm, role))
 
     def stock_data_fault(self, role, index, burst):
         if role != 0 or self.phase != "first delivery":
@@ -215,10 +238,14 @@ class Trial:
             self.log("FAULT withheld stock", self.args.drop_stock_ack, "acknowledgment", index)
         return match
 
-    def linkwise_to_stock(self, source, target, role):
+    def play_to_stock(self, source, target, role, stock_source=False):
         frames = queue.Queue()
 
         def receive():
+            if stock_source:
+                for _, pcm in self.stock_bursts(source, role):
+                    frames.put(self.impair(pcm, role))
+                return
             for index, pcm in enumerate(self.record_stream(source, role)):
                 self.save_burst(role, index, pcm)
                 if self.drop_linkwise_ack(role, index, pcm):
@@ -234,7 +261,7 @@ class Trial:
                     (self.args.output / "injected-rate-reply.f32").write_bytes(pcm)
                     self.rate_reply_injected = True
                     self.log("FAULT substituted captured rate-increase acknowledgment", index)
-                frames.put(pcm)
+                frames.put(self.impair(pcm, role))
 
         self.worker(receive)
         tick = time.monotonic()
@@ -280,7 +307,9 @@ class Trial:
 
     def relay_stock(self, source, target, role):
         for pcm in self.record_stream(source, role):
-            write_pcm(target, pcm)
+            if self.args.pace_virtual:
+                time.sleep(len(pcm) / (4 * SAMPLE_RATE))
+            write_pcm(target, self.impair(pcm, role))
 
     def worker(self, target, *args):
         def run():
@@ -329,8 +358,24 @@ class Trial:
     def run(self):
         stock_roles = {
             "stock": (0, 1), "linkwise-caller": (1,), "linkwise-responder": (0,),
+            "linkwise": (),
         }[self.args.case]
         with ExitStack() as stack:
+            if self.args.hf_snr:
+                delay, spread, echo, seed = HF_PROFILES[self.args.hf_snr]
+                for role in range(2):
+                    stderr = stack.enter_context((self.args.output / f"gnuradio-{role}.stderr").open("w"))
+                    process = subprocess.Popen(
+                        ["docker", "run", "--rm", "-i", "-e", "BENCH_RICIAN_K=10",
+                         "-v", f"{self.args.hf_worker.resolve()}:/bench-channel.py:ro",
+                         "linkwise-hf-bench", "python3", "-u", "/bench-channel.py",
+                         str(self.args.hf_snr), str(delay), str(spread), str(echo), str(seed)],
+                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
+                    )
+                    stack.callback(process.stdout.close)
+                    stack.callback(process.stdin.close)
+                    stack.callback(stop, process)
+                    self.hf_workers[role] = process
             channels = [None, None]
             listeners = {}
             for role in stock_roles:
@@ -354,12 +399,14 @@ class Trial:
             workers = []
             for role, (command, data, audio) in enumerate(channels):
                 target = channels[1 - role][2]
-                if len(stock_roles) == 2:
+                if len(stock_roles) == 2 and self.args.hf_snr:
+                    workers.append(self.worker(self.play_to_stock, audio, target, role, True))
+                elif len(stock_roles) in (0, 2):
                     workers.append(self.worker(self.relay_stock, audio, target, role))
                 elif role in stock_roles:
                     workers.append(self.worker(self.stock_to_linkwise, audio, target, role))
                 else:
-                    workers.append(self.worker(self.linkwise_to_stock, audio, target, role))
+                    workers.append(self.worker(self.play_to_stock, audio, target, role))
                 workers.append(self.worker(self.receive_host, command, role, True))
                 workers.append(self.worker(self.receive_host, data, role, False))
             try:
@@ -394,9 +441,12 @@ class Trial:
         peer_command, peer_data, _ = channels[1]
         self.command(peer_command, "LISTEN ON")
         time.sleep(2)
+        self.phase = "connect"
+        connect_started = time.monotonic()
         self.command(caller_command, "CONNECT KN6MQS W1A")
         connected = f"CONNECTED KN6MQS W1A {self.args.bandwidth}\r".encode("ascii")
         self.wait_for(lambda: all(connected in messages for messages in self.commands), 35)
+        self.measurements["connect_seconds"] = time.monotonic() - connect_started
         first = bytes(range(self.args.payload_length))
         second = first[::-1]
         reply = RETURN_PAYLOAD if self.args.reply_length is None else bytes(range(self.args.reply_length))[::-1]
@@ -413,14 +463,18 @@ class Trial:
                 ("late caller write", caller_data, b"\x01\x00", 1, first + b"\x01\x00"),
             )
             expected_streams = [b"", first + b"\x01\x00"]
+        self.expected_streams = expected_streams
+        transfer_started = time.monotonic()
         for phase, stream, payload, role, expected in deliveries:
             self.phase = phase
             self.log(phase, "queue", len(payload))
             caller_offset = len(self.commands[0])
+            delivery_started = time.monotonic()
             stream.sendall(payload)
             self.wait_for(lambda: len(self.received[role]) >= len(expected), 85)
             if self.received[role] != expected:
                 raise FixtureFailure(f"{phase}: payload mismatch")
+            self.measurements[phase + "_seconds"] = time.monotonic() - delivery_started
             self.log(phase, "exact", len(payload))
             if phase == "first delivery" and (self.args.drop_stock_ack or self.args.drop_linkwise_ack == "final"):
                 self.wait_for(lambda: b"BUFFER 0\r" in self.commands[0][caller_offset:], 35)
@@ -436,7 +490,9 @@ class Trial:
             raise BenchFault("guarded fault stimulus was never sent")
         if self.args.raise_stock_rate and not self.rate_reply_injected:
             raise BenchFault("guarded rate acknowledgment was never sent")
+        self.measurements["transfer_seconds"] = time.monotonic() - transfer_started
         self.phase = "disconnect"
+        disconnect_started = time.monotonic()
         command_offsets = [len(messages) for messages in self.commands]
         closing_command = peer_command if self.args.disconnect_from == "responder" else caller_command
         self.command(closing_command, "DISCONNECT")
@@ -449,6 +505,7 @@ class Trial:
 
         if self.args.verify_disconnect:
             self.wait_for(observed_disconnect, 15)
+            self.measurements["disconnect_seconds"] = time.monotonic() - disconnect_started
         else:
             time.sleep(3)
             observed_disconnect()
@@ -481,7 +538,7 @@ class Trial:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("case", choices=("stock", "linkwise-caller", "linkwise-responder"))
+    parser.add_argument("case", choices=("stock", "linkwise", "linkwise-caller", "linkwise-responder"))
     parser.add_argument("output", type=Path, help="new directory for the transcript and PCM")
     parser.add_argument("--modem", type=Path)
     parser.add_argument("--profile", type=Path)
@@ -500,7 +557,15 @@ def main():
     impairment.add_argument("--drop-stock-ack", choices=("intermediate", "final"))
     impairment.add_argument("--drop-linkwise-ack", choices=("intermediate", "final"))
     parser.add_argument("--raise-stock-rate", nargs=2, type=Path, metavar=("ACK_F32", "INCREASE_F32"))
+    parser.add_argument("--pace-virtual", action="store_true",
+                        help="wait each burst's audio duration in the two-Linkwise case")
+    parser.add_argument("--hf-snr", type=int, choices=HF_PROFILES)
+    parser.add_argument("--hf-worker", type=Path, help="GNU Radio framed-PCM worker script")
     args = parser.parse_args()
+    if args.hf_snr and (args.bandwidth != 500 or not args.hf_worker or not args.hf_worker.is_file()):
+        parser.error("--hf-snr requires BW500 and an existing --hf-worker script")
+    if args.pace_virtual and args.case != "linkwise":
+        parser.error("--pace-virtual requires the two-Linkwise case")
     if args.late_caller_write_delay is not None and (
         args.bandwidth != 500
         or not (args.late_caller_write_delay == -1 or 0 <= args.late_caller_write_delay <= 15)
@@ -514,11 +579,11 @@ def main():
     if args.reply_length is not None and not 1 <= args.reply_length <= 256:
         parser.error("reply length must be between 1 and 256 bytes")
     if args.stock_bridge_base is not None and (
-        args.case == "stock" or not 1024 <= args.stock_bridge_base <= 65533
+        args.case in ("stock", "linkwise") or not 1024 <= args.stock_bridge_base <= 65533
     ):
         parser.error("--stock-bridge-base requires one stock endpoint and three valid ports")
     if args.case != "stock" and (args.modem is None or (args.bandwidth == 500 and args.profile is None)):
-        parser.error("mixed runs require --modem and BW500 also requires --profile")
+        parser.error("Linkwise runs require --modem and BW500 also requires --profile")
     if args.case == "stock" and args.replace_burst:
         parser.error("burst replacement requires a Linkwise endpoint")
     if args.corrupt_stock_first and (args.case != "linkwise-responder" or args.bandwidth != 500):
@@ -563,6 +628,10 @@ def main():
     args.output.mkdir(parents=True)
     manifest = {
         "case": args.case,
+        "hf_snr_db": args.hf_snr,
+        "hf_delay_spread_echo_seed": HF_PROFILES.get(args.hf_snr),
+        "hf_worker_sha256": file_sha256(args.hf_worker) if args.hf_worker else None,
+        "pace_virtual": args.pace_virtual,
         "bandwidth": args.bandwidth,
         "payload_length": args.payload_length,
         "reply_length": args.reply_length if args.reply_length is not None else len(RETURN_PAYLOAD),
@@ -596,6 +665,15 @@ def main():
             manifest["reason"] = str(error)
             trial.log(manifest["result"].upper(), error)
         manifest["phase"] = trial.phase
+        manifest["measurements"] = trial.measurements
+        manifest["expected_sha256"] = [sha256(data) for data in trial.expected_streams] if trial.expected_streams else None
+        manifest["received_lengths"] = [len(data) for data in trial.received]
+        manifest["received_sha256"] = [sha256(data) for data in trial.received]
+        manifest["recorded_audio_seconds"] = {
+            role: path.stat().st_size / (4 * SAMPLE_RATE)
+            for role in ("caller", "responder")
+            if (path := args.output / f"{role}-stream.f32").exists()
+        }
         manifest["fault_injected"] = trial.fault_injected
         manifest["rate_reply_injected"] = trial.rate_reply_injected
         manifest["disconnect_confirmed"] = trial.disconnected

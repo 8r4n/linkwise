@@ -21,3 +21,5 @@ pub mod modem;
 pub mod platform;
 pub mod radio;
 pub mod signals;
+
+pub mod winlink;

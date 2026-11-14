@@ -26,7 +26,7 @@ required-features = ["demo"]
 
 [dependencies]
 aws-lc-rs = { version = "=1.19.0", default-features = false, features = ["fips"], optional = true }
-rustls = { version = "0.23.46", default-features = false, features = ["fips", "std"], optional = true }
+rustls = { version = "0.23.46", default-features = false, features = ["std"], optional = true }
 tokio-rustls = { version = "0.26", default-features = false, optional = true }
 tempfile = { version = "3", optional = true }
 async-trait = "0.1"
@@ -44,9 +44,14 @@ thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync", "signal"] }
 tokio-stream = { version = "0.1.19", optional = true }
 uuid = { version = "1", features = ["v4", "serde"] }
+mail-parser = "=0.11.4"
+mail-builder = "=0.4.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+rustix = { version = "1.1", features = ["fs"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8.1"
@@ -58,4 +63,5 @@ tokio = { version = "1", features = ["test-util"] }
 [features]
 audio-device = ["dep:cpal"]
 demo = ["dep:axum", "dep:sha2", "dep:tokio-stream"]
-secure-transfer = ["dep:aws-lc-rs", "dep:rustls", "dep:tokio-rustls", "dep:tempfile", "tokio/fs", "tokio/io-std"]
+mail-tls = ["dep:rustls", "rustls/ring", "rustls/tls12", "dep:tokio-rustls"]
+secure-transfer = ["dep:aws-lc-rs", "dep:rustls", "rustls/fips", "dep:tokio-rustls", "dep:tempfile", "tokio/fs", "tokio/io-std"]

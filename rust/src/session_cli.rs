@@ -237,13 +237,14 @@ impl Control {
         }
     }
 
-    async fn acknowledged(&mut self, size: usize) -> io::Result<()> {
+    pub(crate) async fn acknowledged(&mut self, size: usize) -> io::Result<()> {
         let mut pending = 0usize;
         let mut acknowledged = 0usize;
         loop {
             let line = self.line().await?;
             if line == "DISCONNECTED" {
-                return Err(io::Error::other(
+                return Err(io::Error::new(
+                    io::ErrorKind::ConnectionAborted,
                     "modem disconnected with unconfirmed bytes",
                 ));
             }
