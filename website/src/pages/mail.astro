@@ -1,0 +1,18 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { repository } from "../releases.mjs";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+<BaseLayout title="Rust mail forwarding status" description="Development status of Linkwise native Rust peer-to-peer mail forwarding over HF and its SMTP and IMAP bridge.">
+  <article class="wrap section guide">
+    <span class="state">In development</span>
+    <h1>Linkwise mail forwarding</h1>
+    <p class="lede">Linkwise is building its own mail forwarder in Rust. Two Linkwise stations can exchange queued messages directly over the modem using Open B2F.</p>
+    <h2>Verified in the lab</h2>
+    <p>Two Linkwise stations exchanged attachments over virtual BW500, verified the received SHA-256 hashes, and confirmed modem disconnects. Pat and Winlink Express have also been exercised as P2P compatibility peers.</p>
+    <h2>Release status</h2>
+    <p>The downloads page lists modem preview installers. The local SMTP and IMAP bridge remains a development feature. Production mail-client setup, supervised forwarding and over-the-air qualification are ongoing. Winlink RMS/CMS access requires separate integration and testing.</p>
+    <p><a href={repository + "/blob/main/docs/architecture/software-design.md"}>Software architecture ↗</a></p>
+    <p><a href={base + "/winlink/"}>Winlink Express P2P bench setup →</a></p>
+  </article>
+</BaseLayout>

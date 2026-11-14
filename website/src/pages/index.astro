@@ -3,7 +3,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Button from "../components/Button.astro";
 import { repository } from "../releases.mjs";
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-const description = "Linkwise is an open-source HF software modem for amateur radio. Explore the Winlink Express VARA HF P2P setup, VarAC compatibility, and platform installers.";
+const description = "Linkwise is an open-source HF software modem preview for amateur radio, with native Rust mail forwarding in development and bench-tested Winlink Express P2P interoperability.";
 const software = {
   "@context": "https://schema.org", "@type": "SoftwareApplication",
   name: "Linkwise", description, applicationCategory: "UtilitiesApplication",
@@ -15,8 +15,8 @@ const software = {
   <section class="hero wrap">
     <div>
       <p class="kicker"><span></span> Open-source amateur radio modem</p>
-      <h1>Put Linkwise<br />on the air.</h1>
-      <p class="lede">Explore an open-source alternative for VARA HF workflows. Start with the verified Winlink Express P2P setup or follow VarAC compatibility testing.</p>
+      <h1>Linkwise HF modem</h1>
+      <p class="lede">Try the cross-platform modem preview. Linkwise is building native peer-to-peer mail forwarding in Rust, with Winlink Express available as a radio-free interoperability workflow.</p>
       <div class="actions">
         <Button href={base + "/downloads/"}>See downloads <span aria-hidden="true">↓</span></Button>
         <Button href={base + "/winlink/"} variant="outline">Set up Winlink Express <span aria-hidden="true">↗</span></Button>
@@ -29,11 +29,12 @@ const software = {
       <figcaption>Linkwise receiver and waveform analysis tools</figcaption>
     </figure>
   </section>
-  <section class="wrap section" aria-labelledby="clients">
-    <h2 id="clients">Choose your radio client</h2>
+  <section class="wrap section" aria-labelledby="project-status">
+    <h2 id="project-status">Project status</h2>
     <div class="cards">
+      <article class="card"><span class="state">In development</span><h3>Linkwise mail forwarding</h3><p>Two Linkwise stations have exchanged mail and verified attachments over virtual BW500. The Rust forwarder owns the mailbox and peer exchange. The SMTP and IMAP bridge is a development feature.</p><a href={base + "/mail/"}>Mail forwarding status →</a></article>
       <article class="card"><span class="state verified">Radio-free P2P verified</span><h3>Winlink Express</h3><p>Point VARA HF P2P at the Linkwise modem service. The bench test verified an attachment by SHA-256 and a clean disconnect on both ends.</p><a href={base + "/winlink/"}>Winlink Express setup →</a></article>
-      <article class="card"><span class="state">Qualification pending</span><h3>VarAC</h3><p>Track Linkwise testing for VarAC HF chat and see which functions are being verified.</p><a href={base + "/varac/"}>VarAC compatibility →</a></article>
+
     </div>
   </section>
 </BaseLayout>
