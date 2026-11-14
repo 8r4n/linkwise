@@ -79,10 +79,18 @@ impl Inbox {
         }
         let mailbox = DirectoryMailbox::open(root, limit)?;
         let mut messages = Vec::new();
+        let mut unrenderable = Vec::new();
         let mut total = self.total_bytes;
         for id in ids {
             let wire = mailbox.incoming(&id)?;
-            let message = mime::export(&wire, limit)?;
+            let message = match mime::export(&wire, limit) {
+                Ok(message) => message,
+                Err(error) if error.kind() == io::ErrorKind::InvalidData => {
+                    unrenderable.push(id);
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
             total = total.saturating_add(message.len());
             if total > 64 * 1024 * 1024 {
                 return Err(invalid("IMAP inbox exceeds 64 MiB"));
@@ -101,6 +109,10 @@ impl Inbox {
         for (id, message) in messages {
             self.ids.insert(id);
             self.messages.push(message);
+        }
+        for id in unrenderable {
+            eprintln!("IMAP skipped a B2F message that cannot be represented as MIME");
+            self.ids.insert(id);
         }
         self.total_bytes = total;
         Ok(())
@@ -575,4 +587,34 @@ async fn send(
     response: &str,
 ) -> io::Result<()> {
     stream.write_all(response.as_bytes()).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn malformed_date_does_not_hide_valid_mail_on_load_or_refresh() -> io::Result<()> {
+        let root = std::env::temp_dir().join(format!("linkwise-imap-{}", uuid::Uuid::new_v4()));
+        let result = (|| {
+            let limit = 4096;
+            DirectoryMailbox::open(&root, limit)?;
+            let good = super::super::tests::FIXTURE;
+            let bad = good
+                .split_at(b"Mid: TEST123\r\nDate: 2026/11/13 12:00".len())
+                .1;
+            let mut wire = b"Mid: BADDATE\r\nDate: yesterday".to_vec();
+            wire.extend_from_slice(bad);
+            fs::write(root.join("inbox/42414444415445.b2f"), wire)?;
+            let mut inbox = Inbox::load(&root, limit)?;
+            assert!(inbox.messages.is_empty());
+            fs::write(root.join("inbox/54455354313233.b2f"), good)?;
+            inbox.refresh(&root, limit)?;
+            assert_eq!(inbox.messages.len(), 1);
+            assert_eq!(Inbox::load(&root, limit)?.messages.len(), 1);
+            Ok(())
+        })();
+        fs::remove_dir_all(root)?;
+        result
+    }
 }
