@@ -53,7 +53,7 @@
 \title{Linkwise: Radio, Modem, and Link Management Research\\[0.4em]
 \large Lab notes and evidence ledger}
 \author{Engineering research log}
-\date{12 November 2026}
+\date{14 November 2026}
 
 \begin{document}
 \maketitle
@@ -67,8 +67,9 @@ codec, streaming receive, audio-handshake, DATA/ARQ, and host-stream components
 now exist. The 9 November entry records their implementation and validation.
 The 10 November entry adds a shared session runtime, a clock-driven runner, and
 a two-way BW500 audio loopback. On 11 November, stock VARA HF accepted
-a Linkwise-initiated BW500 connection over virtual audio. Payload transfer
-and RF qualification remain open.
+a Linkwise-initiated BW500 connection over virtual audio. Later entries record exact payload transfer over virtual audio, BW500
+sensitivity experiments, and receive-only KiwiSDR observations. Controlled
+RF qualification remains open.
 \end{abstract}
 
 \tableofcontents
@@ -2767,9 +2768,171 @@ coverage remain open. Evidence is under
 \pathtext{mail-bench/apple-mail-ca} and
 \pathtext{mail-bench/imap-seen-rpm} in the private Rocky evidence directory.
 
+\section{2026-11-14: BW500 sensitivity and stock VARA interoperability}
+\label{sec:bw500-sensitivity-nov14}
+
+The objective was to improve receive sensitivity while retaining stock
+VARA HF 4.9.1 interoperability. All SNR values in this entry use a
+3 kHz noise reference. The sensitivity study is recorded in commit
+\texttt{770d805}. Commit \texttt{87a3034} contains the modem changes.
+
+Procedures and validation commands appear in
+\pathtext{docs/testing/vara-interoperability.md}.
+
+\subsection{Acquisition, timing, and control matching}
+
+The initial replay used 16 stock captures covering DATA levels 1--4,
+setup, and setup ACK. At 0 dB in additive white Gaussian noise (AWGN),
+the original bench path recovered 0/512 bursts. The offline
+band-limited prototype recovered 500/512. On another six captures of
+request and response bursts it recovered 94/96 at 0 dB, against 0/96
+for the original path. With the clean symbol epoch supplied and
+pilot acceptance bypassed, levels 1 and 2 each recovered 64/64 frames
+at $-12$ dB. The first prototype lost level-3 frames at +44 dB
+(63/96 against 96/96), so it was unsuitable for deployment.
+
+The modem change uses a causal bandpass for acquisition, with an
+out-of-band noise estimate and the original raw path on quiet records.
+It adds bounded carrier-offset recovery and requires complete
+callsign-keyed control sequences for the stock variants seen at low
+SNR. The captured \texttt{0x42} setup form is validated against the frame
+CRC and caller identity. An incoming BW500 level-3 request sets the
+responder's initial DATA rate. The tests below compare exact wire bytes.
+
+\begin{center}
+\begin{tabular}{@{}p{0.64\linewidth}r@{}}
+\toprule
+Engineering replay condition & Exact recovery \\
+\midrule
+AWGN at 0 and +44 dB & 176/176 at each point \\
+Simulated native capture chunks at 0 and +44 dB & 88/88 at each point \\
++15 Hz carrier offset at +8 and +40 dB & 128/128 at each point \\
+2 ms echo on setup ACK at +8 and +44 dB & 48/48 at each point \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The +44 dB replay recovered all 24 level-3 frames. Noise-only
+controls in the ingress replays yielded no decodes. The audio-enabled
+Rust and virtual BW500, BW2300, and BW2750 regressions passed.
+
+\subsection{Live stock interoperability}
+
+Both Linkwise roles completed stock VARA exchanges at +4 dB with
+noise injected in both directions. An engineering build delivered
+203 + 6 + 203 exact bytes in each role, and the final build delivered
+13 + 6 + 13 exact bytes in each role. Both peers confirmed disconnect
+in each passing run. The final 0 dB bilateral responder run connected
+and received the first 13 bytes exactly, then timed out on the reverse
+transfer. Some intermediate +4 dB trials failed during connection.
+The injection was calibrated in PCM before Windows playback.
+These observations demonstrate a +4 dB working point on this bench.
+The SNR needed for 95\% session completion remains unmeasured, and a
+same-route stock-to-stock control needs a second stock endpoint.
+
+\section{2026-11-14: KiwiSDR field comparison and stock stimulus}
+\label{sec:kiwi-nov14}
+
+The fresh survey produced 12 receive-only USB recordings from public
+KiwiSDRs on 40 m and 20 m, totaling 40.7 receiver-minutes with no
+observed recorder sequence gaps. Collection straddled 15 November UTC.
+Neither Linkwise build recovered a CRC-valid BW500 frame from these
+recordings. The number of VARA frames actually transmitted was
+unknown. The result provides no estimate of field detection rate or
+sensitivity.
+
+Four archived off-air frames provided positive controls. Both builds
+recovered all four at the original tuning. Applying a deliberate
+$\pm 15$ Hz shift made eight trials from those same frames. The
+baseline recovered 3/8 and the updated receiver recovered 8/8 with
+exact frame bytes.
+
+Selected clips were also replayed at a common gain into stock VARA
+HF 4.9.1 in BW500 monitor mode. The monitor displayed decoded content
+during archived replay and emitted level-2 receive events for the
+two archived +15 Hz clips tested. No frame bytes appeared on the
+monitored TCP interfaces. A fresh Wisconsin clip drew a level-2
+event during the mixed replay, but that event did not repeat when
+the clip was played alone. Stock versus Linkwise exact-frame recovery
+therefore remains unmeasured.
+
+The isolated Windows audio bench then generated known BW500 signals
+directly with stock VARA HF 4.9.1. The retained 48 kHz mono WAVs include
+the connection request, setup, and level-4 DATA. Linkwise decoded the
+DATA and delivered the 13-byte sequence \texttt{00} through \texttt{0c}.
+The test verified exact 13 + 6 + 13 byte delivery and both disconnect
+reports. It used virtual audio without RF transmission.
+
+\section{2026-11-14: GNU Radio impairment trial and recurring collection}
+\label{sec:gnuradio-nov14}
+
+GNU Radio 3.10.9.2 generated 60 fixtures from two distinct stock
+level-4 DATA frames in the same verified exchange. The protocol fixed
+the exact CRC-valid wire-frame criterion, paired baseline and candidate
+comparisons, and separate development and holdout noise seeds before
+scoring. One factor varied at a time before a combined condition.
+A common gain kept all PCM samples within the daemon's input range
+without changing SNR or interferer ratios. Regenerating development
+fixtures reproduced 30/30 PCM checksums. Both source frames came from
+one session, so the trial measures this corpus and does not estimate
+population or live-link performance.
+
+\begin{center}
+\begin{tabular}{@{}p{0.61\linewidth}rr@{}}
+\toprule
+Condition & Baseline & Updated \\
+\midrule
+Clean & 2/2 & 2/2 \\
+AWGN at $-4$, 0, and +4 dB & 0/18 & 12/18 \\
+Carrier offset at $\pm15$ and $\pm25$ Hz & 0/8 & 4/8 \\
+Fixed echoes & 8/8 & 8/8 \\
+AWGN, +15 Hz offset, and 2 ms echo & 0/6 & 6/6 \\
+Continuous in-band tone & 0/6 & 0/6 \\
+Audio dropouts & 0/6 & 0/6 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Both builds rejected all six noise-only controls. The updated modem
+passed all $\pm15$ Hz cases and missed all $\pm25$ Hz cases. The 40 ms
+dropout split one frame into two acquisition candidates. An offline
+probe allowed gaps up to 60 ms between plausible fragments; it
+recovered both 40 ms cases and preserved every current passing case,
+including on the holdout. The longer dropouts remained unresolved.
+The probe remains experimental. Integration requires a regression
+for adjacent legitimate bursts and exact live stock VARA exchanges
+with Linkwise in both roles.
+
+The local automation \emph{Collect Winlink VARA via KiwiSDR} was
+registered active for 6:30 p.m. Pacific daily. It verifies public VARA
+HF channels using the \href{https://winlink.org/RMSChannels}{Winlink RMS
+list}, then records up to two three-minute USB windows when permitted
+receivers are available. Each run retains original WAVs, channel and
+receiver metadata, SHA-256 hashes, and sequence gap counts. The pinned
+KiwiClient was installed and its help command verified. No scheduled
+collection had completed at the time of this entry.
+
+\subsection{Evidence locations}
+
+Local evidence is under \pathtext{~/Documents/Codex}.
+\begin{itemize}
+  \item Engineering replays and session manifests in
+    \texttt{Linkwise BW500 sensitivity}/\pathtext{engineering.87YWK1}.
+  \item Field captures and stock monitor transcripts in
+    \pathtext{linkwise-kiwi-field.VtgdnY}.
+  \item Stock stimuli and the verified host payload in
+    \pathtext{linkwise-stock-vara.qcreNI}.
+  \item GNU Radio protocol, generator, WAV/PCM fixtures and scores.
+    \par\pathtext{linkwise-gnuradio-bw500.7leUj3}
+  \item Scheduled recordings under \texttt{Linkwise KiwiSDR collection}.
+\end{itemize}
+
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]
+  \item Qualify the short-gap probe with adjacent-burst and live stock
+        VARA regressions. Collect labeled off-air frames and verify a
+        repeatable stock comparator before estimating sensitivity.
   \item Verify the Pat-to-Express sender-side close and exercise
         native CoreAudio capture with an available input endpoint.
   \item Complete the three-pass repeat sequences on one build for mixed Pat,
