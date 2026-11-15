@@ -110,7 +110,7 @@ impl AudioHandshake {
         bandwidth: Bandwidth,
     ) -> Option<Self> {
         Some(Self {
-            protocol: Handshake::new(local, listen, timeout)?,
+            protocol: Handshake::new_with_profile(local, listen, timeout, Profile::Wide)?,
             waveform: SetupWaveform::Wide(
                 bandwidth,
                 Box::new(wide_level4::Waveform::new(bandwidth)?),

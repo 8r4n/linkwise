@@ -2,6 +2,7 @@
 """Verify the paired host sockets and audio waveforms between two Linkwise daemons."""
 import argparse
 import contextlib
+import math
 import re
 import socket
 import struct
@@ -36,8 +37,11 @@ def waveform(stream):
 
 def corrupt_waveform(data):
     count = struct.unpack(">I", data[:4])[0]
-    pairs, tail = divmod(count, 2)
-    return data[:4] + struct.pack("<ff", 0.2, -0.2) * pairs + struct.pack("<f", 0.2) * tail
+    # Replace DATA with an in-band tone so the receiver gets a burst
+    # with invalid DATA rather than an out-of-band signal it should ignore.
+    cycle = tuple(0.2 * math.sin(math.tau * n / 32) for n in range(32))
+    periods, tail = divmod(count, len(cycle))
+    return data[:4] + struct.pack("<32f", *cycle) * periods + struct.pack(f"<{tail}f", *cycle[:tail])
 
 
 def start_station(stack, modem, profile, callsign, bandwidth):

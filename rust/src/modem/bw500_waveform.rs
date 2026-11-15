@@ -149,24 +149,26 @@ impl Waveform {
         ))
     }
 
-    fn lock_score(&self, mixed: &[Vec<Cell>; 2], start: usize) -> f64 {
-        let mut score = 0.0;
+    fn pilot_correlation(&self, mixed: &[Vec<Cell>; 2], start: usize) -> Cell {
+        let mut score = (0.0, 0.0);
         for (band, input) in mixed.iter().enumerate() {
             for column in 1..COLUMNS {
                 if !self.pilots[band][column] {
                     continue;
                 }
                 let Some(a) = self.derotate(input, band, column, start) else {
-                    return -1.0;
+                    return (0.0, 0.0);
                 };
                 let Some(b) = self.derotate(input, band, column - 1, start) else {
-                    return -1.0;
+                    return (0.0, 0.0);
                 };
                 let scale = ((a.0 * a.0 + a.1 * a.1) * (b.0 * b.0 + b.1 * b.1)).sqrt();
-                score += (a.0 * b.0 + a.1 * b.1) / scale.max(f64::EPSILON);
+                let scale = scale.max(f64::EPSILON);
+                score.0 += (a.0 * b.0 + a.1 * b.1) / scale;
+                score.1 += (a.1 * b.0 - a.0 * b.1) / scale;
             }
         }
-        score / 36.0
+        (score.0 / 36.0, score.1 / 36.0)
     }
 
     /// Acquire one level-4 frame near an energy candidate. Timing is locked
@@ -179,7 +181,50 @@ impl Waveform {
         {
             return None;
         }
-        let mixed: [Vec<Cell>; 2] = [1350.0, 1650.0].map(|frequency| {
+        let mixed = Self::mix(audio);
+        let required = (COLUMNS - 1) * HOP + HOP + 1;
+        let last = audio
+            .len()
+            .min(candidate.end.saturating_add(HOP))
+            .checked_sub(required)?;
+        let first = candidate.start.saturating_sub(HOP).max(HOP / 2);
+        let through = candidate.start.saturating_add(PREFIX + HOP).min(last);
+        let search = |track_frequency: bool| {
+            let score = |start| {
+                let (real, imag) = self.pilot_correlation(&mixed, start);
+                if track_frequency {
+                    real.hypot(imag)
+                } else {
+                    real
+                }
+            };
+            let coarse = (first..=through)
+                .step_by(32)
+                .map(|start| (start, score(start)))
+                .max_by(|a, b| a.1.total_cmp(&b.1))?
+                .0;
+            let (start, strength) = (coarse.saturating_sub(32).max(first)
+                ..=coarse.saturating_add(32).min(through))
+                .step_by(2)
+                .map(|start| (start, score(start)))
+                .max_by(|a, b| a.1.total_cmp(&b.1))?;
+            (strength >= 0.65).then_some(start)
+        };
+        if let Some(decoded) = search(false).and_then(|start| self.decode_aligned(&mixed, start)) {
+            return Some(decoded);
+        }
+        let start = search(true)?;
+        let (real, imag) = self.pilot_correlation(&mixed, start);
+        let phase = imag.atan2(real);
+        // One symbol spans 512 samples. Bound the retry to roughly ±24 Hz.
+        if phase.abs() > 1.6 {
+            return None;
+        }
+        self.decode_with_phase(&mixed, start, phase)
+    }
+
+    pub(super) fn mix(audio: &[f32]) -> [Vec<Cell>; 2] {
+        [1350.0, 1650.0].map(|frequency| {
             audio
                 .iter()
                 .enumerate()
@@ -188,26 +233,21 @@ impl Waveform {
                     (f64::from(sample) * cos, -f64::from(sample) * sin)
                 })
                 .collect()
-        });
+        })
+    }
+
+    pub(super) fn decode_aligned(&self, mixed: &[Vec<Cell>; 2], start: usize) -> Option<Decoded> {
+        self.decode_with_phase(mixed, start, 0.0)
+    }
+
+    fn decode_with_phase(
+        &self,
+        mixed: &[Vec<Cell>; 2],
+        start: usize,
+        phase: f64,
+    ) -> Option<Decoded> {
+        let (sin, cos) = phase.sin_cos();
         let required = (COLUMNS - 1) * HOP + HOP + 1;
-        let last = audio
-            .len()
-            .min(candidate.end.saturating_add(HOP))
-            .checked_sub(required)?;
-        let first = candidate.start.saturating_sub(HOP).max(HOP / 2);
-        let through = candidate.start.saturating_add(PREFIX + HOP).min(last);
-        let (coarse, _) = (first..=through)
-            .step_by(32)
-            .map(|start| (start, self.lock_score(&mixed, start)))
-            .max_by(|a, b| a.1.total_cmp(&b.1))?;
-        let (start, score) = (coarse.saturating_sub(32).max(first)
-            ..=coarse.saturating_add(32).min(through))
-            .step_by(2)
-            .map(|start| (start, self.lock_score(&mixed, start)))
-            .max_by(|a, b| a.1.total_cmp(&b.1))?;
-        if score < 0.65 {
-            return None;
-        }
         let mut cells = [0.0; bw500_level4::CODED_CELLS];
         let mut index = 0;
         for (band, input) in mixed.iter().enumerate() {
@@ -217,7 +257,7 @@ impl Waveform {
                 }
                 let a = self.derotate(input, band, column, start)?;
                 let b = self.derotate(input, band, column - 1, start)?;
-                cells[index] = -(a.0 * b.0 + a.1 * b.1);
+                cells[index] = -((a.0 * b.0 + a.1 * b.1) * cos + (a.1 * b.0 - a.0 * b.1) * sin);
                 index += 1;
             }
         }

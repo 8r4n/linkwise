@@ -2,6 +2,8 @@
 
 use std::{f64::consts::TAU, ops::Range};
 
+pub mod bw500;
+
 /// Finds contiguous windows of audio above the bench RMS threshold.
 ///
 /// Samples are mono and normalized to full scale. Positions are zero-based,

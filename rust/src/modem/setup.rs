@@ -83,7 +83,7 @@ impl LinkSetup {
         }
         let (body, crc) = frame.split_at(body_len);
         let control = body[body_len - 1];
-        let stock_bw500_control = profile == Profile::Bw500 && control == 0x02;
+        let stock_bw500_control = profile == Profile::Bw500 && matches!(control, 0x02 | 0x42);
         if coding::crc(body).to_be_bytes() != crc
             || body[4] & 0x0f != 0
             || body[5] > 15
@@ -193,6 +193,27 @@ mod tests {
         assert_eq!(LinkSetup::decode(Profile::Bw500, &frame), Some(setup));
         frame[9] ^= 1;
         assert!(LinkSetup::decode(Profile::Bw500, &frame).is_none());
+    }
+
+    #[test]
+    fn accepts_captured_stock_bw500_setup_with_0x42_control() {
+        // Captured stock VARA 4.9.1 caller under bilateral AWGN. The
+        // waveform and CRC were valid even when setup timed out.
+        let mut frame = [0_u8; 46];
+        frame[..10].copy_from_slice(&[0x2c, 0xe8, 0x4d, 0x45, 0x30, 0, 0, 0x80, 0x14, 0x85]);
+        frame[42..].copy_from_slice(&[0x04, 0x42, 0x54, 0x5a]);
+        assert_eq!(
+            LinkSetup::decode(Profile::Bw500, &frame),
+            Some(LinkSetup {
+                caller: "KN6MQS".into(),
+                high_speed: false,
+                requested_level: 4,
+            })
+        );
+        frame[9] ^= 1;
+        let crc = coding::crc(&frame[..44]).to_be_bytes();
+        frame[44..].copy_from_slice(&crc);
+        assert_eq!(LinkSetup::decode(Profile::Bw500, &frame), None);
     }
 
     #[test]

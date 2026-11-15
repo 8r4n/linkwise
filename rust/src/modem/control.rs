@@ -133,10 +133,8 @@ impl Message {
         let mut random = keyed_stream(key, seed_offset, preadvance)?;
         let mut tones = head.to_vec();
         for index in 0..count {
-            let coarse = (random.advance() * coarse_bins) >> 24;
-            let fine = (random.advance() * 7) >> 24;
             let parity = u32::from(alternate && index % 2 == 0);
-            tones.push((base + parity + 14 * coarse + 2 * fine) as u8);
+            tones.push(single_tone_bin(&mut random, base + parity, coarse_bins));
         }
         Some(tones)
     }
@@ -166,33 +164,112 @@ impl Message {
         estimated_start: usize,
         bandwidth: Bandwidth,
     ) -> Option<usize> {
-        let tones: Vec<_> = self
-            .tones_on(key, bandwidth)?
-            .into_iter()
-            .map(|bin| Tone::new(usize::from(bin), SYMBOL_SAMPLES))
-            .collect();
-        let length = tones.len() * SYMBOL_SAMPLES;
-        let last = audio.len().checked_sub(length)?;
-        let from = estimated_start.saturating_sub(SYMBOL_SAMPLES);
-        let through = estimated_start.saturating_add(SYMBOL_SAMPLES).min(last);
-        let score = |start| {
-            tones
-                .iter()
-                .zip(audio[start..start + length].as_chunks::<SYMBOL_SAMPLES>().0)
-                .map(|(tone, column)| {
-                    let norm = energy(column) * SYMBOL_SAMPLES as f64 / 2.0;
-                    tone.power(column) / norm.max(f64::EPSILON)
-                })
-                .fold((0.0, 1.0_f64), |(sum, weakest), score| {
-                    (sum + score, weakest.min(score))
-                })
+        let bins = self.tones_on(key, bandwidth)?;
+        let robust = bandwidth == Bandwidth::Hz500
+            && (bins.len() >= 20 || matches!(self, Self::Bw500Confirm));
+        if let Some(start) = find_single_tones(&bins, audio, estimated_start, robust) {
+            return Some(start);
+        }
+        if bandwidth != Bandwidth::Hz500 {
+            return None;
+        }
+        // The stock alternatives share a preamble but require a complete
+        // match to their own callsign-keyed tail.
+        let (head, seed, advances, count): (&[u8], _, &[_], _) = match self {
+            Self::ConnectResponse(Bandwidth::Hz500) => (RESPONSE_PREAMBLE, 289, &[691, 661], 15),
+            Self::Bw500Confirm => (&[62], 1551, &[61], 15),
+            Self::Bw500KeepaliveA => (&[74], 1550, &[125], 31),
+            _ => return None,
         };
-        let (start, (sum, weakest)) = (from..=through)
-            .step_by(64)
-            .map(|start| (start, score(start)))
-            .max_by(|a, b| a.1.0.total_cmp(&b.1.0))?;
-        (sum >= 0.80 * tones.len() as f64 && weakest >= 0.30).then_some(start)
+        advances.iter().find_map(|&advance| {
+            let mut random = keyed_stream(key, seed, advance)?;
+            let mut expected = head.to_vec();
+            expected.extend((0..count).map(|_| single_tone_bin(&mut random, 50, 2)));
+            find_single_tones(&expected, audio, estimated_start, true)
+        })
     }
+}
+
+fn single_tone_bin(random: &mut Random24, base: u32, coarse_bins: u32) -> u8 {
+    let coarse = (random.advance() * coarse_bins) >> 24;
+    let fine = (random.advance() * 7) >> 24;
+    (base + 14 * coarse + 2 * fine) as u8
+}
+
+fn find_single_tones(
+    bins: &[u8],
+    audio: &[f32],
+    estimated_start: usize,
+    robust: bool,
+) -> Option<usize> {
+    let length = bins.len() * SYMBOL_SAMPLES;
+    let last = audio.len().checked_sub(length)?;
+    let from = estimated_start.saturating_sub(SYMBOL_SAMPLES);
+    let through = estimated_start.saturating_add(SYMBOL_SAMPLES).min(last);
+    let tones_at = |hz: f64, bins: &[u8]| {
+        bins.iter()
+            .map(|&bin| {
+                Tone::at_bin(
+                    f64::from(bin) + hz * SYMBOL_SAMPLES as f64 / 48_000.0,
+                    SYMBOL_SAMPLES,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let search = |tones: &[Tone], from, through, step, mean, floor| {
+        (from..=through)
+            .step_by(step)
+            .filter_map(|start| {
+                let (sum, weakest) = single_tone_score(tones, &audio[start..]);
+                (sum >= mean * tones.len() as f64 && weakest >= floor).then_some((start, sum))
+            })
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(start, _)| start)
+    };
+    let tones = tones_at(0.0, bins);
+    if let Some(start) = search(&tones, from, through, 64, 0.80, 0.30) {
+        return Some(start);
+    }
+    if !robust {
+        return None;
+    }
+
+    if let Some(start) = search(&tones, from, through, 64, 0.70, 0.25) {
+        return Some(start);
+    }
+    // Use a short prefix to propose offset/timing hypotheses. The entire
+    // keyed sequence still has to pass the acceptance test at one offset.
+    for hz in [-8.0, 8.0, -15.0, 15.0, -22.0, 22.0] {
+        let prefix = tones_at(hz, &bins[..4]);
+        let Some(start) = search(&prefix, from, through, 256, 0.64, 0.20) else {
+            continue;
+        };
+        let tones = tones_at(hz, bins);
+        if let Some(start) = search(
+            &tones,
+            start.saturating_sub(256).max(from),
+            (start + 256).min(through),
+            64,
+            0.70,
+            0.25,
+        ) {
+            return Some(start);
+        }
+    }
+    None
+}
+
+fn single_tone_score(tones: &[Tone], audio: &[f32]) -> (f64, f64) {
+    tones
+        .iter()
+        .zip(audio.chunks_exact(SYMBOL_SAMPLES))
+        .map(|(tone, column)| {
+            let norm = energy(column) * SYMBOL_SAMPLES as f64 / 2.0;
+            tone.power(column) / norm.max(f64::EPSILON)
+        })
+        .fold((0.0, 1.0_f64), |(sum, weakest), score| {
+            (sum + score, weakest.min(score))
+        })
 }
 
 fn keyed_stream(called: &str, seed_offset: u32, preadvance: u32) -> Option<Random24> {
@@ -400,11 +477,25 @@ pub fn find_connected_ack(
     audio: &[f32],
     estimated_start: usize,
 ) -> Option<usize> {
-    find_pairs(
-        &connected_ack_tones(bandwidth, caller)?,
-        audio,
-        estimated_start,
-    )
+    let pairs = connected_ack_tones(bandwidth, caller)?;
+    if bandwidth != Bandwidth::Hz500 {
+        return find_pairs(&pairs, audio, estimated_start);
+    }
+    let (first, through) = pair_timing(&pairs, audio, estimated_start)?;
+    if let Some(start) = search_pairs(&pairs, audio, first..=through, 32, 0.0, 0.70, 0.08) {
+        return Some(start);
+    }
+    for hz in [-8.0, 8.0, -15.0, 15.0, -22.0, 22.0] {
+        let Some(start) = search_pairs(&pairs[..4], audio, first..=through, 256, hz, 0.64, 0.08)
+        else {
+            continue;
+        };
+        let near = start.saturating_sub(256).max(first)..=(start + 256).min(through);
+        if let Some(start) = search_pairs(&pairs, audio, near, 32, hz, 0.70, 0.08) {
+            return Some(start);
+        }
+    }
+    None
 }
 
 /// Renders the BW500 responder's caller-keyed reply to a post-connect poll.
@@ -496,35 +587,54 @@ pub fn find_caller_data_ack(
     find_pairs(&answer_pairs(bandwidth, caller, 852, 0)?, audio, start)
 }
 
+fn pair_timing(pairs: &[[u8; 2]], audio: &[f32], estimated_start: usize) -> Option<(usize, usize)> {
+    let last = audio.len().checked_sub(pairs.len() * SYMBOL_SAMPLES)?;
+    Some((
+        estimated_start.saturating_sub(SYMBOL_SAMPLES),
+        estimated_start.saturating_add(SYMBOL_SAMPLES).min(last),
+    ))
+}
+
 fn find_pairs(pairs: &[[u8; 2]], audio: &[f32], estimated_start: usize) -> Option<usize> {
+    let (first, through) = pair_timing(pairs, audio, estimated_start)?;
+    search_pairs(pairs, audio, first..=through, 32, 0.0, 0.80, 0.15)
+}
+
+fn search_pairs(
+    pairs: &[[u8; 2]],
+    audio: &[f32],
+    timing: std::ops::RangeInclusive<usize>,
+    step: usize,
+    hz: f64,
+    mean: f64,
+    weakest_floor: f64,
+) -> Option<usize> {
+    let bins = hz * SYMBOL_SAMPLES as f64 / 48_000.0;
     let tones: Vec<_> = pairs
         .iter()
-        .map(|pair| pair.map(|bin| Tone::new(usize::from(bin), SYMBOL_SAMPLES)))
+        .map(|pair| pair.map(|bin| Tone::at_bin(f64::from(bin) + bins, SYMBOL_SAMPLES)))
         .collect();
-    let length = tones.len() * SYMBOL_SAMPLES;
-    let last = audio.len().checked_sub(length)?;
-    let first = estimated_start.saturating_sub(SYMBOL_SAMPLES);
-    let through = estimated_start.saturating_add(SYMBOL_SAMPLES).min(last);
-    let (start, score) = (first..=through)
-        .step_by(32)
-        .map(|start| {
+    timing
+        .step_by(step)
+        .filter_map(|start| {
             let mut total = 0.0;
             let mut weakest = 1.0_f64;
             for (pair, column) in tones
                 .iter()
-                .zip(audio[start..start + length].as_chunks::<SYMBOL_SAMPLES>().0)
+                .zip(audio[start..].chunks_exact(SYMBOL_SAMPLES))
             {
-                let scale = energy(column) * SYMBOL_SAMPLES as f64 / 2.0;
-                let powers = pair
-                    .each_ref()
-                    .map(|tone| tone.power(column) / scale.max(f64::EPSILON));
-                total += powers.iter().sum::<f64>();
-                weakest = weakest.min(powers[0]).min(powers[1]);
+                let scale = (energy(column) * SYMBOL_SAMPLES as f64 / 2.0).max(f64::EPSILON);
+                for tone in pair {
+                    let power = tone.power(column) / scale;
+                    total += power;
+                    weakest = weakest.min(power);
+                }
             }
-            (start, (total, weakest))
+            (total >= mean * tones.len() as f64 && weakest >= weakest_floor)
+                .then_some((start, total))
         })
-        .max_by(|a, b| a.1.0.total_cmp(&b.1.0))?;
-    (score.0 >= 0.8 * tones.len() as f64 && score.1 >= 0.15).then_some(start)
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(start, _)| start)
 }
 
 fn render<const N: usize>(symbols: impl IntoIterator<Item = [u8; N]>) -> Vec<f32> {
@@ -555,6 +665,90 @@ fn render<const N: usize>(symbols: impl IntoIterator<Item = [u8; N]>) -> Vec<f32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_stock_bw500_response_variants_with_the_full_keyed_tail() {
+        for tail in [
+            [60, 50, 66, 74, 62, 66, 76, 64, 76, 60, 56, 74, 56, 54, 58],
+            [58, 70, 64, 76, 54, 52, 60, 62, 60, 74, 74, 70, 58, 68, 72],
+        ] {
+            let tones = RESPONSE_PREAMBLE.iter().copied().chain(tail);
+            let audio = render(tones.map(|bin| [bin]));
+            let response = Message::ConnectResponse(Bandwidth::Hz500);
+            assert_eq!(response.find("W1A", &audio, 0), Some(0));
+            assert_eq!(response.find("W1B", &audio, 0), None);
+        }
+    }
+
+    #[test]
+    fn accepts_low_snr_stock_bw500_confirmation_with_the_full_keyed_tail() {
+        let bins = [
+            62, 56, 62, 52, 58, 66, 60, 60, 54, 72, 74, 58, 74, 54, 66, 64,
+        ];
+        let audio = render(bins.map(|bin| [bin]));
+        assert_eq!(Message::Bw500Confirm.find("W1A", &audio, 0), Some(0));
+        assert_eq!(Message::Bw500Confirm.find("W1B", &audio, 0), None);
+    }
+
+    #[test]
+    fn accepts_stock_bw500_poll_after_level_three_setup() {
+        let bins = [
+            74, 68, 58, 66, 74, 54, 66, 66, 52, 68, 60, 60, 60, 54, 72, 70, 50, 76, 64, 60, 62, 64,
+            54, 72, 74, 56, 68, 64, 54, 52, 74, 50,
+        ];
+        let audio = render(bins.map(|bin| [bin]));
+        assert_eq!(Message::Bw500KeepaliveA.find("W1A", &audio, 0), Some(0));
+        assert_eq!(Message::Bw500KeepaliveA.find("W1B", &audio, 0), None);
+    }
+
+    #[test]
+    fn bw500_controls_acquire_offset_and_reject_the_wrong_key() {
+        for bin_shift in [-15.0, 15.0] {
+            let render_shifted = |columns: Vec<Vec<u8>>| -> Vec<f32> {
+                columns
+                    .into_iter()
+                    .flat_map(|bins| {
+                        let tones: Vec<_> = bins
+                            .into_iter()
+                            .map(|bin| {
+                                Tone::at_bin(
+                                    f64::from(bin) + bin_shift * SYMBOL_SAMPLES as f64 / 48_000.0,
+                                    SYMBOL_SAMPLES,
+                                )
+                            })
+                            .collect();
+                        (0..SYMBOL_SAMPLES).map(move |n| {
+                            tones
+                                .iter()
+                                .map(|tone| tone.quadrature[n].1 as f32 * 0.20)
+                                .sum::<f32>()
+                        })
+                    })
+                    .collect()
+            };
+            let bandwidth = Bandwidth::Hz500;
+            let request = Message::ConnectRequest(bandwidth);
+            let samples = render_shifted(
+                request
+                    .tones("W1AW")
+                    .unwrap()
+                    .into_iter()
+                    .map(|bin| vec![bin])
+                    .collect(),
+            );
+            assert_eq!(request.find("W1AW", &samples, 0), Some(0));
+            assert_eq!(request.find("W1AX", &samples, 0), None);
+            let samples = render_shifted(
+                connected_ack_tones(bandwidth, "W1AW")
+                    .unwrap()
+                    .into_iter()
+                    .map(|pair| pair.to_vec())
+                    .collect(),
+            );
+            assert_eq!(find_connected_ack(bandwidth, "W1AW", &samples, 0), Some(0));
+            assert_eq!(find_connected_ack(bandwidth, "W1AX", &samples, 0), None);
+        }
+    }
 
     #[test]
     fn matches_stock_bw500_post_connect_vectors() {

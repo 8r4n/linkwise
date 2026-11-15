@@ -6,7 +6,11 @@ use linkwise::{
         device::Capture,
         playback::{self, Playback, Progress},
     },
-    modem::{bw500_waveform::Waveform, receiver::Receiver, waveform::BurstDetector},
+    modem::{
+        bw500_waveform::Waveform,
+        receiver::Receiver,
+        waveform::{BurstDetector, bw500::Acquisition},
+    },
 };
 use serde::Serialize;
 use tokio::{io::AsyncWriteExt, net::TcpListener, sync::watch};
@@ -128,13 +132,18 @@ pub(super) struct NativeAudio {
     output_channel: u16,
     last_sample: tokio::time::Instant,
     detector: BurstDetector,
+    bw500_detector: Option<Acquisition>,
     history: VecDeque<f32>,
     position: u64,
     completed: VecDeque<Range<u64>>,
 }
 
 impl NativeAudio {
-    pub(super) async fn open(input: &AudioDevice, output: &AudioDevice) -> io::Result<Self> {
+    pub(super) async fn open(
+        input: &AudioDevice,
+        output: &AudioDevice,
+        bw500: bool,
+    ) -> io::Result<Self> {
         let capture = Capture::start(Some(&input.name), input.channel)
             .map_err(|error| io::Error::other(format!("Open input {:?}: {error}", input.name)))?;
         let mut audio = Self {
@@ -143,6 +152,7 @@ impl NativeAudio {
             output_channel: output.channel,
             last_sample: tokio::time::Instant::now(),
             detector: BurstDetector::new(AUDIO_RATE as u32),
+            bw500_detector: bw500.then(Acquisition::default),
             history: VecDeque::with_capacity(HISTORY_LIMIT),
             position: 0,
             completed: VecDeque::new(),
@@ -198,9 +208,12 @@ impl NativeAudio {
                 self.history.drain(..discard);
                 self.history.extend(block.samples);
                 self.position += block.samples.len() as u64;
-                self.detector.push(&block.samples, |candidate| {
-                    self.completed.push_back(candidate)
-                });
+                let emit = |candidate| self.completed.push_back(candidate);
+                if let Some(detector) = &mut self.bw500_detector {
+                    detector.push(&block.samples, emit);
+                } else {
+                    self.detector.push(&block.samples, emit);
+                }
             } else {
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
@@ -235,6 +248,7 @@ impl NativeAudio {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
         self.detector = BurstDetector::new(AUDIO_RATE as u32);
+        self.bw500_detector = self.bw500_detector.as_ref().map(|_| Acquisition::default());
         self.history.clear();
         self.completed.clear();
         self.position = 0;

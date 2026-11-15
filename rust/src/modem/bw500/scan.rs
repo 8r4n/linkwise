@@ -6,18 +6,23 @@ use rustfft::{Fft, FftPlanner, num_complex::Complex32};
 use super::{Column, Level, Mode, SAMPLE_RATE_HZ, Tone, decode_aligned, reference_score};
 
 const HOP: usize = 128;
-const OFFSETS_HZ: [f32; 3] = [0.0, -12.0, 12.0];
+const ROTATED_OFFSETS_HZ: [f32; 3] = [0.0, -12.0, 12.0];
+// One FFT bin on the 1024-sample level-2 symbol.
+const BIN_OFFSET_HZ: f32 = SAMPLE_RATE_HZ as f32 / 1024.0;
+const LEVEL_TWO_OFFSETS_HZ: [f32; 5] = [0.0, -12.0, 12.0, -BIN_OFFSET_HZ, BIN_OFFSET_HZ];
 const MIN_SCORE: f32 = 0.65;
+// Level 2 can still pass the wire CRC on fading signals with weak pilots.
+const MIN_LEVEL_TWO_SCORE: f32 = 0.35;
 const MAX_BINS: usize = 21;
 // Longer than the complete level-1 frame, measured in scan hops.
 const HISTORY: usize = 2000;
-type Power = [[f32; MAX_BINS]; OFFSETS_HZ.len()];
+type Power = [[f32; MAX_BINS]; LEVEL_TWO_OFFSETS_HZ.len()];
 
 struct Spectrum {
     fft: Arc<dyn Fft<f32>>,
     work: Vec<Complex32>,
     scratch: Vec<Complex32>,
-    rotation: [Vec<Complex32>; OFFSETS_HZ.len()],
+    rotation: [Vec<Complex32>; ROTATED_OFFSETS_HZ.len()],
     first_bin: usize,
     bins: usize,
     powers: VecDeque<Power>,
@@ -30,7 +35,7 @@ impl Spectrum {
             scratch: vec![Complex32::default(); fft.get_inplace_scratch_len()],
             fft,
             work: vec![Complex32::default(); symbol],
-            rotation: OFFSETS_HZ.map(|offset| {
+            rotation: ROTATED_OFFSETS_HZ.map(|offset| {
                 (0..symbol)
                     .map(|i| {
                         Complex32::from_polar(1.0, -TAU * offset * i as f32 / SAMPLE_RATE_HZ as f32)
@@ -44,24 +49,18 @@ impl Spectrum {
     }
 
     fn push(&mut self, samples: &[f32]) {
-        let mut power = [[0.0; MAX_BINS]; OFFSETS_HZ.len()];
-        for (row, rotation) in power.iter_mut().zip(&self.rotation) {
+        let mut power = Power::default();
+        for (offset, rotation) in self.rotation.iter().enumerate() {
             for ((cell, phase), sample) in self.work.iter_mut().zip(rotation).zip(samples) {
                 *cell = phase * *sample;
             }
             self.fft
                 .process_with_scratch(&mut self.work, &mut self.scratch);
-            let end = self.first_bin + self.bins;
-            // Normalize against energy near the occupied band, including
-            // guard bins so edge offsets cannot inflate a pilot score.
-            let total: f32 = self.work[self.first_bin - 2..end + 2]
-                .iter()
-                .map(|bin| bin.norm_sqr())
-                .sum();
-            if total.is_finite() && total > f32::EPSILON {
-                for (dst, bin) in row.iter_mut().zip(&self.work[self.first_bin..end]) {
-                    *dst = bin.norm_sqr() / total;
-                }
+            self.read_power(self.first_bin, &mut power[offset]);
+            if offset == 0 && self.work.len() == 1024 {
+                // Read the one-bin offsets from the nominal FFT.
+                self.read_power(self.first_bin - 1, &mut power[3]);
+                self.read_power(self.first_bin + 1, &mut power[4]);
             }
         }
         if self.powers.len() == HISTORY {
@@ -70,11 +69,25 @@ impl Spectrum {
         self.powers.push_back(power);
     }
 
-    fn scores(&self, profile: &Profile) -> [f32; OFFSETS_HZ.len()] {
+    fn read_power(&self, first: usize, row: &mut [f32; MAX_BINS]) {
+        let end = first + self.bins;
+        // Include guard bins so edge offsets cannot inflate a pilot score.
+        let total: f32 = self.work[first - 2..end + 2]
+            .iter()
+            .map(|bin| bin.norm_sqr())
+            .sum();
+        if total.is_finite() && total > f32::EPSILON {
+            for (dst, bin) in row.iter_mut().zip(&self.work[first..end]) {
+                *dst = bin.norm_sqr() / total;
+            }
+        }
+    }
+
+    fn scores(&self, profile: &Profile) -> [f32; LEVEL_TWO_OFFSETS_HZ.len()] {
         let Some(first) = self.powers.len().checked_sub(profile.history_needed) else {
-            return [0.0; OFFSETS_HZ.len()];
+            return [0.0; LEVEL_TWO_OFFSETS_HZ.len()];
         };
-        let mut score = [0.0; OFFSETS_HZ.len()];
+        let mut score = [0.0; LEVEL_TWO_OFFSETS_HZ.len()];
         for &(index, bin) in &profile.pilots {
             let column = &self.powers[first + index];
             for (sum, powers) in score.iter_mut().zip(column) {
@@ -89,7 +102,7 @@ struct Profile {
     mode: Mode,
     pilots: Vec<(usize, usize)>,
     history_needed: usize,
-    tones: [Vec<Tone>; OFFSETS_HZ.len()],
+    tones: [Vec<Tone>; LEVEL_TWO_OFFSETS_HZ.len()],
 }
 
 impl Profile {
@@ -106,7 +119,7 @@ impl Profile {
             })
             .collect();
         let history_needed = (mode.columns.len() - 1) * hops_per_symbol + 1;
-        let tones = OFFSETS_HZ.map(|offset| {
+        let tones = LEVEL_TWO_OFFSETS_HZ.map(|offset| {
             let bins = f64::from(offset) * mode.symbol as f64 / f64::from(SAMPLE_RATE_HZ);
             (mode.first_bin..mode.first_bin + mode.span)
                 .map(|bin| Tone::at_bin(bin as f64 + bins, mode.symbol))
@@ -174,10 +187,20 @@ impl Scan {
                 }
                 let spectrum = if i == 0 { &self.long } else { &self.short };
                 let scores = spectrum.scores(profile);
-                let mut offsets = [0, 1, 2];
+                let min_score = if profile.mode.level == Level::Two {
+                    MIN_LEVEL_TWO_SCORE
+                } else {
+                    MIN_SCORE
+                };
+                let mut offsets = [0, 1, 2, 3, 4];
+                let offsets = if profile.mode.level == Level::Two {
+                    offsets.as_mut_slice()
+                } else {
+                    &mut offsets[..ROTATED_OFFSETS_HZ.len()]
+                };
                 offsets.sort_by(|&a, &b| scores[b].total_cmp(&scores[a]));
-                for offset in offsets {
-                    if scores[offset] < MIN_SCORE {
+                for &offset in offsets.iter() {
+                    if scores[offset] < min_score {
                         break;
                     }
                     let tones = &profile.tones[offset];
@@ -219,9 +242,69 @@ impl Scan {
 mod tests {
     use super::*;
     use crate::modem::{
-        bw500::{Frame, synthesize},
+        bw500::{Frame, sensitivity::translate, synthesize},
         receiver::Receiver,
     };
+
+    #[test]
+    fn recovers_level_two_one_fft_bin_off_frequency() {
+        let expected = Frame {
+            payload: (0..22).collect(),
+            control: 0x80,
+        };
+        let burst = synthesize(Level::Two, std::slice::from_ref(&expected)).unwrap();
+        let mut audio = vec![0.0; 911];
+        audio.extend(burst);
+        audio.extend([0.0; 1024]);
+        let mut planner = FftPlanner::new();
+        for hz in [-48.0, 48.0] {
+            let shifted = translate(&audio, hz, &mut planner);
+            let mut receiver = Receiver::new().with_pilot_acquisition();
+            let mut hits = Vec::new();
+            let mut report = |reception: crate::modem::receiver::Reception| {
+                hits.extend(reception.frames.into_iter().map(|frame| frame.frame));
+            };
+            for chunk in shifted.chunks(997) {
+                receiver.push(chunk, &mut report).unwrap();
+            }
+            receiver.finish(report);
+            assert_eq!(
+                hits.as_slice(),
+                std::slice::from_ref(&expected),
+                "{hz:+} Hz"
+            );
+        }
+    }
+
+    #[test]
+    fn recovers_level_two_when_guard_band_energy_reduces_pilot_score() {
+        let expected = Frame {
+            payload: (0..22).collect(),
+            control: 0x31,
+        };
+        let burst = synthesize(Level::Two, std::slice::from_ref(&expected)).unwrap();
+        // Bin 38 is outside level 2's data bins and inside the pilot
+        // normalization window. It lowers the score without destroying DATA.
+        let step = TAU * 38.0 / 1024.0;
+        let noise: Vec<_> = (0..burst.len() + 2048)
+            .map(|i| 0.24 * (step * i as f32).sin())
+            .collect();
+        let mut receiver = Receiver::new().with_pilot_acquisition();
+        let mut hits = Vec::new();
+        let mut report = |reception: crate::modem::receiver::Reception| {
+            hits.extend(reception.frames.into_iter().map(|frame| frame.frame));
+        };
+        receiver.push(&noise, &mut report).unwrap();
+        let mut mixed = noise;
+        for (sample, signal) in mixed[911..].iter_mut().zip(burst) {
+            *sample += 0.4 * signal;
+        }
+        for chunk in mixed.chunks(997) {
+            receiver.push(chunk, &mut report).unwrap();
+        }
+        receiver.finish(report);
+        assert_eq!(hits, [expected]);
+    }
 
     #[test]
     fn recovers_consecutive_frames_through_continuous_noise_without_duplicates() {
