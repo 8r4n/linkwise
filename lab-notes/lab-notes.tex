@@ -1,4 +1,4 @@
-\documentclass[11pt]{article}
+\documentclass[11pt,a4paper]{article}
 
 \usepackage[margin=1in]{geometry}
 \usepackage[T1]{fontenc}
@@ -7,6 +7,7 @@
 \usepackage{longtable}
 \usepackage{enumitem}
 \usepackage{xcolor}
+\usepackage{xurl}
 \usepackage{hyperref}
 \usepackage{listings}
 \usepackage{fancyhdr}
@@ -43,6 +44,7 @@
 \rhead{Lab notes}
 \cfoot{\thepage}
 \setlength{\headheight}{14pt}
+\setlength{\emergencystretch}{1em}
 
 \newcommand{\statusverified}{\textcolor{verified}{\textbf{Verified}}}
 \newcommand{\statusclue}{\textcolor{clue}{\textbf{Static clue}}}
@@ -53,7 +55,7 @@
 \title{Linkwise: Radio, Modem, and Link Management Research\\[0.4em]
 \large Lab notes and evidence ledger}
 \author{Engineering research log}
-\date{14 November 2026}
+\date{15 November 2026}
 
 \begin{document}
 \maketitle
@@ -1063,7 +1065,7 @@ schema illustration only, not a record of acquired data.
 \subsection{Coverage and capture campaigns}
 Maintain a coverage report that distinguishes available, missing, and
 insufficiently validated cases. Initial categories from the guide are:
-connection handshake; START; ACK1/ACK2/ACK3; NACK; BREAK; REQ; QRT; DATA
+connection handshake; START; ACK1, ACK2, and ACK3; NACK; BREAK; REQ; QRT; DATA
 levels 1--4, 5--8, and 9--11; both directions; complete sessions;
 retransmission/failure; weak signal; frequency offset; and fading/multipath.
 The ACK names and eleven-level grouping are drawn from the supplied guide's
@@ -2916,8 +2918,8 @@ collection had completed at the time of this entry.
 
 Local evidence is under \pathtext{~/Documents/Codex}.
 \begin{itemize}
-  \item Engineering replays and session manifests in
-    \texttt{Linkwise BW500 sensitivity}/\pathtext{engineering.87YWK1}.
+  \item Engineering replays and session manifests.
+    \par\texttt{Linkwise BW500 sensitivity}/\pathtext{engineering.87YWK1}
   \item Field captures and stock monitor transcripts in
     \pathtext{linkwise-kiwi-field.VtgdnY}.
   \item Stock stimuli and the verified host payload in
@@ -2926,6 +2928,48 @@ Local evidence is under \pathtext{~/Documents/Codex}.
     \par\pathtext{linkwise-gnuradio-bw500.7leUj3}
   \item Scheduled recordings under \texttt{Linkwise KiwiSDR collection}.
 \end{itemize}
+
+\section{2026-11-15 -- VOACAP-guided KiwiSDR reception}
+
+VOACAP Method 30 ranked public VARA HF gateway-to-KiwiSDR paths
+for 13:00 and 14:00 UTC. The run evaluated 2,370 channel--receiver
+combinations across 151 reporting gateways and 16 receivers. It
+assumed 100 W, isotropic antennas, residential noise, and a smoothed
+sunspot number of 83. The Eatonton, Georgia path from W4WTN,
+about 351 km, led the ranking at 7100.0 kHz USB and remained first
+with sunspot inputs of 68 and 93.
+
+The receive-only survey ran from 13:29 to 13:42 UTC. Five WAV files
+provided 19.7 receiver-minutes. Half Moon Bay used the northwest
+antenna after the omni stream stalled. Beilen replaced De Kiel on
+the same frequency. The Utah and Australia attempts yielded no audio.
+
+\begin{center}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Receiver & USB dial (kHz) & Audio (s) & CRC-valid frames \\
+\midrule
+Eatonton, GA & 7100.0 & 300.0 & 1 \\
+Eatonton, GA & 10145.0 & 300.0 & 0 \\
+Half Moon Bay, CA (NW) & 3585.0 & 360.1 & 0 \\
+Beilen, Netherlands & 7061.5 & 210.0 & 0 \\
+Rockport, ME & 7115.0 & 9.6 & 0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The Linkwise decoder at revision \texttt{7891532} recovered one
+46-byte BW500 level-4 frame at 112.54 s in the 7100.0 kHz recording,
+approximately 13:31:28 UTC. The decode required an adaptive energy
+candidate from the offline scan. Replay from a separately resampled
+clip reproduced the same frame hash, and an independent CRC-16/GENIBUS
+calculation matched the received checksum. The transmitting station
+remains unidentified. The number of transmitted VARA frames is unknown,
+so the survey cannot establish a frame recovery rate.
+
+Original WAVs, model inputs and outputs, receiver logs, replay code,
+and frame verification evidence are under
+\texttt{Linkwise VOACAP} in \pathtext{~/Documents/Codex}.
 
 \section{Next work}
 

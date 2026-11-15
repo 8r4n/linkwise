@@ -55,7 +55,8 @@ def main():
         writer=csv.DictWriter(f,fieldnames=keys);writer.writeheader()
         for n in nodes:writer.writerow({k:n[k] for k in keys})
 
-    fig=plt.figure(figsize=(11,6.2),facecolor='#f7f9fa')
+    a4_landscape_inches = (297 / 25.4, 210 / 25.4)
+    fig=plt.figure(figsize=a4_landscape_inches,facecolor='#f7f9fa')
     fig.text(.035,.955,'LINKWISE  /  KIWISDR FIELD TEST',fontsize=9,fontweight='bold',color='#27626e')
     fig.text(.035,.906,'Candidate receive network from Julian, California',fontsize=18,fontweight='bold',color='#173744')
     fig.text(.035,.873,'WGS84 geodesics · approximate transmit locality · candidate sites, not confirmed links',fontsize=9,color='#5d717c')
@@ -82,7 +83,7 @@ def main():
         ax.plot(n['longitude'],n['latitude'],'o',ms=5.5,color=COLORS[n['tier']],mec='white',mew=.6,transform=ccrs.PlateCarree(),zorder=5)
         if n['candidate_id'] not in ['R01','R02','R03','R04']:
             xy=projection.transform_point(n['longitude'],n['latitude'],ccrs.PlateCarree())
-            offsets={'R05':(-18,-14),'R06':(9,-10),'R07':(-27,7),'R08':(-27,-12),'R09':(8,-10),'R10':(9,5),'R11':(9,7)}
+            offsets={'R05':(-18,-14),'R06':(9,-10),'R07':(-27,7),'R08':(-27,-12),'R09':(8,-10),'R10':(9,5),'R11':(-25,7)}
             ax.annotate(n['candidate_id'],xy=xy,xytext=offsets.get(n['candidate_id'],(7,7)),textcoords='offset points',url=n['url'],fontsize=9,fontweight='bold',color=COLORS[n['tier']],path_effects=[pe.withStroke(linewidth=3,foreground='white')],zorder=6)
     ax.plot(lon0,lat0,'*',ms=13,color='#cf5047',mec='white',mew=.8,transform=ccrs.PlateCarree(),zorder=8)
     ax.text(.5,-.045,'Azimuthal equidistant centered on Julian · rings show distance from TX',transform=ax.transAxes,ha='center',fontsize=8,color='#607884')

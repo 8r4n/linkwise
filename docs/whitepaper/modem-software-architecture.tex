@@ -34,7 +34,7 @@ host commands, reply/query forms, rate behavior, and disconnect behavior.
 \subsection{Traditional-client interface and session admission}
 \label{sec:modem-client-admission}
 \emph{Proposed integration.} A VARA-compatible host adapter exposes a
-CR-delimited command/notification TCP channel and a separate raw binary DATA
+CR-delimited TCP channel for commands and notifications and a separate raw binary DATA
 channel. Ports default to loopback 8300/8301 where available and remain
 configurable. These are host-protocol compatibility goals; neither accepting
 a command nor opening a socket establishes on-air interoperability. Winlink
