@@ -17,6 +17,30 @@ pub struct ReceivedFrame {
     pub frame: bw500::Frame,
 }
 
+impl ReceivedFrame {
+    /// Recover the generic KISS payload from the measured 20-character
+    /// BW500 level-2 broadcast form. The receiver has already checked its CRC.
+    pub fn kiss_generic_payload(&self) -> Option<[u8; 20]> {
+        let [0x21, packed @ .., 0x14, _, 0] = self.frame.payload.as_slice() else {
+            return None;
+        };
+        if self.level != 2
+            || !matches!(self.frame.control, 0x00 | 0x40 | 0x80)
+            || packed.len() != 18
+            || packed[17] & 0x0f != 0x0f
+        {
+            return None;
+        }
+        // Characters are seven bits, most-significant bit first.
+        Some(std::array::from_fn(|index| {
+            let bit = index * 7;
+            let byte = bit / 8;
+            let pair = u16::from_be_bytes([packed[byte], *packed.get(byte + 1).unwrap_or(&0)]);
+            ((pair >> (9 - bit % 8)) & 0x7f) as u8
+        }))
+    }
+}
+
 #[derive(Debug)]
 pub struct Reception {
     pub candidate: Range<u64>,
@@ -168,6 +192,30 @@ impl Receiver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unpacks_the_measured_generic_kiss_payload() {
+        let mut frame = ReceivedFrame {
+            level: 2,
+            samples: 0..0,
+            frame: bw500::Frame {
+                control: 0x80,
+                payload: vec![
+                    0x21, 0x83, 0x0a, 0x1c, 0x48, 0xb1, 0xa3, 0xc8, 0x93, 0x2a, 0x5c, 0xc9, 0xb3,
+                    0xa7, 0xd0, 0xa3, 0x4a, 0x9d, 0x4f, 0x14, 0, 0,
+                ],
+            },
+        };
+        for control in [0x00, 0x40, 0x80] {
+            frame.frame.control = control;
+            assert_eq!(frame.kiss_generic_payload(), Some(*b"ABCDEFGHIJKLMNOPQRST"));
+        }
+        frame.frame.control = 0x42;
+        assert_eq!(frame.kiss_generic_payload(), None);
+        frame.frame.control = 0x40;
+        frame.frame.payload[18] &= 0xf0;
+        assert_eq!(frame.kiss_generic_payload(), None);
+    }
 
     #[test]
     fn streaming_frames_keep_absolute_positions_across_chunk_boundaries() {

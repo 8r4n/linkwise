@@ -182,7 +182,7 @@ fn bandpass(audio: &[f32], planner: &mut FftPlanner<f32>) -> Vec<f32> {
 
 // Translate the analytic signal so both stock sub-bands move by the
 // same number of Hz without creating a mirror carrier.
-fn translate(audio: &[f32], hz: f32, planner: &mut FftPlanner<f32>) -> Vec<f32> {
+pub(super) fn translate(audio: &[f32], hz: f32, planner: &mut FftPlanner<f32>) -> Vec<f32> {
     let size = audio.len().next_power_of_two();
     let mut spectrum = vec![Complex32::default(); size];
     for (bin, &sample) in spectrum.iter_mut().zip(audio) {
