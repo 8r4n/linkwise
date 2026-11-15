@@ -9,6 +9,9 @@ use super::{
 
 pub(crate) mod scan;
 
+#[cfg(test)]
+mod sensitivity;
+
 pub const SAMPLE_RATE_HZ: u32 = 48_000;
 const LABELS: [usize; 8] = [0, 1, 3, 2, 7, 6, 4, 5];
 

@@ -7,8 +7,10 @@ from collections import deque
 from contextlib import ExitStack
 import hashlib
 import json
+import math
 from pathlib import Path
 import queue
+import random
 import re
 import socket
 import struct
@@ -109,6 +111,8 @@ class Trial:
         self.tearing_down = False
         self.hf_workers = {}
         self.expected_streams = None
+        self.awgn_rng = random.Random(args.stock_awgn_seed)
+        self.awgn_records = 0
 
     def log(self, *items):
         with self.log_lock:
@@ -155,6 +159,27 @@ class Trial:
         self.log(name, "burst", index, len(pcm) // 4)
 
     def impair(self, pcm, role):
+        if self.args.stock_awgn_db is not None and role == (self.args.case == "linkwise-caller"):
+            audio = array.array("f", pcm)
+            active = [
+                sample
+                for start in range(0, len(audio), PCM_WINDOW)
+                if (window := audio[start:start + PCM_WINDOW])
+                and sum(sample * sample for sample in window) >= 0.0001 * len(window)
+                for sample in window
+            ]
+            if active:
+                rms = math.sqrt(sum(sample * sample for sample in active) / len(active))
+                sigma = rms * math.sqrt(SAMPLE_RATE / 6000) * 10 ** (-self.args.stock_awgn_db / 20)
+                gain = self.args.stock_awgn_gain
+                noisy = array.array("f", (gain * (sample + self.awgn_rng.gauss(0, sigma)) for sample in audio))
+                if any(abs(sample) > 1.0 for sample in noisy):
+                    raise BenchFault("AWGN exceeds the PCM range; reduce --stock-awgn-gain")
+                pcm = noisy.tobytes()
+                (self.args.output / f"stock-awgn-{self.awgn_records:02}.f32").write_bytes(pcm)
+                self.awgn_records += 1
+                self.log("stock AWGN", role, len(audio),
+                         f"signal_rms={gain * rms:.5f}", f"noise_sigma={gain * sigma:.5f}")
         if role not in self.hf_workers:
             return pcm
         process = self.hf_workers[role]
@@ -551,6 +576,11 @@ def main():
     parser.add_argument("--verify-reconnect", action="store_true", help="require a fresh exact transfer on the same host sockets")
     parser.add_argument("--late-caller-write-delay", type=float, help="send a two-byte caller continuation after BUFFER 0, or before the final ACK with -1")
     impairment = parser.add_mutually_exclusive_group()
+    impairment.add_argument("--stock-awgn-db", type=float,
+                            help="add AWGN to each stock-to-Linkwise PCM record, referenced to 3 kHz")
+    parser.add_argument("--stock-awgn-seed", type=int, default=1)
+    parser.add_argument("--stock-awgn-gain", type=float, default=1.0,
+                        help="scale the stock signal and its noise together before float PCM ingress")
     impairment.add_argument("--replace-burst", nargs=2, type=Path, metavar=("ORIGINAL_F32", "REPLACEMENT_WAV"))
     impairment.add_argument("--corrupt-stock-first", type=Path, metavar="REPLACEMENT_WAV")
     impairment.add_argument("--corrupt-stock-after-prefix", type=Path, metavar="REPLACEMENT_WAV")
@@ -562,6 +592,12 @@ def main():
     parser.add_argument("--hf-snr", type=int, choices=HF_PROFILES)
     parser.add_argument("--hf-worker", type=Path, help="GNU Radio framed-PCM worker script")
     args = parser.parse_args()
+    if args.stock_awgn_db is not None and (
+        args.case not in ("linkwise-caller", "linkwise-responder")
+        or args.bandwidth != 500 or args.hf_snr or not -30 <= args.stock_awgn_db <= 60
+        or not 0 < args.stock_awgn_gain <= 1
+    ):
+        parser.error("--stock-awgn-db requires a mixed BW500 run, -30 to 60 dB, gain in (0, 1], and no HF worker")
     if args.hf_snr and (args.bandwidth != 500 or not args.hf_worker or not args.hf_worker.is_file()):
         parser.error("--hf-snr requires BW500 and an existing --hf-worker script")
     if args.pace_virtual and args.case != "linkwise":
@@ -629,6 +665,9 @@ def main():
     manifest = {
         "case": args.case,
         "hf_snr_db": args.hf_snr,
+        "stock_awgn_db_3khz": args.stock_awgn_db,
+        "stock_awgn_gain": args.stock_awgn_gain if args.stock_awgn_db is not None else None,
+        "stock_awgn_seed": args.stock_awgn_seed if args.stock_awgn_db is not None else None,
         "hf_delay_spread_echo_seed": HF_PROFILES.get(args.hf_snr),
         "hf_worker_sha256": file_sha256(args.hf_worker) if args.hf_worker else None,
         "pace_virtual": args.pace_virtual,
@@ -674,6 +713,7 @@ def main():
             for role in ("caller", "responder")
             if (path := args.output / f"{role}-stream.f32").exists()
         }
+        manifest["stock_awgn_records"] = trial.awgn_records
         manifest["fault_injected"] = trial.fault_injected
         manifest["rate_reply_injected"] = trial.rate_reply_injected
         manifest["disconnect_confirmed"] = trial.disconnected

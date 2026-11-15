@@ -179,16 +179,7 @@ impl Waveform {
         {
             return None;
         }
-        let mixed: [Vec<Cell>; 2] = [1350.0, 1650.0].map(|frequency| {
-            audio
-                .iter()
-                .enumerate()
-                .map(|(n, &sample)| {
-                    let (sin, cos) = (TAU * frequency * n as f64 / 48_000.0).sin_cos();
-                    (f64::from(sample) * cos, -f64::from(sample) * sin)
-                })
-                .collect()
-        });
+        let mixed = Self::mix(audio);
         let required = (COLUMNS - 1) * HOP + HOP + 1;
         let last = audio
             .len()
@@ -208,6 +199,24 @@ impl Waveform {
         if score < 0.65 {
             return None;
         }
+        self.decode_aligned(&mixed, start)
+    }
+
+    pub(super) fn mix(audio: &[f32]) -> [Vec<Cell>; 2] {
+        [1350.0, 1650.0].map(|frequency| {
+            audio
+                .iter()
+                .enumerate()
+                .map(|(n, &sample)| {
+                    let (sin, cos) = (TAU * frequency * n as f64 / 48_000.0).sin_cos();
+                    (f64::from(sample) * cos, -f64::from(sample) * sin)
+                })
+                .collect()
+        })
+    }
+
+    pub(super) fn decode_aligned(&self, mixed: &[Vec<Cell>; 2], start: usize) -> Option<Decoded> {
+        let required = (COLUMNS - 1) * HOP + HOP + 1;
         let mut cells = [0.0; bw500_level4::CODED_CELLS];
         let mut index = 0;
         for (band, input) in mixed.iter().enumerate() {

@@ -235,3 +235,101 @@ hash, per-trial audio and transcripts, fixture inputs, exact received
 bytes, and an independently checked summary. The virtual wide suite
 and captured BW2750 NAK replay also passed. This sign-off covers
 radio-free DATA recovery for these role and bandwidth combinations.
+
+## BW500 receiver sensitivity experiment
+
+This experiment replays stock 48 kHz WAV bursts into Linkwise's bench
+acquisition and decoders. Use a tab-separated manifest with two columns, no
+header, and one row per fixture. The first column is one of `data1`, `data2`,
+`data3`, `data4`, `setup`, `ack`, `request`, or `response`. The second is the
+absolute WAV path. Use connected ACKs and requests keyed to W1AW, and
+responses keyed to KN6MQS. Use the stock matrix
+measurement profile, `harness/profile.json`. Keep the fixture order for
+reproducible noise seeds. The study's capture manifest records the original
+relative paths and SHA-256 values.
+
+```sh
+export BW500_STUDY_INPUT=/path/to/input.tsv
+export BW500_STUDY_PROFILE=/path/to/harness/profile.json
+export BW500_STUDY_TRIALS=32
+export BW500_STUDY_CSV=/path/to/awgn-trials.csv
+cargo test --release --locked --manifest-path rust/Cargo.toml --lib \
+  stock_awgn_sweep -- --ignored --nocapture
+python3 tools/plot-bw500-sensitivity.py "$BW500_STUDY_CSV" /path/to/plots --title AWGN
+```
+
+The default grid is −16 through +44 dB in 4 dB steps. The receiver input is
+float PCM and excludes clipping. SNR is the active captured burst power
+relative to the equivalent AWGN power in 3 kHz. Noise runs through the
+lead and trailing guards. For a fixed 2 ms echo at −6.02 dB relative to the
+direct path, set `BW500_STUDY_ECHO_SAMPLES=96`. For separate checks set
+`BW500_STUDY_GAIN=0.1` for a 20 dB reduction in absolute input level,
+`BW500_STUDY_OFFSET_HZ=15` for a carrier offset, or
+`BW500_STUDY_INTERFERER_DB=-6` for a continuous 1500 Hz tone at −6 dB
+relative to the signal power. Use `BW500_STUDY_MIN_SNR`,
+`BW500_STUDY_MAX_SNR`, and `BW500_STUDY_STEP` to adjust the grid.
+
+The CSV distinguishes energy gate starts within 20 ms of the clean start,
+CRC-valid exact DATA/setup, and exact keyed ACK matches. Start detection
+and noise-only trigger rates are recorded at each gate's own operating
+point. The clean-window diagnostic supplies burst boundaries. The aligned
+diagnostic also skips DATA/setup pilot acceptance and supplies the clean
+symbol epoch. With an injected frequency offset, it removes that known
+offset. Keyed controls continue to use their own search inside the supplied window.
+The candidate is an offline FFT bandpass plus a threshold estimated from a
+known quiet guard, with a separate path feeding the filtered PCM to the
+demodulator. The production modem continues to use its current receiver.
+
+For the ACK echo diagnostic, run `stock_ack_echo_diagnostic` instead of
+`stock_awgn_sweep` with a distinct output CSV. It reports the mean keyed
+pair power and weakest tone at the best timing for the correct key, two
+wrong keys, and noise-only controls. Given the clean search window, these
+scores can distinguish a weak-tone failure from a missed burst.
+
+For a live mixed BW500 probe, use `--stock-awgn-db 0 --stock-awgn-seed 4001 --stock-awgn-gain 0.2`
+with the existing virtual-audio runner and a calibrated streaming bridge.
+The runner applies AWGN only to finite stock-to-Linkwise ingress records,
+including their existing guards. It derives noise from active window RMS
+and logs RMS, noise scale, and the number of records processed. A common
+gain preserves SNR and keeps the sum within the daemon's PCM range. This is a
+directional session probe. A session curve requires repeated trials of
+both directions at each SNR and a stock-to-stock control on the same route.
+
+### Measured BW500 sensitivity on main at ff66de6
+
+The first sweep used 16 stock captures across setup, connected ACK and
+DATA levels 1–4. At 0 dB in AWGN, the current bench path recovered
+0/512 trials. Band-limiting the gate and decoder input recovered 500/512.
+With the clean symbol epoch and pilot acceptance bypassed, DATA levels 1
+and 2 recovered 64/64 each at −12 dB. The fixed gate depends on absolute
+input level. With the same 24 dB SNR and 20 dB lower input gain the
+baseline recovered 128/128, versus 0/512 at the original gain and 24 dB.
+The reduced-gain sweep used a subset of the original seeds.
+
+An additional six stock request/response captures were swept at 20% gain.
+At 0 dB the baseline and supplied-clean-window paths each recovered 0/96.
+The band-limited detector and demodulator path recovered 94/96. The
+prototype also reduced level-3 recovery at +44 dB, from 96/96 to 63/96,
+so it has a clean-channel regression to resolve before deployment.
+
+A fixed 2 ms echo reduced connected ACK recovery to 0/48 at +44 dB in the
+standard and filtered paths. A separate clean-window diagnostic kept
+the aggregate tone threshold at 0.8 and compared weakest-tone
+thresholds. At +8 dB under this echo, the filtered matcher recovered
+0/48 at the current 0.15 requirement and 48/48 at 0.08. This test used
+three captures and checked two wrong keys per signal and one noise-only
+control. It did not qualify the weaker threshold for live use. The
++15 Hz carrier-offset probe also eliminated setup and level-4 recovery
+at +40 dB. The analysis path supplied the inverse offset and clean
+alignment and recovered all 24 setup and all 24 level-4 trials.
+
+On the single-VM mixed bench, shared WASAPI playback and a 250 ms
+prebuffer enabled exact 203 + 6 + 203 byte exchanges with both Linkwise
+roles, including verified disconnect reports from both peers. One
+Linkwise-responder run each at +28 dB (20% gain) and +44 dB (original
+gain) also passed with AWGN applied to stock-to-Linkwise ingress only.
+At 0 dB and 20% gain, one run in each role timed out during connection
+after successfully injecting noise. These directional probes do not
+estimate a session-success threshold. Current-bridge stock-to-stock,
+two impaired directions, repeated trials at each SNR, and live
+qualification of the receiver prototype remain open.
