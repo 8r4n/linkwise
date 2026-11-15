@@ -8,6 +8,7 @@
 \usepackage{enumitem}
 \usepackage{xcolor}
 \usepackage{xurl}
+\usepackage{pdfpages}
 \usepackage{hyperref}
 \usepackage{listings}
 \usepackage{fancyhdr}
@@ -2970,6 +2971,66 @@ so the survey cannot establish a frame recovery rate.
 Original WAVs, model inputs and outputs, receiver logs, replay code,
 and frame verification evidence are under
 \texttt{Linkwise VOACAP} in \pathtext{~/Documents/Codex}.
+
+\section{2026-11-15 -- Main build and stock VARA retest}
+
+After the merge of PR 15, the macOS ARM64 release binaries were rebuilt
+from \texttt{e506089} with the lockfile and native audio feature. Cargo
+removed the prior debug and release artifacts before the build. The
+release test suite reported 97 passes and two ignored fixture sweeps.
+The run directory records the SHA-256 of the rebuilt binaries.
+
+\begin{center}
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+Linkwise role & Exchanges (bytes) & Time (s) & Outcome \\
+\midrule
+Caller & $13+6+13$ & 51.584 & Exact, both disconnected \\
+Responder & $13+6+13$ & 52.458 & Exact, both disconnected \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Both BW500 exchanges used stock VARA HF 4.9.1 over the isolated Windows
+virtual audio bench. Expected and received stream hashes agreed in
+each direction. These runs qualify the tested short transfers and
+teardown on this route. No RF was transmitted and no impairment was
+injected.
+
+Four receive-only recordings supplied 16.0 receiver-minutes on VarAC
+calling frequencies. The rolling decoder recovered two CRC-valid
+level-2 frames at the Ontario receiver on 7105.0 kHz USB. Stock VARA
+replayed both clips and returned the same 20-byte KISS payloads as
+Linkwise after seven-bit unpacking. SHA-256 verified the guest WAVs.
+Eight preselected windows yielded no payload on either modem. Stock
+reported level-2 reception in one of those windows. Both modems
+recovered the archived KISS control. These counts do not establish
+a relative sensitivity threshold.
+
+The two recovered payloads contained a locator and a callsign-shaped
+suffix, consistent with VarAC advanced beacons. The separate chat
+search recorded 7.5 receiver-minutes on 7105.750, 14105.750, and
+14108.750 kHz USB. The published net slot was sampled outside the
+scheduled net window. Linkwise found no CRC-valid frame in those
+recordings. Stock produced no payload in six preselected chat-slot
+windows. No conversational message was identified.
+
+The run logs, comparison manifest, and original WAV files are in
+\texttt{Linkwise VOACAP} under \pathtext{~/Documents/Codex}.
+The run directory is
+\pathtext{2026-11-15-main-retest.sajUbP}.
+
+The following two landscape A4 plates document the matched replay.
+The map shows WGS84 range rings centered on the Kitchener KiwiSDR,
+with approximate radii of 947 km to the center of grid \texttt{EN40KJ}
+(\texttt{KW9Q}) and 718 km to the center of grid \texttt{EM78EG}
+(\texttt{N9PMI}). The second plate shows the wire bytes, CRC coverage,
+and the seven-bit groups with their hexadecimal and ASCII translations.
+The decoded strings are \texttt{21OEN40KJKW9Q} plus seven spaces and
+\texttt{21OEM78EGN9PMI} plus six spaces. The variable trailer byte at
+offset 20 remains unidentified.
+
+\includepdf[pages={1,2},fitpaper=true,pagecommand={\thispagestyle{empty}}]{figures/kiwisdr-beacon-map-dsp.pdf}
 
 \section{Next work}
 
