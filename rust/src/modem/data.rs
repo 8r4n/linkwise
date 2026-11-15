@@ -323,6 +323,13 @@ impl TransmitPlan {
             .find_map(|length| Self::new(length).map(|plan| (length, plan)))
     }
 
+    /// Select the largest qualified level-3 delivery from a nonempty stream.
+    pub fn level3_prefix(length: usize) -> Option<(usize, Self)> {
+        (1..=length.min(MAX_PLANNED_BYTES))
+            .rev()
+            .find_map(|length| Self::level3_retry(length).map(|plan| (length, plan)))
+    }
+
     /// Repacketize an entirely unacknowledged delivery after a rate-4 NAK.
     /// The five-full-frame layout was observed on stock VARA, including its
     /// repeated first field and final full frame that retains level 3.

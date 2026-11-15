@@ -138,8 +138,13 @@ impl Mode {
     }
 
     fn tones(&self) -> Vec<Tone> {
+        self.tones_at(0.0)
+    }
+
+    fn tones_at(&self, hz: f64) -> Vec<Tone> {
+        let bins = hz * self.symbol as f64 / f64::from(SAMPLE_RATE_HZ);
         (self.first_bin..self.first_bin + self.span)
-            .map(|bin| Tone::new(bin, self.symbol))
+            .map(|bin| Tone::at_bin(bin as f64 + bins, self.symbol))
             .collect()
     }
 }
@@ -199,14 +204,45 @@ pub fn synthesize(level: Level, frames: &[Frame]) -> Option<Vec<f32>> {
 }
 
 fn reference_score(mode: &Mode, tones: &[Tone], samples: &[f32]) -> f64 {
-    let mut score = 0.0;
-    for (column, chunk) in mode.columns.iter().zip(samples.chunks_exact(mode.symbol)) {
-        if let Column::Reference(bin) = column {
+    pilot_score(mode, tones, samples, 1)
+}
+
+fn pilot_score(mode: &Mode, tones: &[Tone], samples: &[f32], stride: usize) -> f64 {
+    mode.columns
+        .iter()
+        .zip(samples.chunks_exact(mode.symbol))
+        .filter_map(|(column, chunk)| match column {
+            Column::Reference(bin) => Some((*bin, chunk)),
+            Column::Data(_) => None,
+        })
+        .step_by(stride)
+        .map(|(bin, chunk)| {
             let norm = energy(chunk) * mode.symbol as f64 / 2.0;
-            score += tones[*bin].power(chunk) / norm.max(f64::EPSILON);
-        }
-    }
-    score / 24.0
+            tones[bin].power(chunk) / norm.max(f64::EPSILON)
+        })
+        .sum::<f64>()
+        / 24_usize.div_ceil(stride) as f64
+}
+
+fn shifted_tones(mode: &Mode, audio: &[f32], start: usize) -> Option<Vec<Tone>> {
+    let nominal = start + mode.lead * mode.symbol;
+    let range = nominal.saturating_sub(mode.symbol)..=nominal + mode.symbol;
+    [-8.0, 8.0, -15.0, 15.0, -22.0, 22.0]
+        .into_iter()
+        .map(|hz| {
+            let tones = mode.tones_at(hz);
+            let score = range
+                .clone()
+                .step_by(256)
+                .filter_map(|offset| audio.get(offset..offset + mode.samples_per_frame()))
+                .map(|samples| pilot_score(mode, &tones, samples, 3))
+                .max_by(f64::total_cmp)
+                .unwrap_or(0.0);
+            (tones, score)
+        })
+        .filter(|(_, score)| *score >= 0.50)
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(tones, _)| tones)
 }
 
 fn acquire(mode: &Mode, tones: &[Tone], audio: &[f32], burst: &Range<usize>) -> Option<usize> {
@@ -264,33 +300,42 @@ pub fn decode_burst(audio: &[f32], burst: Range<usize>) -> Vec<DecodedFrame> {
     let Some(samples) = audio.get(burst.clone()) else {
         return Vec::new();
     };
-    for level in [Level::One, Level::Two, Level::Three] {
-        let mode = Mode::new(level);
+    let modes = [Level::One, Level::Two, Level::Three]
+        .map(Mode::new)
+        .into_iter()
         // Allow one detector window of edge error at each end.
-        if samples.len() + 960 < mode.samples_per_frame() {
-            continue;
-        }
-        let tones = mode.tones();
-        let Some(start) = acquire(&mode, &tones, audio, &burst) else {
-            continue;
-        };
-        let end = burst.end.saturating_add(480).min(audio.len());
-        let mut decoded = Vec::new();
-        for offset in (start..end).step_by(mode.samples_per_frame()) {
-            let frame_end = offset + mode.samples_per_frame();
-            if frame_end > end {
-                break;
+        .filter(|mode| samples.len() + 960 >= mode.samples_per_frame());
+    let modes: Vec<_> = modes.collect();
+    for shifted in [false, true] {
+        for mode in &modes {
+            let tones = if shifted {
+                let Some(tones) = shifted_tones(mode, audio, burst.start) else {
+                    continue;
+                };
+                tones
+            } else {
+                mode.tones()
+            };
+            let Some(start) = acquire(mode, &tones, audio, &burst) else {
+                continue;
+            };
+            let end = burst.end.saturating_add(480).min(audio.len());
+            let decoded: Vec<_> = (start..end)
+                .step_by(mode.samples_per_frame())
+                .map(|offset| offset..offset + mode.samples_per_frame())
+                .take_while(|frame| frame.end <= end)
+                .filter_map(|samples| {
+                    let frame = decode_frame(mode, &tones, &audio[samples.clone()])?;
+                    Some(DecodedFrame {
+                        level: mode.level,
+                        samples,
+                        frame,
+                    })
+                })
+                .collect();
+            if !decoded.is_empty() {
+                return decoded;
             }
-            if let Some(frame) = decode_frame(&mode, &tones, &audio[offset..frame_end]) {
-                decoded.push(DecodedFrame {
-                    level: mode.level,
-                    samples: offset..frame_end,
-                    frame,
-                });
-            }
-        }
-        if !decoded.is_empty() {
-            return decoded;
         }
     }
     Vec::new()

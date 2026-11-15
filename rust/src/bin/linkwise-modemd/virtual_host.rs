@@ -13,7 +13,7 @@ use linkwise::{
         data,
         handshake::{Established, Event},
         setup::{LinkSetup, Profile},
-        waveform::BurstDetector,
+        waveform::{BurstDetector, bw500 as acquisition},
         wide_level4,
     },
 };
@@ -189,6 +189,7 @@ struct Engine<'a> {
     turn_retries: u8,
     initial_poll: bool,
     first_responder_poll: bool,
+    first_responder_level3: bool,
     closed_at_level3: bool,
     rejected_over: bool,
     receive_bytes: Vec<u8>,
@@ -224,6 +225,7 @@ impl Engine<'_> {
         self.turn_retries = 0;
         self.initial_poll = false;
         self.first_responder_poll = false;
+        self.first_responder_level3 = false;
         self.closed_at_level3 = false;
         self.rejected_over = false;
         self.receive_bytes.clear();
@@ -313,6 +315,8 @@ impl Engine<'_> {
                             waveform.responder_lead(&session.caller)
                         };
                     }
+                    self.first_responder_level3 =
+                        session.called == self.local && session.responder_first_level == 3;
                     self.session = Some(session);
                     if caller {
                         self.transition(Phase::ConfirmAck);
@@ -479,7 +483,9 @@ impl Engine<'_> {
         } else {
             // Stock BW500 retains level 3 for a short continuation
             // after a level-3 close, even when that close advertises level 4.
-            let prefix = if self.closed_at_level3 && self.pending.len() <= 31 {
+            let prefix = if self.first_responder_level3 {
+                data::TransmitPlan::level3_prefix(self.pending.len())
+            } else if self.closed_at_level3 && self.pending.len() <= 31 {
                 data::TransmitPlan::level3_retry(self.pending.len())
                     .map(|plan| (self.pending.len(), plan))
             } else {
@@ -489,6 +495,7 @@ impl Engine<'_> {
                 prefix.ok_or_else(|| io::Error::other("could not plan nonempty BW500 delivery"))?;
             self.delivery_len = length;
             self.plan = Some(plan);
+            self.first_responder_level3 = false;
         }
         self.send_index = 0;
         self.intermediate_transmissions = 0;
@@ -686,10 +693,16 @@ impl Engine<'_> {
     }
 
     async fn audio(&mut self, samples: &[f32], cable: &mut Audio) -> io::Result<()> {
-        let mut detector = BurstDetector::new(48_000);
-        let mut candidates = Vec::new();
-        detector.push(samples, |range| candidates.push(range));
-        detector.finish(|range| candidates.push(range));
+        let (audio, candidates) = if self.mode.bandwidth() == Hz500 {
+            acquisition::prepare(samples)
+        } else {
+            let mut detector = BurstDetector::new(48_000);
+            let mut candidates = Vec::new();
+            detector.push(samples, |range| candidates.push(range));
+            detector.finish(|range| candidates.push(range));
+            (std::borrow::Cow::Borrowed(samples), candidates)
+        };
+        let samples = audio.as_ref();
         for range in candidates {
             let start = range.start as usize;
             if self.phase == Phase::Handshake {
@@ -1759,6 +1772,7 @@ async fn serve_audio(
         turn_retries: 0,
         initial_poll: false,
         first_responder_poll: false,
+        first_responder_level3: false,
         closed_at_level3: false,
         rejected_over: false,
         receive_bytes: Vec::new(),
@@ -1820,7 +1834,7 @@ pub(super) async fn serve_native(
         let audio = tokio::select! {
             biased;
             _ = stop.wait_for(|stopping| *stopping) => return Ok(()),
-            result = super::station::NativeAudio::open(&station.input, &station.output) => result,
+            result = super::station::NativeAudio::open(&station.input, &station.output, bandwidth == 500) => result,
         };
         match audio {
             Ok(audio) => {

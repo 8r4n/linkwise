@@ -333,3 +333,72 @@ after successfully injecting noise. These directional probes do not
 estimate a session-success threshold. Current-bridge stock-to-stock,
 two impaired directions, repeated trials at each SNR, and live
 qualification of the receiver prototype remain open.
+
+### Causal BW500 receiver follow-up
+
+The two-way daemon now detects BW500 bursts in continuous native capture
+and in framed PCM. A causal 1110–1890 Hz FIR provides the band power used
+for acquisition. Comparing that power with simultaneous out-of-band power
+lets the gate close in broadband noise without a pre-calibrated noise
+floor. Guarded records with broadband noise also feed the filtered PCM to
+the decoders. Quiet records keep the original timing and raw PCM path,
+which preserves the level-3 behavior seen at high SNR. Persistent
+in-band interference requires separate treatment.
+
+Level-4 setup and DATA use the pilot phase to estimate residual carrier
+offset and rotate the differential soft decisions on retry. Levels 1–3
+and keyed controls try a bounded offset search and still require the
+complete CRC or keyed sequence. The BW500 setup ACK permits a weaker
+individual tone while requiring aggregate energy across all 22 tones.
+The live bench exposed CRC-valid stock setup frames with the `0x42`
+control and level-4 or level-3 requests. The parser accepts that BW500
+form with the existing caller checks. For an incoming level-3 request,
+the handshake records the requested level and the responder starts DATA
+at level 3. The receive matcher recognizes the additional stock
+response, confirmation and poll sequences captured at low SNR. Each
+variant must match the entire callsign-keyed sequence.
+
+The engineering replay used the same archived captures and SNR
+definition as the initial experiment.
+
+| Condition | Exact recoveries | Noise-only decodes |
+| --- | ---: | ---: |
+| AWGN at 0 dB | 176/176 | 0/176 |
+| AWGN at +44 dB | 176/176, including 24/24 level-3 DATA | 0/176 |
+| AWGN at 0 and +44 dB, simulated native capture chunks | 88/88 per point | — |
+| +15 Hz carrier offset at +8 and +40 dB | 128/128 per point | 0/128 per point |
+| 2 ms echo on the setup ACK at +8 and +44 dB | 48/48 per point | 0/48 per point |
+
+The latest sweep emits `streaming_decode` for the modem PCM ingress and
+`native_chunks_decode` for the simulated capture and extraction path.
+The other replay paths share the current decoders. Use the CSVs retained
+from the first study for historical comparisons against main.
+
+To impair both directions in a live mixed run, set both
+`--stock-awgn-db` and `--linkwise-awgn-db`, and retain the seed, gain,
+record counts, exact payload hashes and both disconnect reports. On
+Linkwise transmit, SNR is calibrated in the scheduled PCM before the
+Windows playback bridge. After the bridge it can change with the Windows
+audio path. Noise is applied to finite ingress or playback records.
+
+A single pass gives an observed working point for that build, route,
+payload and seed. A conservative qualification criterion is a one-sided
+95% exact binomial lower bound of at least 95% success in each role.
+Even with no failures that requires 59 independent trials per role at
+one SNR. Use independent seeds and a stable calibrated bridge, and
+report any bridge faults separately. A second stock endpoint is needed
+to measure a stock-to-stock control on this route.
+
+On the Windows VARA HF 4.9.1 bench, the final receiver completed one
+short 13 + 6 + 13 byte session per role at +4 dB with noise injected in
+both directions, with identical payload hashes and both disconnect
+reports. The build preceding the short-control additions passed the
+203 + 6 + 203 byte test at +4 dB in each role. Earlier short probes also
+passed in both roles at +8 dB. Some intermediate +4 dB trials failed
+during connection. At 0 dB in both directions, the final Linkwise
+responder and stock caller both connected and Linkwise received the
+first 13 bytes exactly. The six-byte reverse delivery timed out.
+Stock-to-Linkwise-only 0 dB runs on an earlier candidate passed in both
+roles. All of these tests use a 3 kHz noise reference. The bilateral
+tests used a common PCM gain of 0.2. The 95% session threshold remains
+unmeasured.

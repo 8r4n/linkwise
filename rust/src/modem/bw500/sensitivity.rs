@@ -258,7 +258,7 @@ fn stock_awgn_sweep() {
         .unwrap_or("24".into())
         .parse()
         .unwrap();
-    writeln!(csv, "kind,fixture,snr_db,seed,baseline_start,baseline_stream_start,baseline_decode,band_start,band_decode,clean_window_decode,aligned_decode,baseline_noise_only,band_noise_only,baseline_noise_decode,band_noise_decode,filtered_decode,filtered_noise_decode").unwrap();
+    writeln!(csv, "kind,fixture,snr_db,seed,baseline_start,baseline_stream_start,baseline_decode,band_start,band_decode,clean_window_decode,aligned_decode,baseline_noise_only,band_noise_only,baseline_noise_decode,band_noise_decode,filtered_decode,filtered_noise_decode,streaming_decode,streaming_noise_decode,native_chunks_decode").unwrap();
     let gain: f32 = env::var("BW500_STUDY_GAIN").map_or(1.0, |value| value.parse().unwrap());
     let delay: usize =
         env::var("BW500_STUDY_ECHO_SAMPLES").map_or(0, |value| value.parse().unwrap());
@@ -378,9 +378,29 @@ fn stock_awgn_sweep() {
                 let base_streaming = candidates(&impaired, false);
                 let noise_base = candidates(&noise, true);
                 let flag = u8::from;
+                let (streaming, ranges) = crate::modem::waveform::bw500::prepare(&impaired);
+                let (streaming_noise, noise_ranges) =
+                    crate::modem::waveform::bw500::prepare(&noise);
+                let mut native = crate::modem::waveform::bw500::Acquisition::default();
+                let mut native_ranges = Vec::new();
+                for chunk in impaired.chunks(997) {
+                    native.push(chunk, |r| native_ranges.push(r));
+                }
+                let native_pass = native_ranges.into_iter().any(|range| {
+                    let start = (range.start as usize).saturating_sub(RATE / 10);
+                    let end = range.end as usize + RATE / 10;
+                    let Some(record) = impaired.get(start..end) else {
+                        return false;
+                    };
+                    let (audio, ranges) = crate::modem::waveform::bw500::prepare(record);
+                    ranges.into_iter().any(|r| {
+                        decode(kind, &waveform, &audio, r.start as usize..r.end as usize).as_ref()
+                            == Some(&expected)
+                    })
+                });
                 writeln!(
                     csv,
-                    "{label},{name},{snr},{seed},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+                    "{label},{name},{snr},{seed},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
                     flag(detect(&base)),
                     flag(detect(&base_streaming)),
                     flag(path_test(&impaired, &base)),
@@ -412,6 +432,26 @@ fn stock_awgn_sweep() {
                     ),
                     flag(filtered_pass),
                     flag(filtered_false),
+                    flag(ranges.into_iter().any(|r| {
+                        decode(
+                            kind,
+                            &waveform,
+                            &streaming,
+                            r.start as usize..r.end as usize,
+                        )
+                        .as_ref()
+                            == Some(&expected)
+                    })),
+                    flag(noise_ranges.into_iter().any(|r| {
+                        decode(
+                            kind,
+                            &waveform,
+                            &streaming_noise,
+                            r.start as usize..r.end as usize,
+                        )
+                        .is_some()
+                    })),
+                    flag(native_pass),
                 )
                 .unwrap();
             }

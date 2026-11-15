@@ -23,7 +23,8 @@ SERIES = {
     "band_noise_only": ("Band-limited gate on noise only", "#14766c", "x"),
     "baseline_decode": ("Current gate + decoder", "#242222", "o"),
     "band_decode": ("Band-limited gate only", "#14766c", "s"),
-    "filtered_decode": ("Band-limited gate + decoder input", "#bc4b18", "o"),
+    "filtered_decode": ("Offline band-limited gate + decoder", "#bc4b18", "o"),
+    "streaming_decode": ("Causal BW500 receiver", "#166742", "P"),
     "clean_window_decode": ("Clean candidate boundaries supplied", "#665297", "^"),
     "aligned_decode": ("Clean alignment supplied", "#196eb2", "D"),
 }
@@ -102,12 +103,13 @@ def main():
     for filename, keys, subtitle in (
         ("detection", ("baseline_start", "band_start", "baseline_noise_only", "band_noise_only"),
          "Burst starts and noise-only triggers"),
-        ("decode", ("baseline_decode", "band_decode", "filtered_decode"),
-         "Exact frame or keyed ACK recovery"),
+        ("decode", ("baseline_decode", "band_decode", "filtered_decode", "streaming_decode"),
+         "Exact frame or keyed control recovery"),
         ("alignment", ("baseline_decode", "clean_window_decode", "aligned_decode"),
          "Effect of supplying clean timing"),
     ):
-        plot(rows, keys, f"{args.title} · {subtitle}", args.output / f"{filename}.png")
+        available = tuple(key for key in keys if key in next(iter(rows.values())))
+        plot(rows, available, f"{args.title} · {subtitle}", args.output / f"{filename}.png")
 
 
 if __name__ == "__main__":

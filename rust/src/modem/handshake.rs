@@ -1,4 +1,4 @@
-//! Level-4 link establishment at the boundary between validated bursts and audio.
+//! Link establishment at the boundary between validated bursts and audio.
 //!
 //! The protocol order follows §5.3 of Saul St John's VARA HF notes. The
 //! runtime owns waveform matching, turn-around, and actual playback. This
@@ -84,6 +84,7 @@ enum State {
 struct Session {
     caller: Option<String>,
     called: String,
+    responder_first_level: u8,
 }
 
 /// Reusable controller for one pending establishment. Successful completion
@@ -91,6 +92,7 @@ struct Session {
 /// the radio before supplying further events.
 pub struct Handshake {
     local: LinkSetup,
+    profile: Profile,
     listen: bool,
     timeout: Duration,
     deadline: Option<Duration>,
@@ -125,13 +127,23 @@ impl Handshake {
     /// The timeout is a local watchdog for each transmit or receive phase.
     /// It must cover the longest burst and turnaround on the selected bench.
     pub fn new(local: LinkSetup, listen: bool, timeout: Duration) -> Option<Self> {
+        Self::new_with_profile(local, listen, timeout, Profile::Bw500)
+    }
+
+    pub(super) fn new_with_profile(
+        local: LinkSetup,
+        listen: bool,
+        timeout: Duration,
+        profile: Profile,
+    ) -> Option<Self> {
         if timeout.is_zero() || local.requested_level != LEVEL {
             return None;
         }
-        let encoded = local.encode(Profile::Bw500)?;
-        let local = LinkSetup::decode(Profile::Bw500, &encoded)?;
+        let encoded = local.encode(profile)?;
+        let local = LinkSetup::decode(profile, &encoded)?;
         Some(Self {
             local,
+            profile,
             listen,
             timeout,
             deadline: None,
@@ -173,6 +185,7 @@ impl Handshake {
                 self.session = Some(Session {
                     caller: Some(self.local.caller.clone()),
                     called: called.clone(),
+                    responder_first_level: LEVEL,
                 });
                 Some(self.transmit(
                     now,
@@ -186,6 +199,7 @@ impl Handshake {
                 self.session = Some(Session {
                     caller: None,
                     called: called.clone(),
+                    responder_first_level: LEVEL,
                 });
                 Some(self.transmit(
                     now,
@@ -228,10 +242,13 @@ impl Handshake {
                 AfterTransmit::Wait(Wait::ConnectedAck),
             ),
             (Wait::Setup, Burst::Setup(setup))
-                if setup.caller != session.called && setup.requested_level >= LEVEL =>
+                if setup.caller != session.called
+                    && (setup.requested_level >= LEVEL
+                        || self.profile == Profile::Bw500 && setup.requested_level == 3) =>
             {
                 let caller = setup.caller;
                 session.caller = Some(caller.clone());
+                session.responder_first_level = setup.requested_level.min(LEVEL);
                 (
                     Burst::ConnectedAck { caller },
                     AfterTransmit::Wait(Wait::Confirm),
@@ -292,7 +309,7 @@ impl Handshake {
         Action::Established(Established {
             caller: session.caller.expect("setup precedes establishment"),
             called: session.called,
-            responder_first_level: LEVEL,
+            responder_first_level: session.responder_first_level,
         })
     }
 
@@ -336,6 +353,63 @@ mod tests {
             None,
         );
         burst
+    }
+
+    #[test]
+    fn bw500_responder_preserves_the_stock_level_three_request() {
+        for profile in [Profile::Bw500, Profile::Wide] {
+            let mut responder = Handshake::new_with_profile(
+                LinkSetup {
+                    caller: "W1A".into(),
+                    high_speed: false,
+                    requested_level: 4,
+                },
+                true,
+                TIMEOUT,
+                profile,
+            )
+            .unwrap();
+            let now = Duration::ZERO;
+            let response = responder.handle(
+                now,
+                Event::Received(Burst::Request {
+                    called: "W1A".into(),
+                }),
+            );
+            send(&mut responder, response);
+            let ack = responder.handle(
+                now,
+                Event::Received(Burst::Setup(LinkSetup {
+                    caller: "KN6MQS".into(),
+                    high_speed: false,
+                    requested_level: 3,
+                })),
+            );
+            if profile == Profile::Wide {
+                assert_eq!(ack, None);
+                continue;
+            }
+            assert_eq!(
+                send(&mut responder, ack),
+                Burst::ConnectedAck {
+                    caller: "KN6MQS".into()
+                }
+            );
+            assert_eq!(
+                responder.handle(
+                    now,
+                    Event::Received(Burst::Confirm {
+                        called: "W1A".into(),
+                        level: 4
+                    })
+                ),
+                Some(Action::Established(Established {
+                    caller: "KN6MQS".into(),
+                    called: "W1A".into(),
+                    responder_first_level: 3,
+                }))
+            );
+        }
     }
 
     #[test]
