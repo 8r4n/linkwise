@@ -9,6 +9,8 @@ const EDGE: u64 = 240;
 const MIN_BAND_POWER: f64 = 0.000009;
 const MIN_WIDEBAND_POWER: f64 = 0.000025;
 const BAND_TO_OUTSIDE: f64 = 0.065;
+const RECEIVER_SHARE_OF_RAW: f64 = 0.5;
+const BAND_SHARE_OF_RECEIVER: f64 = 0.5;
 
 struct Bandpass {
     taps: [f32; TAPS],
@@ -18,11 +20,17 @@ struct Bandpass {
 
 impl Default for Bandpass {
     fn default() -> Self {
+        Self::new(1110.0, 1890.0)
+    }
+}
+
+impl Bandpass {
+    fn new(low_hz: f64, high_hz: f64) -> Self {
+        let low = low_hz / RATE;
+        let high = high_hz / RATE;
         Self {
             taps: std::array::from_fn(|i| {
                 let n = i as f64 - (TAPS / 2) as f64;
-                let low = 1110.0 / RATE;
-                let high = 1890.0 / RATE;
                 let ideal = if n == 0.0 {
                     2.0 * (high - low)
                 } else {
@@ -35,9 +43,7 @@ impl Default for Bandpass {
             next: 0,
         }
     }
-}
 
-impl Bandpass {
     fn sample(&mut self, sample: f32) -> f32 {
         self.history[self.next] = sample;
         self.next += 1;
@@ -57,18 +63,34 @@ impl Bandpass {
     }
 }
 
-/// Detect sustained energy in the occupied band using the simultaneous
-/// out-of-band energy as a broadband noise estimate. No quiet calibration
-/// interval or future samples are needed.
-#[derive(Default)]
+/// Detect sustained energy concentrated in the occupied band using
+/// simultaneous receiver-passband and broadband energy measurements.
 pub struct Acquisition {
     filter: Bandpass,
+    receiver_filter: Bandpass,
     position: u64,
     count: usize,
     band_energy: f64,
+    receiver_energy: f64,
     raw_energy: f64,
     start: Option<u64>,
     last_active: u64,
+}
+
+impl Default for Acquisition {
+    fn default() -> Self {
+        Self {
+            filter: Bandpass::default(),
+            receiver_filter: Bandpass::new(300.0, 2700.0),
+            position: 0,
+            count: 0,
+            band_energy: 0.0,
+            receiver_energy: 0.0,
+            raw_energy: 0.0,
+            start: None,
+            last_active: 0,
+        }
+    }
 }
 
 impl Acquisition {
@@ -88,6 +110,7 @@ impl Acquisition {
     fn push_sample(&mut self, sample: f32, emit: &mut impl FnMut(Range<u64>)) -> f32 {
         let band = self.filter.sample(sample);
         self.band_energy += f64::from(band).powi(2);
+        self.receiver_energy += f64::from(self.receiver_filter.sample(sample)).powi(2);
         self.raw_energy += f64::from(sample).powi(2);
         self.count += 1;
         self.position += 1;
@@ -105,16 +128,25 @@ impl Acquisition {
     }
 
     fn close(&mut self, emit: &mut impl FnMut(Range<u64>)) {
+        // When most of the energy is already in the receiver passband,
+        // flat receiver noise can clear the broadband gate by itself.
+        let receiver_limited = self.receiver_energy > RECEIVER_SHARE_OF_RAW * self.raw_energy;
+        // Stock control bursts can briefly spread energy beyond the
+        // acquisition band. Bridge those dips in receiver-filtered audio.
+        let quiet_windows = if receiver_limited { 5 } else { 3 };
         let active = self.band_energy >= MIN_BAND_POWER * self.count as f64
+            && (!receiver_limited
+                || self.band_energy > BAND_SHARE_OF_RECEIVER * self.receiver_energy)
             && self.band_energy > BAND_TO_OUTSIDE * (self.raw_energy - self.band_energy);
         if active {
             self.start.get_or_insert(self.position - self.count as u64);
             self.last_active = self.position;
-        } else if self.position - self.last_active >= 3 * WINDOW as u64 {
+        } else if self.position - self.last_active >= quiet_windows * WINDOW as u64 {
             self.emit(emit);
         }
         self.count = 0;
         self.band_energy = 0.0;
+        self.receiver_energy = 0.0;
         self.raw_energy = 0.0;
     }
 
@@ -165,6 +197,46 @@ pub fn prepare(samples: &[f32]) -> (Cow<'_, [f32]>, Vec<Range<u64>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streaming_acquisition_closes_on_receiver_passband_noise() {
+        let burst_start = 12_000;
+        let burst_end = burst_start + 48_000;
+        let mut seed = 283_u32;
+        let white: Vec<_> = (0..burst_end + 12_000)
+            .map(|_| {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (seed as i32) as f32 / i32::MAX as f32
+            })
+            .collect();
+        let noise = Bandpass::new(300.0, 2700.0).filter(&white);
+        let gain = 0.007 / (super::super::energy(&noise) / noise.len() as f64).sqrt();
+        let samples: Vec<_> = noise
+            .into_iter()
+            .enumerate()
+            .map(|(n, noise)| {
+                let tone = |hz: f64| (TAU * hz * n as f64 / RATE).sin();
+                let signal = if (36_000..37_920).contains(&n) {
+                    // A brief energy dip in the occupied band, as in stock
+                    // connection controls.
+                    0.04 * tone(1500.0) + 0.1 * tone(700.0)
+                } else if (burst_start..burst_end).contains(&n) {
+                    0.1 * tone(1500.0)
+                } else {
+                    0.0
+                };
+                (f64::from(noise) * gain + signal) as f32
+            })
+            .collect();
+        let mut detector = Acquisition::default();
+        let mut streaming = Vec::new();
+        for chunk in samples.chunks(997) {
+            detector.push(chunk, |range| streaming.push(range));
+        }
+        assert_eq!(streaming.len(), 1, "{streaming:?}");
+        assert!(streaming[0].start.abs_diff(burst_start as u64) <= WINDOW as u64);
+        assert!(streaming[0].end.abs_diff(burst_end as u64) <= 2 * WINDOW as u64);
+    }
 
     #[test]
     fn streaming_acquisition_separates_bursts_across_chunk_boundaries() {
