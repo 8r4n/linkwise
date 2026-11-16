@@ -1,10 +1,19 @@
 ---
 import { visualGuide } from "../../../docs/i18n/visual-guide.mjs";
+import { guideTrustMail } from "../../../docs/i18n/guide-trust-mail.mjs";
 import { pagePath } from "../../../docs/i18n/locales.mjs";
 import { repository } from "../releases.mjs";
 
 const { locale, t, base } = Astro.props;
 const labels = visualGuide(locale.code);
+const trust = guideTrustMail(locale.code);
+const reference = (path) => base + "/reference/" + locale.code + "/" + path + "/";
+const clientEvidence = [
+  ["Gmail · Android Emulator", trust.roundTrip, repository + "/blob/b85dbb12512009756fb4aaca760f79dd8a95dd15/lab-notes/lab-notes.tex#L2671-L2717"],
+  ["Thunderbird · Android Emulator", trust.roundTrip, reference("docs/architecture/rocky-thunderbird-validation.md")],
+  ["Thunderbird · iOS", trust.simulator, reference("tools/ios-thunderbird/README.md")],
+  ["Apple Mail · macOS", trust.desktop, repository + "/blob/b85dbb12512009756fb4aaca760f79dd8a95dd15/lab-notes/lab-notes.tex#L2719-L2735"],
+];
 const format = new Intl.NumberFormat(locale.code);
 const seconds = new Intl.NumberFormat(locale.code, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const measurements = [
@@ -17,7 +26,8 @@ const bench = base + "/reference/" + locale.code + "/docs/testing/vara-interoper
 ---
 <nav class="bench-links" aria-label={t.nav.guide}>
   <a href="#start">{t.guide.start}</a>
-  <a href="#workflow-examples">{labels.examples}</a>
+  <a href="#chat-verification">{trust.verify}</a>
+  <a href="#mail-example">{trust.clients}</a>
   <a href="#performance">{labels.performance}</a>
 </nav>
 <section class="visual-section" aria-labelledby="workflow-examples">
@@ -39,37 +49,67 @@ const bench = base + "/reference/" + locale.code + "/docs/testing/vara-interoper
         </div>
       </div>
       <p><code dir="ltr">linkwise chat --pki station-pki.json YOURCALL</code></p>
-      <a href="#pki">{t.guide.pki}</a>
+      <section class="feature-detail" aria-labelledby="chat-verification">
+        <h4 id="chat-verification">{trust.verify}</h4>
+        <dl class="status-legend">
+          {[ ["|V", trust.signed], ["|E", trust.encrypted], ["|X", trust.verifyFailed], ["|F", trust.encryptFailed] ].map(([symbol, meaning]) => (
+            <div><dt><code dir="ltr">{symbol}</code></dt><dd>{meaning}</dd></div>
+          ))}
+        </dl>
+        <p>{trust.trust}</p>
+        <code class="command-line" dir="ltr">/cert inspect → /cert accept SIGNING [ENCRYPTION]</code>
+        <p>{trust.proof}</p>
+        <code class="command-line" dir="ltr">/proof message-proof.json</code>
+        <code class="command-line" dir="ltr">linkwise pki verify-chat station-pki.json message-proof.json</code>
+        <a href="#pki">{t.guide.pki}</a>
+      </section>
     </article>
 
     <article class="workflow" id="mail-example">
-      <h3><a href="#mail">{t.nav.mail}</a></h3>
-      <ol class="flow">
-        <li>
-          <span>{labels.caller} <bdi>AA1AA</bdi></span>
-          <code dir="ltr">linkwise mail import ./mailbox message.eml</code>
-        </li>
-        <li>
-          <span>{labels.exchange}</span>
-          <div class="mail-ports">
-            <div><span>{labels.listener} <bdi>BB2BB</bdi></span><code dir="ltr">linkwise mail listen ./mailbox BB2BB AA1AA</code></div>
-            <div><span>{labels.caller} <bdi>AA1AA</bdi></span><code dir="ltr">linkwise mail exchange ./mailbox AA1AA BB2BB</code></div>
-          </div>
-        </li>
-        <li>
-          <span>{labels.received}</span>
-          <code dir="ltr">./mailbox/inbox/*.b2f → Mid:</code>
-          <code dir="ltr">linkwise mail export ./mailbox MESSAGE_ID &gt; received.eml</code>
-        </li>
-      </ol>
+      <h3>{trust.clients}</h3>
+      <p>{trust.flow}</p>
+      <dl class="mail-settings">
+        <div><dt>SMTP</dt><dd><bdi>2525 · STARTTLS / SSL/TLS</bdi></dd></div>
+        <div><dt>IMAP</dt><dd><bdi>1143 · SSL/TLS</bdi></dd></div>
+      </dl>
+      <p>{trust.tls}</p>
+      <a href={reference("rust/docs/mobile-development.md")}>{trust.setup}</a>
       <details class="mail-client">
-        <summary>SMTP / IMAP</summary>
-        <code dir="ltr">linkwise mail smtp ./mailbox AA1AA</code>
-        <code dir="ltr">linkwise mail imap ./mailbox</code>
-        <code dir="ltr">SMTP 127.0.0.1:2525 · IMAP 127.0.0.1:1143</code>
+        <summary>Linkwise · SMTP / IMAP</summary>
+        <code dir="ltr">linkwise mail smtp ./mailbox AA1AA 2525 --starttls cert.pem key.pem</code>
+        <code dir="ltr">linkwise mail imap ./mailbox 1143 --tls cert.pem key.pem</code>
+      </details>
+      <section class="feature-detail" aria-labelledby="mail-client-tests">
+        <h4 id="mail-client-tests">{trust.tested}</h4>
+        <ul class="client-evidence">
+          {clientEvidence.map(([client, evidence, url]) => (
+            <li><a href={url}><bdi>{client}</bdi></a><span>{evidence}</span></li>
+          ))}
+        </ul>
+        <p>{trust.radio} <a href="#mail">{t.guide.mail}</a></p>
+      </section>
+      <details class="mail-client">
+        <summary><bdi>CLI</bdi> · {labels.exchange}</summary>
+        <ol class="flow">
+          <li>
+            <span>{labels.caller} <bdi>AA1AA</bdi></span>
+            <code dir="ltr">linkwise mail import ./mailbox message.eml</code>
+          </li>
+          <li>
+            <span>{labels.exchange}</span>
+            <div class="mail-ports">
+              <div><span>{labels.listener} <bdi>BB2BB</bdi></span><code dir="ltr">linkwise mail listen ./mailbox BB2BB AA1AA</code></div>
+              <div><span>{labels.caller} <bdi>AA1AA</bdi></span><code dir="ltr">linkwise mail exchange ./mailbox AA1AA BB2BB</code></div>
+            </div>
+          </li>
+          <li>
+            <span>{labels.received}</span>
+            <code dir="ltr">./mailbox/inbox/*.b2f → Mid:</code>
+            <code dir="ltr">linkwise mail export ./mailbox MESSAGE_ID &gt; received.eml</code>
+          </li>
+        </ol>
       </details>
       <div class="bench-links">
-        <a href="#mail">{t.guide.mail}</a>
         <a href={base + pagePath(locale.code, "winlink") + "#bench-video"}>{t.winlink.video}</a>
       </div>
     </article>
@@ -137,6 +177,18 @@ const bench = base + "/reference/" + locale.code + "/docs/testing/vara-interoper
   h3 { font-size: 1.3rem; }
   h3 a { color: inherit; text-decoration: none; }
   h3 a:hover { text-decoration: underline; }
+  h4 { margin: 0 0 .55rem; font-size: 1rem; }
+  .feature-detail { border-block-start: 1px solid var(--border); padding-block-start: 1rem; margin-block-start: 1rem; }
+  .feature-detail p, .workflow > p { color: var(--muted); }
+  .command-line { display: block; margin-block: .3rem .8rem; unicode-bidi: isolate; }
+  .status-legend, .mail-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; margin: 0 0 1rem; }
+  .status-legend div, .mail-settings div { padding: .5rem; background: #0a1119; border-radius: .3rem; }
+  .status-legend dt, .mail-settings dt { color: var(--primary); font-weight: 700; }
+  .status-legend div:nth-child(n+3) dt { color: #ffb8aa; }
+  .status-legend dd, .mail-settings dd { margin: 0; color: var(--muted); font-size: .87rem; }
+  .client-evidence { list-style: none; padding: 0; margin: 0 0 1rem; }
+  .client-evidence li { display: grid; gap: .1rem; padding-block: .38rem; border-block-end: 1px solid var(--border); }
+  .client-evidence span { font-size: .87rem; color: var(--muted); }
   .terminal {
     margin-block: 1.15rem .8rem;
     border: 1px solid var(--border);

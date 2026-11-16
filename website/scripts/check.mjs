@@ -75,10 +75,11 @@ for (const { code, dir = "ltr" } of locales) {
     }
     if (page === "guide") {
       assert.ok(html.includes('<pre dir="ltr">') && html.includes("linkwise qsl receive"));
-      for (const anchor of ["workflow-examples", "chat-example", "mail-example", "performance", "payload-chart", "turn-chart"]) {
+      for (const anchor of ["workflow-examples", "chat-example", "chat-verification", "mail-example", "mail-client-tests", "performance", "payload-chart", "turn-chart"]) {
         assert.ok(html.includes('id="' + anchor + '"'), path + "#" + anchor);
       }
       assert.ok(html.includes("linkwise mail listen ./mailbox BB2BB AA1AA"), path);
+      assert.ok(html.includes("linkwise pki verify-chat") && html.includes("2525 · STARTTLS / SSL/TLS"), path);
       assert.ok(html.includes("VARA HF → Linkwise") && html.includes("Linkwise → VARA HF"), path);
     }
   }
