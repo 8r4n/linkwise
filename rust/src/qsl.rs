@@ -200,26 +200,36 @@ fn scan(path: &Path) -> io::Result<CertificateOffer> {
     reader.limits(limits);
     let image =
         image::DynamicImage::ImageLuma8(reader.decode().map_err(io::Error::other)?.into_luma8());
-    let mut previous = 0;
-    // Finder detection depends on how the camera samples each printed module.
-    // Try a few pixel pitches before reporting that the photo is unreadable.
-    for cap in [2300, 1500, 1100, 850] {
-        let size = cap.min(image.width().max(image.height()));
-        if previous == size {
-            continue;
-        }
-        previous = size;
-        let gray = image.thumbnail(size, size).into_luma8();
-        let mut prepared = rqrr::PreparedImage::prepare(gray);
-        let mut codes = prepared.detect_grids().into_iter().filter_map(|grid| {
-            let (_, text) = grid.decode().ok()?;
-            text.starts_with(MARKER).then_some(text)
-        });
-        if let Some(text) = codes.next() {
-            if codes.next().is_some() {
-                return Err(invalid("share a photo of one Linkwise QSL card at a time"));
+    // Try several module sizes. Adaptive thresholding handles uneven lighting.
+    // A fixed threshold can recover high-contrast cards with JPEG artifacts.
+    for fixed_threshold in [false, true] {
+        let mut previous = 0;
+        for cap in [2300, 1500, 1100, 850] {
+            let size = cap.min(image.width().max(image.height()));
+            if previous == size {
+                continue;
             }
-            return decode(&text);
+            previous = size;
+            let gray = image.thumbnail(size, size).into_luma8();
+            let (width, height) = (gray.width() as usize, gray.height() as usize);
+            let luminance = |x, y| gray.as_raw()[y * width + x];
+            let mut prepared = if fixed_threshold {
+                rqrr::PreparedImage::prepare_from_bitmap(width, height, |x, y| {
+                    luminance(x, y) < 128
+                })
+            } else {
+                rqrr::PreparedImage::prepare_from_greyscale(width, height, luminance)
+            };
+            let mut codes = prepared.detect_grids().into_iter().filter_map(|grid| {
+                let (_, text) = grid.decode().ok()?;
+                text.starts_with(MARKER).then_some(text)
+            });
+            if let Some(text) = codes.next() {
+                if codes.next().is_some() {
+                    return Err(invalid("share a photo of one Linkwise QSL card at a time"));
+                }
+                return decode(&text);
+            }
         }
     }
     Err(invalid("no readable Linkwise QSL QR code in photo"))
