@@ -1,0 +1,107 @@
+.TH LINKWISE-MODEMD 8 "2026-11-15" "Linkwise"
+.SH NAME
+linkwise\-modemd \- تشغيل محطة مودم Linkwise البرمجية وتشخيصها
+.SH "صيغة الاستخدام"
+.B linkwise\-modemd
+.RB { \-h | \-\-help | \-\-version | \-\-audio\-devices | \-\-simulate }
+.br
+.B linkwise\-modemd
+.RB { \-\-check\-config | \-\-check\-station | \-\-serve\-station }
+.I FILE
+.br
+.B linkwise\-modemd \-\-simulate\-audio
+.I PROFILE
+.br
+.B linkwise\-modemd \-\-serve\-bench
+.IR CALL " [" CONTROL_PORT " " DATA_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-bw500
+.IR CALL " " PROFILE " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-wide
+.IR CALL " " BANDWIDTH " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-virtual\-audio\-device
+.I AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE
+.SH "الوصف"
+شغّل محطة صوت محلي أو تحقّق من إعداد المحطة أو اختبر المودم دون بث لاسلكي. اختر عملية واحدة لكل استدعاء. تستخدم حزمة الصوت معدل 48 kHz. ترتبط مقابس الاستماع للمحطة ومنصة الاختبار بعنوان الاسترجاع المحلي IPv4.
+.SH "الخيارات"
+.TP
+.BR \-h ", " \-\-help
+اعرض طريقة الاستخدام ثم اخرج.
+.TP
+.B \-\-version
+اعرض إصدار البرنامج ثم اخرج.
+.TP
+.B \-\-audio\-devices
+اعرض أسماء أجهزة الالتقاط والتشغيل المتاحة.
+.TP
+.BI "\-\-check\-config " FILE
+تحقّق من ملف JSON للمحطة وأي ملف موجة BW500 مشار إليه.
+.TP
+.BI "\-\-check\-station " FILE
+تحقّق من الإعداد وانتظر عينات الالتقاط وافحص صيغة الإخراج المعلنة واحجز منفذي الأوامر والبيانات مؤقتًا. لا يشغّل هذا الفحص أي صوت.
+.TP
+.BI "\-\-serve\-station " FILE
+شغّل المحطة في الواجهة الأمامية. يتيح ضبط عرض النطاق الإرسال والاستقبال بالأجهزة المحددة وبمقبسي أوامر وبيانات منفصلين. عند غياب عرض النطاق يعيد مقبس الأوامر تشخيص الاستقبال بصيغة JSON. في Windows يختار winlink_test_audio_port اختبار موجة BW500 المعزول. راجع linkwise-station(5). تعالج المحطة الأمامية SIGINT وSIGTERM في Unix وCtrl-C وCtrl-Break في Windows. تعالج خدمة Windows أوامر Stop وShutdown من مدير الخدمات. تحاول المحطة النشطة ثنائية الاتجاه فصل المودم في غضون ثلاث ثوان ثم تحرر الموارد المحلية. أعد تشغيل الخدمة بعد تعديل الإعداد. يتولى نظام التشغيل SIGKILL وSIGSTOP.
+.TP
+.B \-\-simulate
+نفّذ تبادلًا محليًا باستخدام أجهزة محاكاة.
+.TP
+.BI "\-\-simulate\-audio " PROFILE
+نفّذ تبادلًا محليًا بموجات BW500 اصطناعية وملف القياس المحدد.
+.TP
+.BI "\-\-serve\-bench " CALL
+شغّل طرف صدى محاكى. المنفذان الافتراضيان للأوامر والبيانات 8300 و8301. حددهما معًا لتغييرهما.
+.TP
+.BI "\-\-serve\-virtual\-bw500 " "CALL PROFILE"
+شغّل محطة اختبار BW500 بوصلة موجية على TCP. المنافذ الافتراضية للأوامر والبيانات والموجة 8300 و8301 و8302. حددها جميعًا لتغييرها.
+.TP
+.BI "\-\-serve\-virtual\-wide " "CALL BANDWIDTH"
+شغّل محطة وصلة موجية بتردد 2300 أو 2750 Hz. تتبع المنافذ قواعد --serve-virtual-bw500.
+.TP
+.BI "\-\-virtual\-audio\-device " "AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE"
+صِل مقبس الموجة المحلي بأجهزة الالتقاط والتشغيل المختارة على القناة صفر. استخدم مسارات صوت مستقلة لعزل الاختبار.
+.SH "المعاملات"
+FILE هو ملف JSON للمحطة الموصوف في linkwise-station(5). PROFILE ملف قياس BW500 بصيغة JSON. CALL إشارة النداء المحلية. ضع أسماء الأجهزة التي تحوي مسافات بين علامتي اقتباس.
+.SH "حالة الخروج"
+.TP
+.B 0
+نجحت العملية.
+.TP
+.B 1
+فشلت العملية، مثل خطأ في ملف أو الصوت أو المقبس.
+.TP
+.B 2
+لم يحدد سطر الأوامر عملية معروفة.
+.SH "متغيرات البيئة"
+.TP
+.B LINKWISE_LOG_LEVEL
+اضبط القيمة على error لحجب رسائل بدء التشغيل والجلسة الإعلامية. يعرض البرنامج افتراضيًا الرسائل الإعلامية والأخطاء.
+.SH "أمثلة"
+العثور على أجهزة صوت USB. اعرض الأسماء كلها ثم صفِّ النتائج. انسخ أسماء الإدخال والإخراج الكاملة إلى إعداد المحطة.
+.EX
+linkwise-modemd --audio-devices
+linkwise-modemd --audio-devices | grep -i usb
+.EE
+التحقق من إعداد المحطة. ضع المسارات المحتوية على مسافات بين علامتي اقتباس. احفظ التأكيد والتشخيص في ملفين منفصلين.
+.EX
+linkwise-modemd --check-config "Field Station/station.json" \e
+    >check.out 2>check.err
+.EE
+فحص الصوت وتشغيل المحطة. أوقف أي خدمة تستخدم الأجهزة أو المنافذ نفسها. يبقى الأمر الثاني في الواجهة الأمامية؛ اضغط Ctrl-C لإيقافه.
+.EX
+linkwise-modemd --check-station station.json &&
+    linkwise-modemd --serve-station station.json 2>station.log
+.EE
+قراءة تشخيص الاستقبال بصيغة JSON. شغّل المحطة دون bandwidth ثم استعلم عن منفذ الأوامر الافتراضي من طرفية ثانية. استخرج عدد الإطارات المفكوكة باستخدام jq(1).
+.EX
+nc 127.0.0.1 8300 | jq '.received_frames'
+.EE
+محاكاة تبادل دون جهاز راديو. استخدم المحاكاة المدمجة لاختبار تبادل محلي واحفظ الإخراج والتشخيص معًا لاستكشاف الأعطال.
+.EX
+linkwise-modemd --simulate >simulation.log 2>&1
+.EE
+.SH "انظر أيضًا"
+.BR linkwise (1),
+.BR linkwise-station (5)

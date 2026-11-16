@@ -1,4 +1,4 @@
-.TH LINKWISE-STATION 5 "2026-11-12" "Linkwise" "File Formats"
+.TH LINKWISE-STATION 5 "2026-11-15" "Linkwise" "File Formats"
 .SH NAME
 linkwise\-station \- Linkwise modem station configuration
 .SH SYNOPSIS
@@ -45,6 +45,19 @@ Path to a BW500 measurement profile in JSON, limited to 128 KiB.
 Relative paths are resolved from the station file's directory.
 The field is required for two-way operation at 500 Hz and optional for
 receive diagnostics.
+.TP
+.B winlink_test_audio_port
+Windows only. When set, the station exposes a radio-free BW500 waveform
+socket on this distinct nonzero loopback port. Omit
+.BR bandwidth ,
+specify
+.BR bw500_profile ,
+and set the DATA port to the command port plus one.
+.TP
+.B verify_bw500_fixture
+Windows only. Set to true for the receive diagnostic that counts exact
+level-2 BW500 fixture matches. Use this setting with an isolated audio
+route and remove it after verifying capture.
 .SH FILES
 .TP
 .I /etc/linkwise/station.json
@@ -55,6 +68,9 @@ Linux user service configuration.
 .TP
 .I ~/Library/Application Support/Linkwise/station.json
 macOS login agent configuration.
+.TP
+.I %ProgramData%\eLinkwise\eStation.json
+Windows service configuration.
 .SH EXAMPLES
 A two-way 500 Hz station configuration follows.
 Replace the callsign, device names, and profile path with those for your

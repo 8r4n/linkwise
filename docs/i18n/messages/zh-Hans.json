@@ -1,0 +1,103 @@
+{
+  "nav": [
+    "下载",
+    "邮件转发",
+    "Winlink Express",
+    "操作指南",
+    "文档"
+  ],
+  "ui": [
+    "跳至正文",
+    "主导航",
+    "语言",
+    "供代理使用的安装参考",
+    "打开源文档",
+    "英语",
+    "完整参考文档以英语提供。",
+    "本地化版本",
+    "手册页"
+  ],
+  "home": [
+    "Linkwise 短波调制解调器",
+    "面向业余无线电的开源 Rust 软件调制解调器。可试用跨平台预览版，并了解经过台架验证的直连邮件和终端聊天。",
+    "查看下载",
+    "配置 Winlink Express",
+    "Linkwise 的波形和频谱显示",
+    "Linkwise 接收器与波形分析",
+    "项目状态",
+    "启用相应构建功能后，可使用直连聊天、文件传输、共享台站证书和可打印的 QSL 卡片。"
+  ],
+  "downloads": [
+    "下载 Linkwise",
+    "预览版",
+    "发行版",
+    "安装前请核对软件包的 SHA-256。",
+    "完整的公开预览版尚未发布。请关注",
+    "选择操作系统",
+    "下载",
+    "SHA-256 文件",
+    "安装、验证与卸载",
+    "机器可读的发布清单"
+  ],
+  "mail": [
+    "Linkwise 邮件转发",
+    "两个 Linkwise 台站可通过调制解调器使用 Open B2F 交换排队邮件。共享 PKI 配置支持签名和可选加密。",
+    "台架验证",
+    "虚拟 BW500 台架验证了附件的 SHA-256 和正常断开。其他点对点试验使用了 Pat 和 Winlink Express。",
+    "发布状态",
+    "预览版下载包含调制解调器。SMTP、IMAP 和受保护邮件需要相应的构建选项及配置。网关接入和实际射频运行需单独验证。",
+    "软件架构"
+  ],
+  "winlink": [
+    "Linkwise 与 Winlink Express",
+    "Winlink Express 1.8.6.0 通过 Windows ARM64 上的 Linkwise 服务收到 Pat 发送的 64 字节附件。SHA-256 一致，双方均正常断开。",
+    "配置 VARA HF P2P",
+    "安装 Windows 版 Linkwise，打开 Configure Linkwise for Winlink，并输入 Express 使用的呼号。",
+    "选择 Radio-free waveform test 和 BW500 测量配置文件。将独立的波形对端接到向导显示的端口。",
+    "在 Express 中打开 VARA HF P2P → Settings → TNC Setup。使用 127.0.0.1 和控制端口 8300，或使用向导给出的自定义端口。DATA 使用紧随其后的端口。",
+    "选择 500 Hz，取消 Automatically launch TNC when session is opened，再打开会话。Express 会将其显示为 VARA TNC 会话。",
+    "验证连接",
+    "运行 Get-Service LinkwiseModem，然后确认 Express 中显示 Ready 和回环端口。发送测试附件，核对 SHA-256，并检查双方的断开日志。",
+    "本试验验证无射频的点对点附件交换。实际射频和网关运行需另行验证。",
+    "完整的 Winlink 说明",
+    "Winlink 台架演示",
+    "下载台架视频"
+  ],
+  "guide": [
+    "Linkwise 操作指南",
+    "运行 BW500 台站，交换公开证书，并在隔离链路上复现受保护的聊天和邮件流程。",
+    "启动台站",
+    "检查台站 JSON、音频设备和 BW500 测量配置文件。在不同终端启动服务和聊天，呼号须与台站配置一致。",
+    "聊天和在线状态",
+    "一次直连呼叫只连接一个对端。/who 和 /status 显示对端和链路信息。窗口保留草稿，并根据终端宽度换行。通知包括加入、离开、断开和超时。启用 PKI 时，|V 表示已签名的明文，|E 表示已加密并验证，|X 表示验证失败，|F 表示加解密失败。双方输入 /encrypt 可升级正在进行的呼叫。/proof 可导出最近验证的消息。",
+    "文件传输",
+    "使用 secure-transfer 构建以支持 gzip 和 SHA-256。明文文件传输上限为 32 KiB，需由接收方接受，并保留已有文件。客户端拒绝原版 VarAC 的 MD5 文件请求。加密传输使用 --secure-config，由接收方和发送方分别执行 /receivefile --encrypt 和 /sendfile --encrypt，建立独立的双向认证 TLS 1.3 会话。",
+    "共享 PKI 和混合密钥交换",
+    "配置可信 CA 和有效 CRL。信任多把 CA 密钥时，为各呼号固定 CA。接受证书前，通过独立可信渠道核对完整的 SHA-256 指纹。聊天使用 ECDSA P-256 签名。TLS 1.3 可使用临时 P-256；双方均采用 pqc-chat 构建和要求的 OpenSSL FIPS 配置时，可要求 P-256 + ML-KEM-768。",
+    "证书 QSL 卡片",
+    "生成包含公开证书的矢量 PDF。在 5½ × 3½ 英寸邮资明信片的空白面按 100% 打印，或使用 --size 4x6。凭已核对的指纹启动 qsl receive 后，将 JPEG 或 PNG 照片分享到监视文件夹。Linkwise 验证证书并把对端加入共享配置。",
+    "受保护的无线邮件",
+    "导入和导出使用同一 PKI 配置。使用 --encrypt 加密发出的邮件，或在导出时要求来件已加密。mail exchange 和 mail listen 传送受保护的 B2F 信封。加密证书用于存储转发邮件，签名证书用于认证实时聊天。",
+    "实时接收与诊断",
+    "向 receive-pcm 输入 48 kHz 单声道、16 位有符号小端 PCM，也可持续输入 KiwiSDR 音频。程序以 JSON 输出 CRC 有效的 BW500 帧。恢复被动接收的对话需重组会话。直连聊天使用调制解调器的 DATA 套接字。",
+    "传输与验证",
+    "台架和只接收结果均有各自的适用范围。仅在获授权的传输方式上启用加密。FIPS 部署须使用符合验证条件的模块版本、构建和运行环境。"
+  ],
+  "docs": [
+    "Linkwise 文档",
+    "请选择参考文档或切换语言。目录注明英语源文档，并链接可用译本。",
+    "操作和安装指南",
+    "架构",
+    "测试和实验记录",
+    "研究与参考资料"
+  ],
+  "man": [
+    "本地化概览",
+    "完整参考",
+    "Linkwise 命令行命令",
+    "Linkwise 调制解调器服务",
+    "Linkwise 台站配置",
+    "--check-config 检查 JSON，--check-station 检查音频和端口且不播放音频。--serve-station 使用本机音频并绑定 IPv4 回环地址。--serve-virtual-bw500 和 --serve-virtual-wide 提供无射频波形连接。",
+    "使用 UTF-8 JSON，包含 version 1、callsign 以及 input 和 output 对象。音频通道从零编号。双向音频的 bandwidth 为 500、2300 或 2750。默认控制和数据端口为 8300 和 8301。双向 BW500 需要 bw500_profile。"
+  ]
+}

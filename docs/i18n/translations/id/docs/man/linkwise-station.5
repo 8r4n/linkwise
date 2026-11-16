@@ -1,0 +1,60 @@
+.TH LINKWISE-STATION 5 "2026-11-15" "Linkwise"
+.SH NAME
+linkwise\-station \- konfigurasi stasiun modem Linkwise
+.SH "SINOPSIS"
+.I station.json
+.SH "DESKRIPSI"
+Konfigurasi stasiun berupa objek JSON UTF-8 dengan batas 16 KiB. Kunci yang tidak dikenal ditolak. linkwise-modemd(8) membaca berkas yang disebutkan pada baris perintah.
+.SH "KOLOM"
+.TP
+.B version
+Bilangan bulat wajib. Gunakan 1 untuk format ini.
+.TP
+.B callsign
+Tanda panggil stasiun wajib. Linkwise menghapus spasi di awal dan akhir serta mengubah huruf menjadi huruf kapital.
+.TP
+.BR input ", " output
+Objek wajib dengan string name dan bilangan bulat channel yang dimulai dari nol. Gunakan nama perangkat persis seperti keluaran linkwise-modemd --audio-devices.
+.TP
+.B bandwidth
+Bilangan bulat opsional dalam Hz. Gunakan 500, 2300, atau 2750 untuk audio bawaan dua arah. Hilangkan kolom ini untuk menjalankan diagnostik penerimaan.
+.TP
+.BR command_port ", " data_port
+Porta TCP opsional dengan nilai bawaan 8300 dan 8301. Pilih nomor porta berbeda dan bukan nol. Diagnostik penerimaan hanya memakai porta perintah. Winlink Express memakai nomor porta berikutnya setelah porta perintah untuk data.
+.TP
+.B bw500_profile
+Jalur profil pengukuran BW500 dalam JSON hingga 128 KiB. Jalur relatif berawal dari direktori berkas stasiun. Profil wajib untuk operasi dua arah pada 500 Hz dan opsional untuk diagnostik penerimaan.
+.TP
+.B winlink_test_audio_port
+Khusus Windows. Membuka soket bentuk gelombang BW500 tanpa radio pada porta loopback yang berbeda dan bukan nol. Hilangkan bandwidth, tentukan bw500_profile, dan atur porta DATA ke porta perintah ditambah satu.
+.TP
+.B verify_bw500_fixture
+Khusus Windows. Atur true agar diagnostik penerimaan menghitung kecocokan persis dengan sinyal uji BW500 tingkat 2. Gunakan jalur audio terisolasi dan hapus pengaturan setelah memverifikasi tangkapan.
+.SH "BERKAS"
+.TP
+.I /etc/linkwise/station.json
+Konfigurasi layanan sistem Linux.
+.TP
+.I ~/.config/linkwise/station.json
+Konfigurasi layanan pengguna Linux.
+.TP
+.I ~/Library/Application Support/Linkwise/station.json
+Konfigurasi agen masuk macOS.
+.TP
+.I %ProgramData%\eLinkwise\eStation.json
+Konfigurasi layanan Windows.
+.SH "CONTOH"
+Konfigurasi stasiun dua arah 500 Hz.
+Ganti tanda panggil, nama perangkat, dan jalur profil dengan milik stasiun Anda.
+.EX
+{
+  "version": 1,
+  "callsign": "W1AW",
+  "input": {"name": "Radio input", "channel": 0},
+  "output": {"name": "Radio output", "channel": 0},
+  "bandwidth": 500,
+  "bw500_profile": "bw500-profile.json"
+}
+.EE
+.SH "LIHAT JUGA"
+.BR linkwise-modemd (8)

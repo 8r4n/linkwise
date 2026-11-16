@@ -3190,6 +3190,36 @@ The final local run passed 123 audio-enabled Rust tests, the two-peer PTY
 bench, exact replay of both on-air frames, and manual-page lint. All three
 review threads were resolved.
 
+\subsection{VarAC file transfer and encrypted chat handoff}
+The file-transfer bench re-used the isolated VarAC 16.1.8 command and
+DATA relay. Stock peers transferred 8-byte and 2,048-byte binary
+samples. Stock also rejected a 6,144-byte sample after its incoming
+size prompt expired. The trace placed the file offer, ready reply,
+Base64 gzip body, and final receipt in separate decimal-length DATA
+records. The offer identified the gzip byte count and the legacy MD5
+of the compressed bytes. The receiving peer replied with
+\texttt{<SFRD>}, \texttt{<SFOK>}, or \texttt{<SFAB>}.
+
+An early stock-checksum prototype transferred the 8-byte sample
+both ways through the relay. Both received files matched the original
+SHA-256. The prototype was removed when file transfers were restricted
+to FIPS-provider hashing. Mixed stock modem audio and on-air delivery
+remain open. The full wire trace and reproduction
+commands are recorded in \href{../docs/testing/varac-chat.md}{the
+VarAC chat bench report}.
+
+Linkwise chat uses gzip and AWS-LC FIPS-provider SHA-256 for
+plain transfers between Linkwise peers. It declines stock VarAC file
+offers with legacy checksums. The encrypted mode runs a dedicated
+mutually authenticated TLS 1.3 session using the attached modem. The receiver verifies the
+authenticated SHA-256 before publishing the expanded file.
+
+The two-Linkwise virtual BW500 bench exercised a multi-write plain
+gzip transfer, a dedicated encrypted transfer and a wrong-certificate
+rejection. The receiver published no file in the wrong-certificate
+case. Cryptographic module certification remains a deployment property.
+
+\clearpage
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]

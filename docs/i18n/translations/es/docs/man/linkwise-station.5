@@ -1,0 +1,60 @@
+.TH LINKWISE-STATION 5 "2026-11-15" "Linkwise"
+.SH NAME
+linkwise\-station \- configuración de una estación de módem Linkwise
+.SH "SINOPSIS"
+.I station.json
+.SH "DESCRIPCIÓN"
+La configuración de la estación es un objeto JSON codificado en UTF-8, de hasta 16 KiB. Se rechazan las claves desconocidas. linkwise-modemd(8) lee el archivo indicado en su línea de órdenes.
+.SH "CAMPOS"
+.TP
+.B version
+Entero obligatorio. Usa 1 para este formato.
+.TP
+.B callsign
+Indicativo de estación obligatorio. Linkwise elimina los espacios en los extremos y convierte las letras a mayúsculas.
+.TP
+.BR input ", " output
+Objetos obligatorios con una cadena name y un entero channel que empieza en cero. Usa los nombres exactos que muestra linkwise-modemd --audio-devices.
+.TP
+.B bandwidth
+Entero opcional en Hz. Usa 500, 2300 o 2750 para audio nativo bidireccional. Omite el campo para el diagnóstico de recepción.
+.TP
+.BR command_port ", " data_port
+Puertos TCP opcionales. Los valores predeterminados son 8300 y 8301, respectivamente. Elige dos puertos distintos y no nulos. El diagnóstico de recepción solo usa el puerto de comandos. Para Winlink Express, usa el puerto inmediatamente posterior al de comandos para los datos.
+.TP
+.B bw500_profile
+Ruta a un perfil de medición BW500 en JSON de hasta 128 KiB. Las rutas relativas parten del directorio del archivo de estación. El perfil es obligatorio para audio bidireccional a 500 Hz y opcional para diagnosticar la recepción.
+.TP
+.B winlink_test_audio_port
+Solo Windows. Abre un socket de forma de onda BW500 sin radio en este puerto de bucle local, que debe ser distinto y no nulo. Omite bandwidth, especifica bw500_profile y fija el puerto DATA en el de comandos más uno.
+.TP
+.B verify_bw500_fixture
+Solo Windows. Activa true para contar coincidencias exactas con la señal de prueba BW500 de nivel 2. Usa una ruta de audio aislada y elimina el ajuste después de verificar la captura.
+.SH "ARCHIVOS"
+.TP
+.I /etc/linkwise/station.json
+Configuración del servicio del sistema Linux.
+.TP
+.I ~/.config/linkwise/station.json
+Configuración del servicio de usuario Linux.
+.TP
+.I ~/Library/Application Support/Linkwise/station.json
+Configuración del agente de inicio de sesión de macOS.
+.TP
+.I %ProgramData%\eLinkwise\eStation.json
+Configuración del servicio de Windows.
+.SH "EJEMPLOS"
+Configuración de una estación bidireccional de 500 Hz.
+Sustituye el indicativo, los nombres de los dispositivos y la ruta del perfil por los de tu estación.
+.EX
+{
+  "version": 1,
+  "callsign": "W1AW",
+  "input": {"name": "Radio input", "channel": 0},
+  "output": {"name": "Radio output", "channel": 0},
+  "bandwidth": 500,
+  "bw500_profile": "bw500-profile.json"
+}
+.EE
+.SH "VÉASE TAMBIÉN"
+.BR linkwise-modemd (8)

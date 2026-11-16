@@ -1,0 +1,107 @@
+.TH LINKWISE-MODEMD 8 "2026-11-15" "Linkwise"
+.SH NAME
+linkwise\-modemd \- executar e diagnosticar uma estação de modem Linkwise
+.SH "SINOPSE"
+.B linkwise\-modemd
+.RB { \-h | \-\-help | \-\-version | \-\-audio\-devices | \-\-simulate }
+.br
+.B linkwise\-modemd
+.RB { \-\-check\-config | \-\-check\-station | \-\-serve\-station }
+.I FILE
+.br
+.B linkwise\-modemd \-\-simulate\-audio
+.I PROFILE
+.br
+.B linkwise\-modemd \-\-serve\-bench
+.IR CALL " [" CONTROL_PORT " " DATA_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-bw500
+.IR CALL " " PROFILE " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-wide
+.IR CALL " " BANDWIDTH " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-virtual\-audio\-device
+.I AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE
+.SH "DESCRIÇÃO"
+Execute uma estação com áudio nativo, verifique a configuração ou teste o modem em bancada sem rádio. Selecione uma operação por invocação. O pacote de áudio usa 48 kHz. Os serviços da estação e da bancada se vinculam ao loopback IPv4.
+.SH "OPÇÕES"
+.TP
+.BR \-h ", " \-\-help
+Mostra o uso e encerra.
+.TP
+.B \-\-version
+Mostra a versão e encerra.
+.TP
+.B \-\-audio\-devices
+Lista os nomes disponíveis dos dispositivos de captura e reprodução.
+.TP
+.BI "\-\-check\-config " FILE
+Valida o JSON da estação e os perfis de forma de onda BW500 referenciados.
+.TP
+.BI "\-\-check\-station " FILE
+Valida a configuração, aguarda amostras de captura, verifica o formato de saída anunciado e reserva temporariamente as portas de comando e dados. A verificação não reproduz áudio.
+.TP
+.BI "\-\-serve\-station " FILE
+Executa a estação em primeiro plano. Com uma largura de banda, transmite e recebe nos dispositivos configurados por sockets separados de comando e dados. Sem largura de banda, o socket de comando retorna diagnósticos de recepção em JSON. No Windows, winlink_test_audio_port seleciona o teste BW500 isolado. Veja linkwise-station(5). Em primeiro plano são tratados SIGINT e SIGTERM no Unix e Ctrl-C e Ctrl-Break no Windows. O serviço Windows trata Stop e Shutdown do gerenciador de serviços. Uma estação bidirecional ativa tenta desconectar o modem em três segundos e libera os recursos locais. Reinicie o serviço para aplicar mudanças. O sistema operacional trata SIGKILL e SIGSTOP.
+.TP
+.B \-\-simulate
+Executa uma troca local com dispositivos simulados.
+.TP
+.BI "\-\-simulate\-audio " PROFILE
+Executa uma troca local com formas de onda BW500 sintetizadas e o perfil de medição indicado.
+.TP
+.BI "\-\-serve\-bench " CALL
+Serve um par de eco simulado. As portas padrão de comando e dados são 8300 e 8301. Informe ambas para alterá-las.
+.TP
+.BI "\-\-serve\-virtual\-bw500 " "CALL PROFILE"
+Serve uma estação BW500 com cabo de forma de onda TCP. As portas padrão de comando, dados e forma de onda são 8300, 8301 e 8302. Informe as três para alterá-las.
+.TP
+.BI "\-\-serve\-virtual\-wide " "CALL BANDWIDTH"
+Serve uma estação com cabo de forma de onda a 2300 ou 2750 Hz. As portas seguem as regras de --serve-virtual-bw500.
+.TP
+.BI "\-\-virtual\-audio\-device " "AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE"
+Liga o socket local de forma de onda aos dispositivos selecionados de captura e reprodução no canal zero. Use rotas de áudio distintas no teste isolado.
+.SH "OPERANDOS"
+FILE é o JSON de estação descrito em linkwise-station(5). PROFILE é um perfil de medição BW500 em JSON. CALL é o indicativo local. Use aspas para nomes de dispositivos com espaços.
+.SH "CÓDIGO DE SAÍDA"
+.TP
+.B 0
+Operação concluída.
+.TP
+.B 1
+Falha na operação, como um arquivo inválido ou erro de áudio ou socket.
+.TP
+.B 2
+A linha de comando não selecionou uma operação conhecida.
+.SH "AMBIENTE"
+.TP
+.B LINKWISE_LOG_LEVEL
+Defina error para suprimir mensagens informativas de inicialização e sessão. Por padrão são emitidas mensagens informativas e erros.
+.SH "EXEMPLOS"
+Localizar dispositivos USB. Liste todos os nomes e depois filtre. Copie os nomes completos de entrada e saída para a configuração.
+.EX
+linkwise-modemd --audio-devices
+linkwise-modemd --audio-devices | grep -i usb
+.EE
+Validar uma estação. Coloque caminhos com espaços entre aspas. Salve confirmação e diagnósticos em arquivos separados.
+.EX
+linkwise-modemd --check-config "Field Station/station.json" \e
+    >check.out 2>check.err
+.EE
+Verificar o áudio e iniciar. Pare os serviços que usam os mesmos dispositivos ou portas. O segundo comando fica em primeiro plano. Pare-o com Ctrl-C.
+.EX
+linkwise-modemd --check-station station.json &&
+    linkwise-modemd --serve-station station.json 2>station.log
+.EE
+Ler diagnósticos de recepção em JSON. Execute sem bandwidth e consulte a porta de comando padrão em outro terminal. Com jq(1), extraia o número de quadros decodificados.
+.EX
+nc 127.0.0.1 8300 | jq '.received_frames'
+.EE
+Simular sem rádio. Use a simulação integrada para uma troca local e salve a saída e os diagnósticos juntos para investigar problemas.
+.EX
+linkwise-modemd --simulate >simulation.log 2>&1
+.EE
+.SH "VEJA TAMBÉM"
+.BR linkwise (1),
+.BR linkwise-station (5)

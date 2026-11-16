@@ -1,0 +1,103 @@
+{
+  "nav": [
+    "Unduhan",
+    "Penerusan surel",
+    "Winlink Express",
+    "Panduan operator",
+    "Dokumentasi"
+  ],
+  "ui": [
+    "Lewati ke konten",
+    "Navigasi utama",
+    "Bahasa",
+    "Referensi instalasi untuk agen",
+    "Buka dokumen sumber",
+    "Bahasa Inggris",
+    "Referensi lengkap tersedia dalam bahasa Inggris.",
+    "Edisi terjemahan",
+    "Halaman manual"
+  ],
+  "home": [
+    "Modem HF Linkwise",
+    "Modem perangkat lunak sumber terbuka dalam Rust untuk radio amatir. Coba pratinjau lintas platform dan pelajari surel langsung serta obrolan terminal yang diuji di laboratorium.",
+    "Lihat unduhan",
+    "Atur Winlink Express",
+    "Tampilan bentuk gelombang dan spektrum Linkwise",
+    "Penerima Linkwise dan analisis bentuk gelombang",
+    "Status proyek",
+    "Build dengan fitur yang sesuai menyediakan obrolan langsung, transfer berkas, sertifikat bersama, dan kartu QSL siap cetak."
+  ],
+  "downloads": [
+    "Unduh Linkwise",
+    "Pratinjau",
+    "Rilis",
+    "Verifikasi SHA-256 paket sebelum instalasi.",
+    "Pratinjau publik lengkap belum tersedia. Pantau",
+    "Pilih sistem operasi",
+    "Unduh",
+    "Berkas SHA-256",
+    "Instal, verifikasi, dan hapus",
+    "Manifes rilis yang dapat dibaca mesin"
+  ],
+  "mail": [
+    "Penerusan surel Linkwise",
+    "Dua stasiun Linkwise dapat bertukar pesan antrean melalui modem dengan Open B2F. Profil PKI bersama memungkinkan tanda tangan dan enkripsi opsional.",
+    "Terverifikasi di laboratorium",
+    "Uji BW500 virtual memverifikasi SHA-256 lampiran dan pemutusan koneksi yang bersih. Pat dan Winlink Express juga diuji sebagai mitra P2P.",
+    "Status rilis",
+    "Unduhan pratinjau berisi modem. SMTP, IMAP, dan surel terlindungi memerlukan build dan konfigurasi masing-masing. Akses gateway dan kualifikasi RF fisik diuji terpisah.",
+    "Arsitektur perangkat lunak"
+  ],
+  "winlink": [
+    "Linkwise dengan Winlink Express",
+    "Winlink Express 1.8.6.0 menerima lampiran 64 byte dari Pat lewat layanan Linkwise untuk Windows ARM64. SHA-256 cocok dan kedua pihak memutus sambungan secara normal.",
+    "Konfigurasi VARA HF P2P",
+    "Instal Linkwise untuk Windows lalu buka Configure Linkwise for Winlink. Masukkan tanda panggil yang digunakan di Express.",
+    "Pilih Radio-free waveform test dan profil pengukuran BW500. Hubungkan mitra bentuk gelombang terisolasi ke porta yang ditampilkan wisaya.",
+    "Di Express, buka VARA HF P2P → Settings → TNC Setup. Gunakan 127.0.0.1 dan porta perintah 8300 atau porta khusus dari wisaya. DATA memakai porta berikutnya.",
+    "Pilih 500 Hz, nonaktifkan Automatically launch TNC when session is opened, lalu buka ulang sesi. Express menampilkan VARA TNC sebagai jenis sesi.",
+    "Verifikasi sambungan",
+    "Jalankan Get-Service LinkwiseModem lalu periksa Ready dan porta loopback di Express. Kirim lampiran uji, bandingkan SHA-256, dan periksa kedua log pemutusan.",
+    "Uji ini meliputi pertukaran lampiran P2P tanpa radio. Operasi RF fisik dan gateway memerlukan kualifikasi terpisah.",
+    "Petunjuk lengkap Winlink",
+    "Demo Winlink di laboratorium",
+    "Unduh video uji"
+  ],
+  "guide": [
+    "Panduan operator Linkwise",
+    "Jalankan stasiun BW500, tukarkan sertifikat publik, dan ulangi pengujian obrolan dan surel terlindungi pada sambungan terisolasi.",
+    "Mulai stasiun",
+    "Validasi JSON stasiun, perangkat audio, dan profil pengukuran BW500. Jalankan modem dan obrolan di terminal terpisah dengan tanda panggil yang sama seperti konfigurasi stasiun.",
+    "Obrolan dan kehadiran",
+    "Setiap panggilan memiliki satu mitra langsung. /who dan /status menampilkan mitra dan sambungan. Jendela menyimpan draf dan membungkus baris sesuai lebar terminal. Pemberitahuan mencakup bergabung, keluar, putus sambungan, dan batas waktu. Dengan PKI, |V berarti teks terbuka bertanda tangan, |E terenkripsi dan terverifikasi, |X gagal verifikasi, dan |F gagal enkripsi atau dekripsi. Kedua pihak mengetik /encrypt untuk meningkatkan panggilan aktif. /proof mengekspor pesan terverifikasi terakhir.",
+    "Transfer berkas",
+    "Build secure-transfer memakai gzip dan SHA-256. Transfer tanpa enkripsi dibatasi 32 KiB, perlu diterima, dan mempertahankan berkas yang ada. Tawaran MD5 VarAC ditolak. Untuk berkas terenkripsi, gunakan --secure-config dan pasangkan /receivefile --encrypt dengan /sendfile --encrypt pada sesi TLS 1.3 terpisah yang diautentikasi timbal balik.",
+    "PKI bersama dan obrolan hibrida",
+    "Atur CA tepercaya, CRL terkini, dan pin CA per tanda panggil bila memercayai beberapa kunci CA. Verifikasi sidik jari SHA-256 lengkap melalui saluran terpisah yang tepercaya. Tanda tangan menggunakan ECDSA P-256. TLS 1.3 memakai P-256 sementara atau P-256 + ML-KEM-768 dengan build pqc-chat dan penyedia OpenSSL FIPS yang disiapkan di kedua pihak.",
+    "Kartu QSL sertifikat",
+    "Buat PDF vektor berisi sertifikat publik. Cetak 100% pada sisi kosong kartu 5½ × 3½ inci atau gunakan --size 4x6. Jalankan qsl receive dengan sidik jari terverifikasi, lalu bagikan foto JPEG atau PNG ke folder yang dipantau. Linkwise memvalidasi tawaran dan menambahkan mitra ke profil bersama.",
+    "Surel radio terlindungi",
+    "Impor dan ekspor memakai profil PKI yang sama. --encrypt melindungi surel keluar atau mewajibkan enkripsi saat ekspor. mail exchange dan mail listen mengirim amplop B2F tersegel. Sertifikat enkripsi digunakan untuk surel, sedangkan sertifikat tanda tangan mengautentikasi obrolan langsung.",
+    "Penerimaan langsung dan diagnostik",
+    "Masukkan PCM mono bertanda 16 bit little-endian 48 kHz ke receive-pcm, termasuk aliran KiwiSDR. Bingkai BW500 dengan CRC valid dilaporkan sebagai JSON. Rekonstruksi pasif memerlukan perakitan ulang sesi. Obrolan terhubung memakai soket DATA.",
+    "Transport dan validasi",
+    "Hasil uji laboratorium dan penerimaan saja berlaku dalam cakupan pengujiannya. Gunakan enkripsi hanya pada transport yang diizinkan. Penerapan FIPS memerlukan versi modul, build, dan lingkungan yang tervalidasi."
+  ],
+  "docs": [
+    "Dokumentasi Linkwise",
+    "Pilih referensi atau ganti bahasa. Katalog menandai sumber berbahasa Inggris dan menautkan terjemahan yang tersedia.",
+    "Panduan operator dan instalasi",
+    "Arsitektur",
+    "Uji dan catatan laboratorium",
+    "Riset dan referensi"
+  ],
+  "man": [
+    "RINGKASAN TERJEMAHAN",
+    "REFERENSI LENGKAP",
+    "Perintah CLI Linkwise",
+    "Layanan modem Linkwise",
+    "Konfigurasi stasiun Linkwise",
+    "--check-config memvalidasi JSON dan --check-station memeriksa audio serta porta tanpa pemutaran. --serve-station menggunakan audio lokal dan loopback IPv4. --serve-virtual-bw500 dan --serve-virtual-wide menyediakan soket bentuk gelombang tanpa radio.",
+    "Gunakan JSON UTF-8 dengan version 1, callsign dan objek input serta output. Indeks kanal dimulai dari nol. Pilih bandwidth 500, 2300 atau 2750 untuk audio dua arah. Porta bawaan 8300 dan 8301. BW500 dua arah memerlukan bw500_profile."
+  ]
+}

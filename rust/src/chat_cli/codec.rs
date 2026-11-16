@@ -11,7 +11,19 @@ pub fn encode(text: &str) -> io::Result<Vec<u8>> {
             "enter 1–1024 bytes of text without control characters",
         ));
     }
-    Ok(format!("{} {text}", text.len()).into_bytes())
+    encode_record(text.as_bytes())
+}
+
+pub(super) fn encode_record(body: &[u8]) -> io::Result<Vec<u8>> {
+    if !(1..=MAX_RECORD).contains(&body.len()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid VarAC record length",
+        ));
+    }
+    let mut record = format!("{} ", body.len()).into_bytes();
+    record.extend_from_slice(body);
+    Ok(record)
 }
 
 #[derive(Default)]
@@ -22,6 +34,11 @@ pub struct Decoder {
 }
 
 impl Decoder {
+    pub(super) fn partial_file_body(&self) -> Option<(usize, usize)> {
+        let received = self.body.as_ref()?.strip_prefix(b"<SFB>")?.len();
+        Some((received, self.size - 5))
+    }
+
     pub fn push(&mut self, bytes: &[u8], mut record: impl FnMut(&[u8])) -> io::Result<()> {
         for &byte in bytes {
             if let Some(body) = &mut self.body {

@@ -1,0 +1,107 @@
+.TH LINKWISE-MODEMD 8 "2026-11-15" "Linkwise"
+.SH NAME
+linkwise\-modemd \- menjalankan dan mendiagnosis stasiun modem perangkat lunak Linkwise
+.SH "SINOPSIS"
+.B linkwise\-modemd
+.RB { \-h | \-\-help | \-\-version | \-\-audio\-devices | \-\-simulate }
+.br
+.B linkwise\-modemd
+.RB { \-\-check\-config | \-\-check\-station | \-\-serve\-station }
+.I FILE
+.br
+.B linkwise\-modemd \-\-simulate\-audio
+.I PROFILE
+.br
+.B linkwise\-modemd \-\-serve\-bench
+.IR CALL " [" CONTROL_PORT " " DATA_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-bw500
+.IR CALL " " PROFILE " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-wide
+.IR CALL " " BANDWIDTH " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-virtual\-audio\-device
+.I AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE
+.SH "DESKRIPSI"
+Jalankan stasiun audio bawaan, periksa konfigurasi stasiun, atau uji modem tanpa radio. Pilih satu operasi setiap kali dijalankan. Paket audio memakai 48 kHz. Listener stasiun dan laboratorium mengikat loopback IPv4.
+.SH "OPSI"
+.TP
+.BR \-h ", " \-\-help
+Tampilkan cara penggunaan lalu keluar.
+.TP
+.B \-\-version
+Tampilkan versi program lalu keluar.
+.TP
+.B \-\-audio\-devices
+Tampilkan nama perangkat perekaman dan pemutaran yang tersedia.
+.TP
+.BI "\-\-check\-config " FILE
+Validasi JSON stasiun dan profil bentuk gelombang BW500 yang dirujuk.
+.TP
+.BI "\-\-check\-station " FILE
+Validasi konfigurasi, tunggu sampel rekaman, periksa format keluaran yang dilaporkan, lalu reservasi porta perintah dan data sementara. Pemeriksaan ini tidak memutar audio.
+.TP
+.BI "\-\-serve\-station " FILE
+Jalankan stasiun di latar depan. Dengan lebar pita, perangkat yang dikonfigurasi mengirim dan menerima melalui soket perintah dan data terpisah. Tanpa lebar pita, soket perintah mengembalikan diagnostik penerimaan dalam JSON. Pada Windows, winlink_test_audio_port memilih uji BW500 yang terisolasi. Lihat linkwise-station(5). Proses latar depan menangani SIGINT dan SIGTERM di Unix serta Ctrl-C dan Ctrl-Break di Windows. Layanan Windows menangani Stop dan Shutdown dari pengelola layanan. Stasiun dua arah aktif mencoba memutus modem dalam tiga detik lalu melepas sumber daya lokal. Mulai ulang layanan untuk menerapkan perubahan konfigurasi. Sistem operasi menangani SIGKILL dan SIGSTOP.
+.TP
+.B \-\-simulate
+Jalankan pertukaran modem lokal dengan perangkat simulasi.
+.TP
+.BI "\-\-simulate\-audio " PROFILE
+Jalankan pertukaran lokal dengan gelombang BW500 sintetis dan profil pengukuran yang ditentukan.
+.TP
+.BI "\-\-serve\-bench " CALL
+Sediakan mitra gema simulasi. Porta perintah dan data bawaan 8300 dan 8301. Tentukan keduanya untuk mengubahnya.
+.TP
+.BI "\-\-serve\-virtual\-bw500 " "CALL PROFILE"
+Sediakan stasiun uji BW500 dengan kabel bentuk gelombang TCP. Porta perintah, data, dan bentuk gelombang bawaan 8300, 8301, dan 8302. Tentukan ketiganya untuk mengubahnya.
+.TP
+.BI "\-\-serve\-virtual\-wide " "CALL BANDWIDTH"
+Sediakan stasiun dengan kabel bentuk gelombang pada 2300 atau 2750 Hz. Argumen porta mengikuti aturan --serve-virtual-bw500.
+.TP
+.BI "\-\-virtual\-audio\-device " "AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE"
+Sambungkan soket bentuk gelombang lokal ke perangkat perekaman dan pemutaran yang dipilih pada kanal nol. Gunakan jalur audio terpisah untuk uji terisolasi.
+.SH "OPERAN"
+FILE adalah JSON stasiun yang dijelaskan di linkwise-station(5). PROFILE adalah profil pengukuran BW500 berformat JSON. CALL adalah tanda panggil stasiun lokal. Apit nama perangkat yang berisi spasi dengan tanda kutip.
+.SH "STATUS KELUAR"
+.TP
+.B 0
+Operasi berhasil.
+.TP
+.B 1
+Operasi gagal, misalnya akibat berkas tidak valid atau galat audio atau soket.
+.TP
+.B 2
+Baris perintah tidak memilih operasi yang dikenal.
+.SH "LINGKUNGAN"
+.TP
+.B LINKWISE_LOG_LEVEL
+Atur ke error untuk menyembunyikan pesan informasi saat memulai dan selama sesi. Secara bawaan, pesan informasi dan galat ditampilkan.
+.SH "CONTOH"
+Cari perangkat audio USB. Tampilkan semua nama sebelum memfilter. Salin nama perangkat masukan dan keluaran lengkap ke konfigurasi.
+.EX
+linkwise-modemd --audio-devices
+linkwise-modemd --audio-devices | grep -i usb
+.EE
+Validasi konfigurasi stasiun. Apit jalur yang berisi spasi dengan tanda kutip. Simpan konfirmasi dan diagnostik dalam berkas terpisah.
+.EX
+linkwise-modemd --check-config "Field Station/station.json" \e
+    >check.out 2>check.err
+.EE
+Periksa audio dan jalankan stasiun. Hentikan layanan yang memakai perangkat atau porta yang sama. Perintah kedua tetap berjalan di latar depan. Tekan Ctrl-C untuk berhenti.
+.EX
+linkwise-modemd --check-station station.json &&
+    linkwise-modemd --serve-station station.json 2>station.log
+.EE
+Baca diagnostik penerimaan JSON. Jalankan tanpa bandwidth lalu kueri porta perintah bawaan dari terminal lain. Gunakan jq(1) untuk memperoleh jumlah bingkai yang terdekode.
+.EX
+nc 127.0.0.1 8300 | jq '.received_frames'
+.EE
+Simulasikan pertukaran tanpa perangkat radio. Jalankan simulasi bawaan untuk pertukaran lokal. Simpan keluaran dan diagnostik bersama untuk penelusuran masalah.
+.EX
+linkwise-modemd --simulate >simulation.log 2>&1
+.EE
+.SH "LIHAT JUGA"
+.BR linkwise (1),
+.BR linkwise-station (5)

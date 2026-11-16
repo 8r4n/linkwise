@@ -3,8 +3,10 @@
 Linkwise provides a two-way software modem, station diagnostics, and local
 modem simulations. See Station Setup for audio routing and transmit settings.
 
-Encrypted P2P transfer is available in a source build with the
-`secure-transfer` feature. This installer omits the feature.
+This preview installer omits the `secure-transfer` feature. Use a source
+build for gzip/SHA-256 file transfer, shared PKI, protected chat and mail,
+and QSL certificate postcards. See the [PKI guide](../../rust/docs/pki.md)
+for setup and hybrid chat requirements.
 
 ## Install or update
 

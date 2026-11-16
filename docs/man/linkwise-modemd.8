@@ -1,4 +1,4 @@
-.TH LINKWISE-MODEMD 8 "2026-11-12" "Linkwise" "System Administration"
+.TH LINKWISE-MODEMD 8 "2026-11-15" "Linkwise" "System Administration"
 .SH NAME
 linkwise\-modemd \- run and diagnose a Linkwise software modem station
 .SH SYNOPSIS
@@ -53,6 +53,12 @@ Run the station in the foreground.
 A configured bandwidth enables transmit and receive using the configured
 devices and separate command and data sockets.
 Without a bandwidth, the command socket returns receive diagnostics as JSON.
+On Windows, a configured
+.B winlink_test_audio_port
+selects the isolated BW500 waveform test instead of native audio.
+See
+.BR linkwise-station (5)
+for the test settings.
 The foreground station handles SIGINT and SIGTERM on Unix
 and Ctrl-C and Ctrl-Break on Windows.
 Installed Windows services handle Service Control Manager Stop and Shutdown.

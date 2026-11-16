@@ -1,5 +1,5 @@
 ---
-const { title, description } = Astro.props;
+const { title, description, alternates } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const image = new URL(base + "/modem-demo.png", Astro.site);
@@ -9,6 +9,8 @@ const image = new URL(base + "/modem-demo.png", Astro.site);
 <title>{title} | Linkwise</title>
 <meta name="description" content={description} />
 <link rel="canonical" href={canonical} />
+{alternates.map(({ code, href }) => <link rel="alternate" hreflang={code} href={new URL(href, Astro.site)} />)}
+<link rel="alternate" hreflang="x-default" href={new URL(alternates[0].href, Astro.site)} />
 <link rel="sitemap" href={base + "/sitemap.xml"} />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Linkwise" />

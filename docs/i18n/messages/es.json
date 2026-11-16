@@ -1,0 +1,103 @@
+{
+  "nav": [
+    "Descargas",
+    "Retransmisión de correo",
+    "Winlink Express",
+    "Guía de operación",
+    "Documentación"
+  ],
+  "ui": [
+    "Ir al contenido",
+    "Navegación principal",
+    "Idioma",
+    "Referencias de instalación para agentes",
+    "Abrir documento fuente",
+    "Inglés",
+    "La referencia completa está disponible en inglés.",
+    "Edición localizada",
+    "Páginas del manual"
+  ],
+  "home": [
+    "Módem HF Linkwise",
+    "Módem de software libre para radioafición, escrito en Rust. Prueba la versión preliminar multiplataforma y explora el correo directo y el chat de terminal probados en banco.",
+    "Ver descargas",
+    "Configurar Winlink Express",
+    "Forma de onda y espectro de Linkwise",
+    "Receptor y análisis de formas de onda de Linkwise",
+    "Estado del proyecto",
+    "Las compilaciones con las funciones necesarias ofrecen chat conectado, transferencia de archivos, certificados compartidos y tarjetas QSL imprimibles."
+  ],
+  "downloads": [
+    "Descargar Linkwise",
+    "Versión preliminar",
+    "Versión publicada",
+    "Verifica el SHA-256 del paquete antes de instalarlo.",
+    "La versión preliminar pública completa está pendiente. Consulta",
+    "Elige tu sistema operativo",
+    "Descargar",
+    "Archivo SHA-256",
+    "Instalar, verificar y desinstalar",
+    "Manifiesto de versiones legible por máquinas"
+  ],
+  "mail": [
+    "Retransmisión de correo con Linkwise",
+    "Dos estaciones Linkwise pueden intercambiar mensajes en cola por el módem mediante Open B2F. Un perfil PKI compartido permite firmar y cifrar de forma opcional.",
+    "Verificado en banco",
+    "El banco BW500 virtual comprobó el SHA-256 de los adjuntos y la desconexión ordenada. Otras pruebas P2P usaron Pat y Winlink Express.",
+    "Estado de la versión",
+    "Las descargas preliminares incluyen el módem. SMTP, IMAP y el correo protegido requieren su compilación y configuración correspondientes. El acceso a pasarelas y la validación por radiofrecuencia se evalúan por separado.",
+    "Arquitectura del software"
+  ],
+  "winlink": [
+    "Linkwise con Winlink Express",
+    "Winlink Express 1.8.6.0 recibió un adjunto de 64 bytes de Pat a través del servicio Linkwise para Windows ARM64. El SHA-256 coincidió y ambos equipos se desconectaron correctamente.",
+    "Configurar VARA HF P2P",
+    "Instala Linkwise para Windows y abre Configure Linkwise for Winlink. Introduce el mismo indicativo que usas en Express.",
+    "Selecciona Radio-free waveform test y el perfil de medición BW500. Conecta un par de formas de onda aislado al puerto que indica el asistente.",
+    "En Express, abre VARA HF P2P → Settings → TNC Setup. Usa 127.0.0.1 y el puerto de comandos 8300, o el puerto personalizado del asistente. DATA usa el siguiente puerto.",
+    "Selecciona 500 Hz, desactiva Automatically launch TNC when session is opened y vuelve a abrir la sesión. Express muestra VARA TNC como tipo de sesión.",
+    "Verificar la conexión",
+    "Ejecuta Get-Service LinkwiseModem y comprueba que Express muestre Ready y el puerto local. Envía un adjunto de prueba, compara su SHA-256 y revisa ambos registros de desconexión.",
+    "Esta prueba cubre el intercambio P2P sin radio. La operación por RF y con pasarelas requiere otra validación.",
+    "Instrucciones completas de Winlink",
+    "Demostración de Winlink en banco",
+    "Descargar el vídeo de la prueba"
+  ],
+  "guide": [
+    "Guía de operación de Linkwise",
+    "Opera una estación BW500, intercambia certificados públicos y reproduce el chat y el correo protegidos en un enlace aislado.",
+    "Iniciar la estación",
+    "Valida el JSON de estación, los dispositivos de audio y el perfil de medición BW500. Abre el módem y el chat en terminales distintos con el indicativo de la estación.",
+    "Chat y presencia",
+    "Cada llamada admite un solo par directo. /who y /status muestran el par y el enlace. Las ventanas conservan borradores y ajustan el texto al ancho del terminal. Las notificaciones indican entrada, salida, desconexión y tiempo agotado. Con PKI, |V indica texto firmado, |E cifrado y verificado, |X error de verificación y |F error criptográfico. Ambos pares usan /encrypt para actualizar la llamada. /proof exporta el último mensaje verificado.",
+    "Transferir archivos",
+    "La compilación secure-transfer admite gzip y SHA-256. El envío sin cifrar admite hasta 32 KiB, requiere aceptación y conserva archivos existentes. Se rechazan las ofertas MD5 de VarAC. Para cifrar, usa --secure-config y combina /receivefile --encrypt con /sendfile --encrypt en una sesión TLS 1.3 separada con autenticación mutua.",
+    "PKI compartida y chat híbrido",
+    "Configura CA de confianza, CRL vigentes y una CA fijada por indicativo si confías en varias claves de CA. Confirma las huellas SHA-256 completas por un canal independiente antes de aceptar certificados. El chat firma con ECDSA P-256. TLS 1.3 usa P-256 efímero, o P-256 + ML-KEM-768 con pqc-chat y el proveedor OpenSSL FIPS configurado en ambos pares.",
+    "Tarjetas QSL con certificados",
+    "Genera un PDF vectorial con certificados públicos. Imprime al 100 % en el reverso de una postal de 5½ × 3½ pulgadas o usa --size 4x6. Inicia qsl receive con las huellas verificadas y comparte una foto JPEG o PNG en la carpeta vigilada. Linkwise valida la oferta y añade el par al perfil compartido.",
+    "Correo por radio protegido",
+    "Importa y exporta con el mismo perfil PKI. Usa --encrypt al enviar o al exigir un mensaje cifrado al exportar. mail exchange y mail listen transfieren el sobre B2F sellado. El certificado de cifrado sirve para el correo y el de firma autentica el chat interactivo.",
+    "Recepción en directo y diagnóstico",
+    "Envía PCM mono de 48 kHz, 16 bits con signo y orden little endian a receive-pcm, incluido un flujo KiwiSDR. Devuelve tramas BW500 con CRC válido en JSON. La reconstrucción pasiva necesita reensamblar la sesión. El chat conectado usa el socket DATA.",
+    "Transporte y validación",
+    "Los resultados de banco y de solo recepción tienen un alcance limitado. Usa el cifrado solo en transportes autorizados. Una instalación FIPS debe corresponder a la versión, compilación y entorno validados."
+  ],
+  "docs": [
+    "Documentación de Linkwise",
+    "Elige una referencia o cambia de idioma. El catálogo identifica las fuentes en inglés y enlaza las traducciones disponibles.",
+    "Guías de instalación y operación",
+    "Arquitectura",
+    "Pruebas y notas de laboratorio",
+    "Investigación y referencias"
+  ],
+  "man": [
+    "RESUMEN LOCALIZADO",
+    "REFERENCIA COMPLETA",
+    "Comandos de la CLI de Linkwise",
+    "Servicio de módem Linkwise",
+    "Configuración de estación Linkwise",
+    "--check-config valida el JSON y --check-station comprueba el audio y los puertos sin reproducir sonido. --serve-station usa audio nativo y sockets IPv4 locales. --serve-virtual-bw500 y --serve-virtual-wide proporcionan enlaces de laboratorio sin radio.",
+    "Usa JSON UTF-8 con version 1, callsign y dispositivos input y output. Los canales empiezan en cero. bandwidth admite 500, 2300 o 2750. Los puertos predeterminados son 8300 y 8301. Para BW500 bidireccional se requiere bw500_profile."
+  ]
+}

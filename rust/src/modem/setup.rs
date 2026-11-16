@@ -7,6 +7,8 @@
 use super::coding;
 
 const CALLER_SLOTS: usize = 6;
+/// The full caller identity includes an optional hyphen and a two-digit SSID.
+pub const MAX_LINK_CALLSIGN_LEN: usize = CALLER_SLOTS + "-15".len();
 const CONTROL: u8 = 0x82;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -227,5 +229,25 @@ mod tests {
         assert_eq!(frame[5], 10);
         assert_eq!(frame[9], 0x37);
         assert_eq!(LinkSetup::decode(Profile::Bw500, &frame), Some(setup));
+    }
+
+    #[test]
+    fn bw500_caller_length_includes_the_two_digit_ssid() {
+        let setup = LinkSetup {
+            caller: "KN6MQS-15".into(),
+            high_speed: false,
+            requested_level: 4,
+        };
+        assert_eq!(setup.caller.len(), MAX_LINK_CALLSIGN_LEN);
+        let frame = setup.encode(Profile::Bw500).unwrap();
+        assert_eq!(
+            LinkSetup::decode(Profile::Bw500, &frame),
+            Some(setup.clone())
+        );
+        let overlong = LinkSetup {
+            caller: "KN6MQSA-15".into(),
+            ..setup
+        };
+        assert!(overlong.encode(Profile::Bw500).is_none());
     }
 }

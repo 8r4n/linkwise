@@ -44,7 +44,9 @@ profile and bench-only framing.
 ## Direct terminal chat
 
 Use the [chat guide](docs/chat.md) for the BW500 client, terminal controls,
-and a radio-free two-station walkthrough.
+and a radio-free two-station walkthrough. The [station PKI guide](docs/pki.md)
+covers signed chat and radio mail, optional encryption, message proofs,
+and printable QSL cards for exchanging public certificates.
 
 ## Development
 

@@ -19,10 +19,19 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 use crate::{frame_cli::Failure, session_cli::Control};
 
 const PROTOCOL: &[u8] = b"linkwise-transfer/2";
+const CHAT_PROTOCOL: &[u8] = b"linkwise-transfer/2+gzip";
 const REQUIRED_CIPHER: CipherSuite = CipherSuite::TLS13_AES_256_GCM_SHA384;
 const CHUNK: usize = 512;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(90);
 const IO_TIMEOUT: Duration = Duration::from_secs(180);
+
+pub(crate) fn fips_tls_provider() -> Arc<rustls::crypto::CryptoProvider> {
+    let mut provider = rustls::crypto::aws_lc_rs::default_provider();
+    provider.cipher_suites =
+        vec![rustls::crypto::aws_lc_rs::cipher_suite::TLS13_AES_256_GCM_SHA384];
+    provider.kx_groups = vec![rustls::crypto::aws_lc_rs::kx_group::SECP256R1];
+    Arc::new(provider)
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -76,12 +85,11 @@ impl Settings {
         Ok(())
     }
 
-    fn tls(&self) -> Result<(ClientConfig, ServerConfig), Box<dyn std::error::Error>> {
-        let mut provider = rustls::crypto::aws_lc_rs::default_provider();
-        provider.cipher_suites =
-            vec![rustls::crypto::aws_lc_rs::cipher_suite::TLS13_AES_256_GCM_SHA384];
-        provider.kx_groups = vec![rustls::crypto::aws_lc_rs::kx_group::SECP256R1];
-        let provider = Arc::new(provider);
+    fn tls(
+        &self,
+        protocol: &[u8],
+    ) -> Result<(ClientConfig, ServerConfig), Box<dyn std::error::Error>> {
+        let provider = fips_tls_provider();
         let mut roots = RootCertStore::empty();
         roots.add(CertificateDer::from_pem_file(&self.ca_certificate)?)?;
         let certificate = CertificateDer::from_pem_file(&self.certificate)?;
@@ -99,8 +107,8 @@ impl Settings {
             .with_single_cert(vec![certificate], key)?;
         client.resumption = rustls::client::Resumption::disabled();
         server.send_tls13_tickets = 0;
-        client.alpn_protocols = vec![PROTOCOL.to_vec()];
-        server.alpn_protocols = vec![PROTOCOL.to_vec()];
+        client.alpn_protocols = vec![protocol.to_vec()];
+        server.alpn_protocols = vec![protocol.to_vec()];
         client.max_fragment_size = Some(CHUNK);
         server.max_fragment_size = Some(CHUNK);
         if !client.fips() || !server.fips() {
@@ -143,8 +151,9 @@ fn verify_peer(
     certificates: Option<&[CertificateDer<'_>]>,
     alpn: Option<&[u8]>,
     expected: &CertificateDer<'_>,
+    protocol: &[u8],
 ) -> io::Result<()> {
-    if alpn != Some(PROTOCOL) || certificates.and_then(|certs| certs.first()) != Some(expected) {
+    if alpn != Some(protocol) || certificates.and_then(|certs| certs.first()) != Some(expected) {
         return Err(io::Error::other(
             "unexpected secure transfer protocol or peer certificate",
         ));
@@ -157,6 +166,10 @@ async fn execute(
     config: &OsString,
     path: &OsString,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    transfer(send, load_settings(config)?, path).await
+}
+
+fn load_settings(config: &OsString) -> Result<Settings, Box<dyn std::error::Error>> {
     let config: Config = serde_json::from_reader(std::fs::File::open(config)?)?;
     if !config.encryption.enabled {
         return Err("encryption is disabled in the configuration".into());
@@ -166,9 +179,101 @@ async fn execute(
         .settings
         .ok_or("missing encryption settings")?;
     settings.validate()?;
-    let expected = CertificateDer::from_pem_file(&settings.peer_certificate)?;
-    let dns = ServerName::try_from(settings.peer_dns.clone())?;
-    let (client, server) = settings.tls()?;
+    Ok(settings)
+}
+
+pub(crate) struct ChatTransfer {
+    send: bool,
+    settings: Settings,
+    path: OsString,
+}
+
+impl ChatTransfer {
+    pub(crate) fn prepare(
+        send: bool,
+        config: &OsString,
+        path: OsString,
+        local: &str,
+        peer: Option<&str>,
+        ports: (u16, u16),
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let settings = load_settings(config)?;
+        if settings.local_call != local
+            || peer.is_some_and(|peer| peer != settings.peer_call)
+            || (settings.command_port, settings.data_port) != ports
+        {
+            return Err(
+                "secure configuration does not match the chat station, peer, or ports".into(),
+            );
+        }
+        Ok(Self {
+            send,
+            settings,
+            path,
+        })
+    }
+
+    pub(crate) async fn run(
+        self,
+        control: &mut Control,
+        data: &mut TcpStream,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if self.send {
+            let limit = self.settings.max_bytes;
+            let path = self.path;
+            let gzip = tokio::task::spawn_blocking(move || gzip_input(path, limit)).await??;
+            let compressed = gzip.path().as_os_str().to_owned();
+            transfer_on_host(true, self.settings, &compressed, true, control, data).await
+        } else {
+            transfer_on_host(false, self.settings, &self.path, true, control, data).await
+        }
+    }
+}
+
+fn gzip_input(path: OsString, max: u64) -> io::Result<tempfile::NamedTempFile> {
+    use std::io::{Read, Write};
+    if !std::fs::metadata(&path)?.is_file() {
+        return Err(io::Error::other("choose a regular file"));
+    }
+    let source = std::fs::File::open(path)?;
+    let mut temp = tempfile::NamedTempFile::new()?;
+    let mut gzip = flate2::write::GzEncoder::new(temp.as_file_mut(), flate2::Compression::fast());
+    if io::copy(&mut source.take(max.saturating_add(1)), &mut gzip)? > max {
+        return Err(io::Error::other("file exceeds the configured size limit"));
+    }
+    gzip.finish()?.flush()?;
+    Ok(temp)
+}
+
+fn publish_gzip(
+    compressed: tempfile::TempPath,
+    destination: PathBuf,
+    directory: PathBuf,
+    max: u64,
+) -> io::Result<()> {
+    use std::io::{BufRead, Read};
+    let file = std::fs::File::open(&compressed)?;
+    let mut gzip = flate2::bufread::GzDecoder::new(io::BufReader::new(file));
+    let mut output = tempfile::NamedTempFile::new_in(directory)?;
+    if io::copy(&mut (&mut gzip).take(max.saturating_add(1)), &mut output)? > max
+        || !gzip.get_mut().fill_buf()?.is_empty()
+    {
+        return Err(io::Error::other(
+            "expanded file exceeds the limit or has trailing data",
+        ));
+    }
+    output.as_file().sync_all()?;
+    output
+        .persist_noclobber(destination)
+        .map_err(|error| error.error)?;
+    Ok(())
+}
+
+async fn transfer(
+    send: bool,
+    settings: Settings,
+    path: &OsString,
+) -> Result<(), Box<dyn std::error::Error>> {
     let localhost = std::net::Ipv4Addr::LOCALHOST;
     let (control, mut data) = timeout(Duration::from_secs(5), async {
         tokio::try_join!(
@@ -177,7 +282,38 @@ async fn execute(
         )
     })
     .await??;
-    let mut control = Control::new(control);
+    transfer_on_host(
+        send,
+        settings,
+        path,
+        false,
+        &mut Control::new(control),
+        &mut data,
+    )
+    .await
+}
+
+async fn transfer_on_host(
+    send: bool,
+    settings: Settings,
+    path: &OsString,
+    gzip: bool,
+    control: &mut Control,
+    data: &mut TcpStream,
+) -> Result<(), Box<dyn std::error::Error>> {
+    aws_lc_rs::try_fips_mode().map_err(io::Error::other)?;
+    let expected = CertificateDer::from_pem_file(&settings.peer_certificate)?;
+    let dns = ServerName::try_from(settings.peer_dns.clone())?;
+    let protocol = if gzip { CHAT_PROTOCOL } else { PROTOCOL };
+    let limit = if gzip {
+        settings
+            .max_bytes
+            .saturating_add(settings.max_bytes / 64)
+            .saturating_add(128)
+    } else {
+        settings.max_bytes
+    };
+    let (client, server) = settings.tls(protocol)?;
     let (source, destination) = if send {
         (&settings.local_call, &settings.peer_call)
     } else {
@@ -219,7 +355,7 @@ async fn execute(
         if send {
             let mut tls = timeout(
                 IO_TIMEOUT,
-                TlsConnector::from(Arc::new(client)).connect(dns, &mut data),
+                TlsConnector::from(Arc::new(client)).connect(dns, &mut *data),
             )
             .await??;
             verify_cipher(
@@ -232,18 +368,13 @@ async fn execute(
                 tls.get_ref().1.peer_certificates(),
                 tls.get_ref().1.alpn_protocol(),
                 &expected,
+                protocol,
             )?;
             if path == "-" {
                 let (mut input, status) = stdin_stream();
-                send_file(&mut tls, &mut input, settings.max_bytes, Some(status)).await?;
+                send_file(&mut tls, &mut input, limit, Some(status)).await?;
             } else {
-                send_file(
-                    &mut tls,
-                    &mut File::open(path).await?,
-                    settings.max_bytes,
-                    None,
-                )
-                .await?;
+                send_file(&mut tls, &mut File::open(path).await?, limit, None).await?;
             }
             tls.get_mut().1.send_close_notify();
             timeout(IO_TIMEOUT, tls.flush()).await??;
@@ -252,7 +383,7 @@ async fn execute(
         } else {
             let mut tls = timeout(
                 IO_TIMEOUT,
-                TlsAcceptor::from(Arc::new(server)).accept(&mut data),
+                TlsAcceptor::from(Arc::new(server)).accept(&mut *data),
             )
             .await??;
             verify_cipher(
@@ -265,23 +396,33 @@ async fn execute(
                 tls.get_ref().1.peer_certificates(),
                 tls.get_ref().1.alpn_protocol(),
                 &expected,
+                protocol,
             )?;
             if path == "-" {
-                let digest =
-                    receive_file(&mut tls, &mut tokio::io::stdout(), settings.max_bytes).await?;
+                let digest = receive_file(&mut tls, &mut tokio::io::stdout(), limit).await?;
                 receipt(&mut tls, &digest).await?;
             } else {
                 let destination = PathBuf::from(path);
                 let directory = destination
                     .parent()
                     .filter(|p| !p.as_os_str().is_empty())
-                    .unwrap_or(std::path::Path::new("."));
-                let (file, temporary) = tempfile::NamedTempFile::new_in(directory)?.into_parts();
+                    .unwrap_or(std::path::Path::new("."))
+                    .to_owned();
+                let (file, temporary) = tempfile::NamedTempFile::new_in(&directory)?.into_parts();
                 let mut file = File::from_std(file);
-                let digest = receive_file(&mut tls, &mut file, settings.max_bytes).await?;
+                let digest = receive_file(&mut tls, &mut file, limit).await?;
                 file.sync_all().await?;
                 drop(file);
-                temporary.persist_noclobber(&destination)?;
+                if gzip {
+                    let max = settings.max_bytes;
+                    tokio::task::spawn_blocking(move || {
+                        publish_gzip(temporary, destination, directory, max)
+                    })
+                    .await
+                    .map_err(io::Error::other)??;
+                } else {
+                    temporary.persist_noclobber(&destination)?;
+                }
                 receipt(&mut tls, &digest).await?;
             }
             wait_for_tls_close(&mut tls).await?;
@@ -496,10 +637,11 @@ mod tests {
     fn peer_pin_and_protocol_are_both_required() {
         let pin = CertificateDer::from(&b"expected"[..]);
         let other = CertificateDer::from(&b"other"[..]);
-        assert!(verify_peer(Some(&[pin.clone()]), Some(PROTOCOL), &pin).is_ok());
-        assert!(verify_peer(Some(&[other]), Some(PROTOCOL), &pin).is_err());
-        assert!(verify_peer(Some(&[pin.clone()]), None, &pin).is_err());
-        assert!(verify_peer(None, Some(PROTOCOL), &pin).is_err());
+        assert!(verify_peer(Some(&[pin.clone()]), Some(PROTOCOL), &pin, PROTOCOL).is_ok());
+        assert!(verify_peer(Some(&[other]), Some(PROTOCOL), &pin, PROTOCOL).is_err());
+        assert!(verify_peer(Some(&[pin.clone()]), None, &pin, PROTOCOL).is_err());
+        assert!(verify_peer(None, Some(PROTOCOL), &pin, PROTOCOL).is_err());
+        assert!(verify_peer(Some(&[pin.clone()]), Some(PROTOCOL), &pin, CHAT_PROTOCOL).is_err());
     }
 
     #[tokio::test]
