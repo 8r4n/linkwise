@@ -27,9 +27,11 @@ publishing a GitHub prerelease. The website build uses only complete public
 release sets and obtains the SHA-256 from GitHub asset metadata. The same
 release snapshot feeds the static download table and releases.json.
 
-After deployment, verify the root crawler policy at
-`https://8r4n.github.io/robots.txt` and submit the project sitemap in Search
-Console. The root policy is scoped to the GitHub Pages hostname.
+After deployment, submit `https://8r4n.github.io/linkwise/sitemap.xml` in a
+verified Search Console URL-prefix property for `https://8r4n.github.io/linkwise/`.
+Inspect the home, VarAC, and operator guide URLs there to check discovery and
+indexing. A hostname-wide crawler policy belongs at
+`https://8r4n.github.io/robots.txt`, separately from the project deployment.
 
 ## Translations
 

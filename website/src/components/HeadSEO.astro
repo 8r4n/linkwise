@@ -3,10 +3,11 @@ const { title, description, alternates } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const image = new URL(base + "/modem-demo.png", Astro.site);
+const pageTitle = title.includes("Linkwise") ? title : title + " | Linkwise";
 ---
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>{title} | Linkwise</title>
+<title>{pageTitle}</title>
 <meta name="description" content={description} />
 <link rel="canonical" href={canonical} />
 {alternates.map(({ code, href }) => <link rel="alternate" hreflang={code} href={new URL(href, Astro.site)} />)}
@@ -14,7 +15,7 @@ const image = new URL(base + "/modem-demo.png", Astro.site);
 <link rel="sitemap" href={base + "/sitemap.xml"} />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Linkwise" />
-<meta property="og:title" content={title + " | Linkwise"} />
+<meta property="og:title" content={pageTitle} />
 <meta property="og:description" content={description} />
 <meta property="og:url" content={canonical} />
 <meta property="og:image" content={image} />

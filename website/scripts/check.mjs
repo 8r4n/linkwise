@@ -4,6 +4,7 @@ import { packagesFor, releaseManifest, repository } from "../src/releases.mjs";
 import { locales, loadMessages, pages, pagePath } from "../../docs/i18n/locales.mjs";
 import { catalog, translation } from "../../docs/i18n/catalog.mjs";
 import { manuals } from "../../docs/i18n/manuals.mjs";
+import { varacGuide } from "../../docs/i18n/varac.mjs";
 
 const sha = "b".repeat(64);
 const tag = "v0.1.0-preview";
@@ -49,6 +50,7 @@ const examples = (text, source) => Array.from(
 
 for (const { code, dir = "ltr" } of locales) {
   const t = loadMessages(code);
+  const varac = varacGuide(code);
   for (const source of completeReferences) {
     if (code === "en") break;
     const local = translation(code, source);
@@ -67,6 +69,15 @@ for (const { code, dir = "ltr" } of locales) {
     const path = pagePath(code, page);
     const html = await checkHtml(path, code, dir);
     assert.ok(xml.includes("<loc>" + origin + path + "</loc>"));
+    if (page === "" || page === "guide") {
+      assert.ok(html.includes('href="/linkwise' + pagePath(code, "varac") + '"'), path);
+    }
+    if (page === "") assert.ok(html.includes("<title>" + varac.siteTitle + " | Linkwise</title>"), path);
+    if (page === "varac") {
+      assert.ok(html.includes("<title>" + varac.title + "</title>"), path);
+      assert.ok(html.includes('name="description" content="' + varac.lede + '"'), path);
+      assert.ok(html.includes("/connect PEERCALL") && html.includes("/docs/testing/varac-chat.md/"), path);
+    }
     if (page === "downloads") {
       for (const asset of manifest.installers) {
         assert.ok(html.includes(asset.url) && html.includes(asset.sha256));
@@ -109,6 +120,7 @@ for (const { code, dir = "ltr" } of locales) {
   const guide = await readFile("dist/guides/" + code + ".md", "utf8");
   assert.ok(guide.includes(t.guide.title) && guide.includes("linkwise qsl card"));
   const agents = await readFile("dist" + pagePath(code) + "llms.txt", "utf8");
+  assert.ok(agents.includes(origin + pagePath(code, "varac")), code + " VarAC");
   for (const anchor of ["chat-verification", "mail-client-tests", "performance"]) {
     assert.ok(agents.includes(origin + pagePath(code, "guide") + "#" + anchor), code + " " + anchor);
   }

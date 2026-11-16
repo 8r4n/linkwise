@@ -4,6 +4,7 @@ import { buildGuides, buildManuals } from "../../docs/i18n/manuals.mjs";
 import { catalog, translation } from "../../docs/i18n/catalog.mjs";
 import { guideTrustMail } from "../../docs/i18n/guide-trust-mail.mjs";
 import { visualGuide } from "../../docs/i18n/visual-guide.mjs";
+import { varacGuide } from "../../docs/i18n/varac.mjs";
 
 const root = new URL("../../", import.meta.url);
 const publicDir = new URL("website/public/", root);
@@ -24,6 +25,7 @@ for (const { code } of locales) {
   const t = loadMessages(code);
   const trust = guideTrustMail(code);
   const visual = visualGuide(code);
+  const varac = varacGuide(code);
   const target = new URL(pagePath(code).slice(1), publicDir);
   const guide = base + pagePath(code, "guide").slice(1);
   const link = (label, url) => "- [" + label + "](" + url + ")";
@@ -40,6 +42,9 @@ for (const { code } of locales) {
     link(t.guide.start, guide + "#start"),
     link(t.nav.winlink, base + pagePath(code, "winlink").slice(1)),
     link(t.nav.docs, base + pagePath(code, "docs").slice(1)), "",
+    "## " + varac.title, "", varac.lede, "", varac.setup, "", varac.bench, varac.scope, "",
+    link(varac.title, base + pagePath(code, "varac").slice(1)),
+    link(visual.bench, reference("docs/testing/varac-chat.md")), "",
     "## " + trust.verify, "", t.guide.chatText, "", trust.trust, trust.proof, "",
     link(trust.verify, guide + "#chat-verification"),
     link(t.guide.pki, reference("rust/docs/pki.md")),

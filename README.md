@@ -23,7 +23,9 @@ radio PTT remain under development. See the
 ## Chat, files, and protected mail
 
 The source build includes direct BW500 terminal chat and Open B2F mail
-forwarding. The [chat guide](rust/docs/chat.md) covers presence notices,
+forwarding. The [VarAC and VARA HF BW500 guide](https://8r4n.github.io/linkwise/varac/)
+covers station setup and the results of mixed-peer amateur radio chat tests.
+The [chat guide](rust/docs/chat.md) covers presence notices,
 word wrapping, file offers, and the in-call `/encrypt` upgrade.
 The optional `secure-transfer` build adds gzip/SHA-256 file transfer,
 shared PKI for signed chat and protected mail, certificate enrollment,
