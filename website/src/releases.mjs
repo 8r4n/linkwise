@@ -15,7 +15,9 @@ export function packagesFor(version) {
 }
 
 export async function releaseManifest(fetcher = fetch) {
-  const response = await fetcher("https://api.github.com/repos/8r4n/linkwise/releases?per_page=30");
+  const token = process.env.GITHUB_TOKEN;
+  const options = token ? { headers: { Authorization: `Bearer ${token}` }, redirect: "error" } : undefined;
+  const response = await fetcher("https://api.github.com/repos/8r4n/linkwise/releases?per_page=30", options);
   if (!response.ok) throw new Error(`GitHub release lookup failed: ${response.status}`);
   const releases = await response.json();
   for (const release of releases) {
