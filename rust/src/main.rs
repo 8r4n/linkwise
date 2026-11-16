@@ -4,6 +4,13 @@ mod chat_cli;
 mod frame_cli;
 mod mail_cli;
 #[cfg(feature = "secure-transfer")]
+mod pki;
+#[cfg(feature = "secure-transfer")]
+mod pki_mail;
+#[cfg(feature = "secure-transfer")]
+mod qsl;
+
+#[cfg(feature = "secure-transfer")]
 mod secure_cli;
 mod session_cli;
 mod wav_analysis;
@@ -17,6 +24,10 @@ use linkwise::{
 const USAGE: &str = "linkwise — radio-control and modem research service
 
 Usage:
+  linkwise pki check FILE     Validate a shared station identity and trust profile
+  linkwise pki verify-chat FILE PROOF  Verify an exported signed chat message
+  linkwise pki fingerprint ca|cert FILE  Display a SHA-256 fingerprint
+  linkwise qsl card|inspect|import|receive  Public certificate postcards (see qsl --help)
   linkwise                 Start the MCP server on stdio
   linkwise analyze-wav PATH  Report bench burst candidates as JSON
   linkwise decode-wav PATH   Decode BW500 DATA (level 4 requires measurement profile) from a 48 kHz mono WAV
@@ -29,10 +40,10 @@ Usage:
   linkwise decode-frame INPUT  Write one decoded payload as raw bytes
   linkwise transmit-frame LEVEL CONTROL INPUT  Play one BW500 frame
   linkwise send SOURCE DESTINATION INPUT [COMMAND_PORT DATA_PORT]  Send via local P2P modem
-  linkwise chat LOCAL [COMMAND_PORT DATA_PORT]  Direct BW500 terminal chat
-  linkwise mail queue MAILBOX ENVELOPE
-  linkwise mail import MAILBOX MESSAGE.eml
-  linkwise mail export MAILBOX MESSAGE_ID
+  linkwise chat [--pki FILE [--encrypt | --enroll]] [--secure-config FILE] LOCAL [COMMAND_PORT DATA_PORT]  Direct BW500 terminal chat
+  linkwise mail queue [--pki FILE [--encrypt]] MAILBOX ENVELOPE
+  linkwise mail import [--pki FILE [--encrypt]] MAILBOX MESSAGE.eml
+  linkwise mail export [--pki FILE [--encrypt]] MAILBOX MESSAGE_ID
   linkwise mail smtp MAILBOX CALLSIGN [PORT [--tls CERT.pem KEY.pem]]
   linkwise mail imap MAILBOX [PORT [--tls CERT.pem KEY.pem]]
   linkwise mail exchange|listen MAILBOX LOCAL PEER [COMMAND_PORT DATA_PORT]
@@ -61,6 +72,68 @@ async fn main() {
     use std::io::Write;
 
     let mut args: Vec<_> = env::args_os().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "qsl") {
+        #[cfg(feature = "secure-transfer")]
+        {
+            if let Err(error) = qsl::run(&args[1..]) {
+                let status = if error.kind() == std::io::ErrorKind::InvalidInput {
+                    2
+                } else {
+                    1
+                };
+                fail(status, error.into());
+            }
+            return;
+        }
+        #[cfg(not(feature = "secure-transfer"))]
+        fail(
+            2,
+            "QSL card support requires the secure-transfer feature".into(),
+        );
+    }
+    if args.first().is_some_and(|arg| arg == "pki") {
+        #[cfg(feature = "secure-transfer")]
+        {
+            if let [_, check, config] = args.as_slice()
+                && check == "check"
+            {
+                match pki::Pki::load(Path::new(config)).and_then(|pki| {
+                    pki.check()?;
+                    writeln!(
+                        std::io::stdout().lock(),
+                        "PKI configuration verified for {}",
+                        pki.callsign()
+                    )
+                }) {
+                    Ok(()) => return,
+                    Err(error) => fail(1, error.into()),
+                }
+            }
+            if let [_, command, config, proof] = args.as_slice()
+                && command == "verify-chat"
+            {
+                if let Err(error) = pki::verify_chat_proof(Path::new(config), Path::new(proof)) {
+                    fail(1, error.into());
+                }
+                return;
+            }
+            if let [_, command, kind, file] = args.as_slice()
+                && command == "fingerprint"
+                && (kind == "ca" || kind == "cert")
+            {
+                if let Err(error) = pki::print_fingerprint(Path::new(file), kind == "ca") {
+                    fail(1, error.into());
+                }
+                return;
+            }
+            fail(
+                2,
+                "use linkwise pki check FILE, pki verify-chat FILE PROOF, or pki fingerprint ca|cert FILE".into(),
+            );
+        }
+        #[cfg(not(feature = "secure-transfer"))]
+        fail(2, "PKI support is unavailable in this build".into());
+    }
     if args.first().is_some_and(|arg| arg == "chat") {
         if let Err(error) = chat_cli::run(&args[1..]).await {
             fail(error.status, error.source);

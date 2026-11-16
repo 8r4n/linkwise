@@ -1,0 +1,60 @@
+.TH LINKWISE-STATION 5 "2026-11-15" "Linkwise"
+.SH NAME
+linkwise\-station \- Linkwise 调制解调器台站配置
+.SH "用法"
+.I station.json
+.SH "说明"
+台站配置是 UTF-8 编码的 JSON 对象，文件最大为 16 KiB。未知键会被拒绝。linkwise-modemd(8) 读取命令行指定的文件。
+.SH "字段"
+.TP
+.B version
+必填整数。此格式使用 1。
+.TP
+.B callsign
+必填的台站呼号。Linkwise 去除开头和结尾的空白，并将字母转换为大写。
+.TP
+.BR input ", " output
+必填对象，其中 name 是字符串，channel 是从零开始编号的整数。设备名称必须与 linkwise-modemd --audio-devices 报告的名称完全一致。
+.TP
+.B bandwidth
+可选整数，单位为 Hz。原生双向音频可用 500、2300 或 2750。省略此字段可运行接收诊断。
+.TP
+.BR command_port ", " data_port
+可选 TCP 端口，默认分别为 8300 和 8301。请选择两个不同的非零端口。接收诊断仅使用命令端口。Winlink Express 的数据端口必须是紧随命令端口的下一个端口。
+.TP
+.B bw500_profile
+BW500 JSON 测量配置文件的路径，文件最大为 128 KiB。相对路径基于台站配置文件所在的目录。500 Hz 双向运行必须指定此项，接收诊断可省略。
+.TP
+.B winlink_test_audio_port
+仅限 Windows。启用后，在指定的独立非零回环端口上提供无需射频的 BW500 波形套接字。省略 bandwidth，指定 bw500_profile，并将 DATA 数据端口设为命令端口加一。
+.TP
+.B verify_bw500_fixture
+仅限 Windows。设为 true 后，接收诊断会统计与 BW500 第 2 级测试波形完全匹配的次数。使用隔离音频路径，并在验证采集后删除此设置。
+.SH "文件"
+.TP
+.I /etc/linkwise/station.json
+Linux 系统服务配置。
+.TP
+.I ~/.config/linkwise/station.json
+Linux 用户服务配置。
+.TP
+.I ~/Library/Application Support/Linkwise/station.json
+macOS 登录代理配置。
+.TP
+.I %ProgramData%\eLinkwise\eStation.json
+Windows 服务配置。
+.SH "示例"
+以下是双向 500 Hz 台站的配置。
+请使用本台站的呼号、设备名称和配置文件路径。
+.EX
+{
+  "version": 1,
+  "callsign": "W1AW",
+  "input": {"name": "Radio input", "channel": 0},
+  "output": {"name": "Radio output", "channel": 0},
+  "bandwidth": 500,
+  "bw500_profile": "bw500-profile.json"
+}
+.EE
+.SH "另请参阅"
+.BR linkwise-modemd (8)

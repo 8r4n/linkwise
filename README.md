@@ -20,6 +20,24 @@ station checks and local simulations. Live Winlink message transfer and
 radio PTT remain under development. See the
 [packaging instructions](packaging/README.md) to build installers.
 
+## Chat, files, and protected mail
+
+The source build includes direct BW500 terminal chat and Open B2F mail
+forwarding. The [chat guide](rust/docs/chat.md) covers presence notices,
+word wrapping, file offers, and the in-call `/encrypt` upgrade.
+The optional `secure-transfer` build adds gzip/SHA-256 file transfer,
+shared PKI for signed chat and protected mail, certificate enrollment,
+message proofs, and vector QSL cards for exchanging public certificates.
+The `pqc-chat` build adds optional hybrid P-256 + ML-KEM-768 key exchange
+for live TLS 1.3 chat.
+
+Use the [shared PKI guide](rust/docs/pki.md) for CA pins, out-of-band
+fingerprint checks, QSL printing and automatic photo import, and mail
+encryption. Use the [operator guide](https://8r4n.github.io/linkwise/guide/)
+or [documentation index](https://8r4n.github.io/linkwise/docs/) to choose
+a language. See the [localization notes](docs/i18n/README.md) for edition
+coverage and building the manuals locally.
+
 ## Run the modem demo
 
 ```sh

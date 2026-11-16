@@ -24,13 +24,13 @@ p { margin: 0 0 1rem; }
 .bar a:hover, .bar a[aria-current] { color: var(--primary); }
 .bar .brand, .footer .brand { color: var(--foreground); font-weight: 750; font-size: 1.25rem; }
 .brand span { color: var(--primary); }
-.skip { position: absolute; left: -100vw; }
-.skip:focus { left: 1rem; top: 1rem; z-index: 1; background: var(--background); padding: .5rem; }
-.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 3.5rem; align-items: center; padding-block: clamp(3rem, 8vw, 7rem); }
+.skip { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+.skip:focus { width: auto; height: auto; clip-path: none; inset-inline-start: 1rem; top: 1rem; z-index: 3; background: var(--background); padding: .5rem; }
+.hero { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3.5rem; align-items: center; padding-block: clamp(3rem, 8vw, 7rem); }
 .kicker, .platforms, .state, .console-bar, figcaption { font-size: .82rem; color: var(--muted); }
 .kicker { text-transform: uppercase; letter-spacing: .13em; font-weight: 680; }
 .kicker span { display: inline-block; width: .55rem; height: .55rem; border-radius: 100%; background: var(--primary); margin-right: .4rem; }
-h1, h2, h3 { margin: 0 0 .65em; line-height: 1.04; letter-spacing: -.035em; }
+h1, h2, h3 { margin: 0 0 .65em; line-height: 1.04; letter-spacing: -.035em; overflow-wrap: anywhere; }
 h1 { font-size: clamp(2.6rem, 6vw, 5rem); margin-bottom: .25em; }
 h2 { font-size: clamp(1.5rem, 3vw, 2rem); }
 h3 { font-size: 1.5rem; }
@@ -62,9 +62,16 @@ code { overflow-wrap: anywhere; }
 .footer { border-top: 1px solid var(--border); padding-block: 1.3rem; font-size: .9rem; }
 @media (max-width: 720px) {
   .wrap { width: calc(100% - 2rem); }
-  .hero, .cards { grid-template-columns: 1fr; }
+  .hero, .cards { grid-template-columns: minmax(0, 1fr); }
   .hero { gap: 1.8rem; }
   .bar { justify-content: flex-start; gap: .55rem 1rem; }
   .bar nav { order: 3; width: 100%; gap: .9rem; }
   .source { margin-inline-start: auto; }
 }
+
+.languages { position: relative; }
+.languages summary { cursor: pointer; color: var(--foreground); }
+.languages ul { position: absolute; inset-inline-end: 0; z-index: 2; min-width: 12rem; margin: .5rem 0 0; padding: .55rem; list-style: none; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+.languages a { display: block; padding: .18rem .55rem; }
+pre { text-align: start; overflow: auto; padding: 1rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+[dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3 { letter-spacing: normal; line-height: 1.25; overflow-wrap: anywhere; }

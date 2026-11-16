@@ -1,0 +1,12 @@
+---
+import { locales, pages, pagePath } from "../../../docs/i18n/locales.mjs";
+import SitePage from "../components/SitePage.astro";
+export function getStaticPaths() {
+  return locales.flatMap(locale => pages.map(page => ({
+    params: { path: pagePath(locale.code, page).slice(1, -1) || undefined },
+    props: { locale, page },
+  })));
+}
+const { locale, page } = Astro.props;
+---
+<SitePage {locale} {page} />

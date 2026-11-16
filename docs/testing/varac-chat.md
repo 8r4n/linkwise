@@ -181,3 +181,72 @@ from Linkwise immediately led to crossed traffic and the stock modem
 did not acknowledge that DATA. In a second run, Linkwise stayed idle
 and answered repeated stock polls. Stock keyboard DATA remained unobserved. The stock-originated
 call therefore qualifies establishment only.
+
+## Shared PKI and QSL bench
+
+Two empty peer profiles used separate test CAs, preconfigured CA pins and
+current CRLs. A bench camera running on an iPhone simulator decoded each
+rendered QSL postcard and uploaded the JPEG to the Mac over loopback.
+`linkwise qsl receive` installed the two public certificates in each shared
+profile after checking independently supplied SHA-256 fingerprints.
+Linkwise then sent a sealed B2F message through two virtual BW500 modems.
+The receiver recovered the complete envelope, decrypted the mail, and
+verified the sender. In a separate direct call, both terminals authenticated
+the peer using the imported certificates, accepted `/encrypt`, negotiated
+TLS 1.3 with P-256 + ML-KEM-768, and received `|E` messages in both directions.
+
+The exercise used simulated print and camera input and a local photo
+upload. The mail and chat tests used real Linkwise processes and virtual
+modem samples. The [PKI guide](../../rust/docs/pki.md#qualification) has
+reproduction commands for the postcard, mail, and chat checks.
+
+## File transfer bench
+
+VarAC 16.1.8 on both sides of the isolated command/DATA relay sent an
+8-byte binary file and a 2,048-byte binary file. The relay captured the
+offer, ready reply, Base64 body, and acceptance receipt. For a 6,144-byte
+file, stock VarAC showed the configured incoming size alert and sent
+an abort reply when the approval countdown expired.
+
+| Body inside the decimal-length DATA record | Meaning |
+| --- | --- |
+| `<SF:sample.bin.VarAC_gzip\|28\|9BCE18C5112051FF758CE44DD401AEA1>` | Basename, gzip byte count, and MD5 of the gzip bytes. |
+| `<SFRD>` | Receiver is ready for the body. |
+| `<SFB>H4sIAAAAAAAEAGNgZGKub/j3HwDyh2m8CAAAAA==` | The single gzip member as Base64. |
+| `<SFOK>` | Receiver reports completion. |
+| `<SFAB>` | Receiver declines or aborts. |
+
+The first sample expands to hex `00 01 02 03 7f 80 fe ff` and has
+SHA-256 `46d7c9e30f06774ee03af126b95c971f6fe6cc8b70ed27377bd4495b72b9b20a`.
+The 2,048-byte sample produced one 2,769-byte application record,
+including the body tag. A modem may deliver the record across multiple
+TCP reads.
+
+A prototype with the stock checksum exchanged the 8-byte sample both
+ways through the isolated relay. The received files on both hosts matched
+the original SHA-256. That compatibility mode was removed because it
+required MD5. The current client declines 32-digit checksum offers.
+Stock VARA audio and on-air file delivery remain outside this qualification.
+
+For two Linkwise peers, the plain mode uses a 64-digit SHA-256 field and
+requires a matching checksum before expansion and publication. The
+32-digit stock checksum field is unsupported. Encrypted chat
+uses gzip within a dedicated, mutually authenticated session with ALPN
+`linkwise-transfer/2+gzip`; the authenticated SHA-256 receipt follows
+successful publication of the expanded file.
+
+Run the PTY regression on a Unix host with the verified BW500 profile.
+Build both binaries as described in the chat and secure transfer guides.
+
+~~~sh
+python3 tools/test-varac-file-transfer.py rust/target/debug/linkwise \
+  rust/target/debug/linkwise-modemd \
+  reference/vara/fixtures/level4/bw500-level4.json plain
+python3 tools/test-varac-file-transfer.py rust/target/debug/linkwise \
+  rust/target/debug/linkwise-modemd \
+  reference/vara/fixtures/level4/bw500-level4.json secure pin
+~~~
+
+The first command tests the SHA-256 mode between Linkwise peers. The second tests the encrypted chat handoff and rejection of an
+incorrect peer pin. The stock application checks above use the separate
+Windows bench.

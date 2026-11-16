@@ -23,6 +23,12 @@ const IO_TIMEOUT: Duration = Duration::from_secs(120);
 const CHUNK: usize = 1024;
 
 pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
+    if args.get(1).is_some_and(|arg| arg == "--pki") {
+        #[cfg(feature = "secure-transfer")]
+        return crate::pki_mail::run(args);
+        #[cfg(not(feature = "secure-transfer"))]
+        return Err(Failure::usage("PKI support is unavailable in this build"));
+    }
     if let [command, root, input] = args
         && (command == "queue" || command == "import")
     {

@@ -30,3 +30,15 @@ release snapshot feeds the static download table and releases.json.
 After deployment, verify the root crawler policy at
 `https://8r4n.github.io/robots.txt` and submit the project sitemap in Search
 Console. The root policy is scoped to the GitHub Pages hostname.
+
+## Translations
+
+English keeps the unprefixed URL. For example, Arabic starts at
+'/linkwise/ar/' and Simplified Chinese at '/linkwise/zh-Hans/'.
+Each page links to its language equivalents. The operator guide also
+builds as downloadable Markdown. The documentation catalog links to each
+source and identifies coverage for localized reference editions.
+
+Edit the shared message bundles under **docs/i18n/messages/**. Run the site
+check after changes. See the [localization guide](../docs/i18n/README.md)
+for full document overlays, man page generation, and fallback behavior.

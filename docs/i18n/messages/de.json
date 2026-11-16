@@ -1,0 +1,103 @@
+{
+  "nav": [
+    "Downloads",
+    "Mail-Weiterleitung",
+    "Winlink Express",
+    "Bedienungsanleitung",
+    "Dokumentation"
+  ],
+  "ui": [
+    "Zum Inhalt",
+    "Hauptnavigation",
+    "Sprache",
+    "Installationsreferenz für Agenten",
+    "Quelldokument öffnen",
+    "Englisch",
+    "Die vollständige Referenz ist auf Englisch verfügbar.",
+    "Übersetzte Ausgabe",
+    "Handbuchseiten"
+  ],
+  "home": [
+    "Linkwise-Kurzwellenmodem",
+    "Quelloffenes Softwaremodem in Rust für den Amateurfunk. Die plattformübergreifende Vorschau bietet Einblick in die am Prüfstand getestete direkte Mail-Übertragung und den Terminalchat.",
+    "Zu den Downloads",
+    "Winlink Express einrichten",
+    "Signalform und Spektrum in Linkwise",
+    "Linkwise-Empfänger und Signalanalyse",
+    "Projektstatus",
+    "Mit den entsprechenden Build-Optionen sind Direktchat, Dateiübertragung, gemeinsame Zertifikate und druckbare QSL-Karten verfügbar."
+  ],
+  "downloads": [
+    "Linkwise herunterladen",
+    "Vorschau",
+    "Version",
+    "Prüfen Sie vor der Installation den SHA-256-Wert des Pakets.",
+    "Die vollständige öffentliche Vorschau steht noch aus. Folgen Sie",
+    "Betriebssystem auswählen",
+    "Herunterladen",
+    "SHA-256-Datei",
+    "Installieren, prüfen und deinstallieren",
+    "Maschinenlesbares Versionsmanifest"
+  ],
+  "mail": [
+    "Mail-Weiterleitung mit Linkwise",
+    "Zwei Linkwise-Stationen können wartende Nachrichten via Open B2F über das Modem austauschen. Ein gemeinsames PKI-Profil ermöglicht Signatur und optionale Verschlüsselung.",
+    "Am Prüfstand verifiziert",
+    "Im virtuellen BW500-Test wurden SHA-256 der Anhänge und korrekte Verbindungsenden geprüft. Pat und Winlink Express kamen in separaten P2P-Tests zum Einsatz.",
+    "Versionsstatus",
+    "Die Vorschau enthält das Modem. SMTP, IMAP und geschützte Mail benötigen passende Builds und Konfigurationen. Gateway-Zugriff und Funkbetrieb werden getrennt geprüft.",
+    "Softwarearchitektur"
+  ],
+  "winlink": [
+    "Linkwise mit Winlink Express",
+    "Winlink Express 1.8.6.0 empfing über den Linkwise-Dienst für Windows ARM64 einen 64-Byte-Anhang von Pat. SHA-256 stimmte überein und beide Seiten trennten die Verbindung korrekt.",
+    "VARA HF P2P einrichten",
+    "Installieren Sie Linkwise für Windows und öffnen Sie Configure Linkwise for Winlink. Geben Sie Ihr Rufzeichen aus Express ein.",
+    "Wählen Sie Radio-free waveform test und das BW500-Messprofil. Verbinden Sie eine isolierte Gegenstelle mit dem vom Assistenten angezeigten Port.",
+    "Öffnen Sie in Express VARA HF P2P → Settings → TNC Setup. Verwenden Sie 127.0.0.1 und den Befehlsport 8300 oder den Port des Assistenten. DATA nutzt den Folgeport.",
+    "Wählen Sie 500 Hz, deaktivieren Sie Automatically launch TNC when session is opened und öffnen Sie die Sitzung erneut. Express zeigt VARA TNC als Sitzungstyp.",
+    "Verbindung prüfen",
+    "Führen Sie Get-Service LinkwiseModem aus. Prüfen Sie Ready und den Loopback-Port in Express. Senden Sie einen Testanhang, vergleichen Sie SHA-256 und prüfen Sie beide Verbindungsprotokolle.",
+    "Der Test deckt P2P-Anhänge ohne Funk ab. Funkbetrieb und Gateways erfordern separate Qualifikation.",
+    "Vollständige Winlink-Anleitung",
+    "Winlink-Prüfstandsvideo",
+    "Prüfstandsvideo herunterladen"
+  ],
+  "guide": [
+    "Linkwise-Bedienungsanleitung",
+    "Betreiben Sie eine BW500-Station, tauschen Sie öffentliche Zertifikate aus und erproben Sie geschützten Chat und Mail über einen isolierten Link.",
+    "Station starten",
+    "Prüfen Sie Stations-JSON, Audiogeräte und BW500-Messprofil. Starten Sie Modem und Chat in getrennten Terminals mit demselben Rufzeichen wie in der Stationskonfiguration.",
+    "Chat und Anwesenheit",
+    "Ein Ruf hat eine direkte Gegenstelle. /who und /status zeigen Gegenstelle und Verbindung. Fenster behalten Entwürfe und passen Zeilen an die Terminalbreite an. Hinweise melden Eintritt, Austritt, Verbindungsabbruch und Zeitüberschreitung. Mit PKI steht |V für signierten Klartext, |E für verschlüsselt und verifiziert, |X für einen Prüffehler und |F für einen Ver- oder Entschlüsselungsfehler. Beide Seiten geben /encrypt ein, um den laufenden Ruf zu schützen. /proof exportiert die letzte verifizierte Nachricht.",
+    "Dateiübertragung",
+    "Der secure-transfer-Build verwendet gzip und SHA-256. Unverschlüsselte Dateien sind auf 32 KiB beschränkt, müssen angenommen werden und überschreiben keine vorhandenen Dateien. VarAC-Angebote mit MD5 werden abgelehnt. Für verschlüsselte Dateien verwenden Sie --secure-config sowie /receivefile --encrypt und /sendfile --encrypt in einer eigenen TLS-1.3-Sitzung mit gegenseitiger Authentisierung.",
+    "Gemeinsame PKI und hybrider Chat",
+    "Konfigurieren Sie vertrauenswürdige CAs und aktuelle CRLs. Bei mehreren CA-Schlüsseln ist pro Rufzeichen ein CA-Pin nötig. Vergleichen Sie vollständige SHA-256-Fingerabdrücke über einen unabhängigen vertrauenswürdigen Kanal. Chat signiert mit ECDSA P-256. TLS 1.3 nutzt flüchtiges P-256 oder P-256 + ML-KEM-768 mit pqc-chat und passender OpenSSL-FIPS-Konfiguration beider Seiten.",
+    "QSL-Karten mit Zertifikaten",
+    "Erstellen Sie eine Vektor-PDF mit öffentlichen Zertifikaten. Drucken Sie mit 100% auf die freie Seite einer Karte mit 5½ × 3½ Zoll oder wählen Sie --size 4x6. Starten Sie qsl receive mit geprüften Fingerabdrücken. Teilen Sie ein JPEG- oder PNG-Foto in den überwachten Ordner. Linkwise prüft das Angebot und ergänzt das gemeinsame Profil.",
+    "Geschützte Funkmail",
+    "Import und Export verwenden dasselbe PKI-Profil. --encrypt verschlüsselt ausgehende Mail oder verlangt Verschlüsselung beim Export. mail exchange und mail listen transportieren den geschützten B2F-Umschlag. Das Verschlüsselungszertifikat dient der Mail, das Signaturzertifikat authentisiert den Live-Chat.",
+    "Live-Empfang und Diagnose",
+    "Leiten Sie vorzeichenbehaftetes 16-Bit-Mono-PCM mit 48 kHz in Little-Endian-Reihenfolge an receive-pcm weiter, etwa von KiwiSDR. BW500-Rahmen mit gültiger CRC erscheinen als JSON. Passive Rekonstruktion erfordert das Zusammensetzen der Sitzung. Verbundener Chat verwendet den DATA-Socket.",
+    "Transport und Validierung",
+    "Prüfstand und Empfangsergebnisse gelten für ihren jeweiligen Testumfang. Verwenden Sie Verschlüsselung nur auf einem zugelassenen Transport. FIPS-Einsatz erfordert validierte Modulversion, Build und Betriebsumgebung."
+  ],
+  "docs": [
+    "Linkwise-Dokumentation",
+    "Wählen Sie einen Eintrag oder wechseln Sie die Sprache. Der Katalog kennzeichnet englische Quellen und verlinkt verfügbare Übersetzungen.",
+    "Bedienung und Installation",
+    "Architektur",
+    "Tests und Labornotizen",
+    "Forschung und Referenzen"
+  ],
+  "man": [
+    "DEUTSCHER ÜBERBLICK",
+    "VOLLSTÄNDIGE REFERENZ",
+    "Linkwise-CLI-Befehle",
+    "Linkwise-Modemdienst",
+    "Linkwise-Stationskonfiguration",
+    "--check-config prüft JSON und --check-station prüft Audio und Ports ohne Tonwiedergabe. --serve-station nutzt native Audiogeräte und IPv4-Loopback. --serve-virtual-bw500 und --serve-virtual-wide bieten virtuelle Signal-Sockets.",
+    "Verwenden Sie UTF-8-JSON mit version 1, callsign und den Objekten input und output. Kanalnummern beginnen bei null. Für bidirektionales Audio ist bandwidth 500, 2300 oder 2750. Standardports sind 8300 und 8301; bidirektionales BW500 erfordert bw500_profile."
+  ]
+}

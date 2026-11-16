@@ -1,0 +1,107 @@
+.TH LINKWISE-MODEMD 8 "2026-11-15" "Linkwise"
+.SH NAME
+linkwise\-modemd \- Linkwise সফটওয়্যার মডেম স্টেশন চালানো ও পরীক্ষা করা
+.SH "ব্যবহারের রূপরেখা"
+.B linkwise\-modemd
+.RB { \-h | \-\-help | \-\-version | \-\-audio\-devices | \-\-simulate }
+.br
+.B linkwise\-modemd
+.RB { \-\-check\-config | \-\-check\-station | \-\-serve\-station }
+.I FILE
+.br
+.B linkwise\-modemd \-\-simulate\-audio
+.I PROFILE
+.br
+.B linkwise\-modemd \-\-serve\-bench
+.IR CALL " [" CONTROL_PORT " " DATA_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-bw500
+.IR CALL " " PROFILE " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-wide
+.IR CALL " " BANDWIDTH " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-virtual\-audio\-device
+.I AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE
+.SH "বিবরণ"
+নেটিভ অডিও স্টেশন চালান, স্টেশনের কনফিগারেশন যাচাই করুন, অথবা রেডিওবিহীন বেঞ্চে মডেম পরীক্ষা করুন। প্রতি আহ্বানে একটি কাজ বেছে নিন। প্যাকেজের অডিও বিল্ড 48 kHz ব্যবহার করে। স্টেশন ও পরীক্ষার লিসেনার IPv4 লুপব্যাকে বাঁধা থাকে।
+.SH "বিকল্প"
+.TP
+.BR \-h ", " \-\-help
+ব্যবহারের নিয়ম দেখিয়ে প্রস্থান করে।
+.TP
+.B \-\-version
+প্রোগ্রামের সংস্করণ দেখিয়ে প্রস্থান করে।
+.TP
+.B \-\-audio\-devices
+উপলব্ধ ক্যাপচার ও প্লেব্যাক ডিভাইসের নাম দেখায়।
+.TP
+.BI "\-\-check\-config " FILE
+স্টেশনের JSON এবং উল্লেখ করা BW500 তরঙ্গরূপ প্রোফাইল যাচাই করে।
+.TP
+.BI "\-\-check\-station " FILE
+কনফিগারেশন যাচাই করে, ক্যাপচার নমুনার জন্য অপেক্ষা করে, ঘোষিত আউটপুট ফরম্যাট পরীক্ষা করে এবং সাময়িকভাবে কমান্ড ও ডেটা পোর্ট সংরক্ষণ করে। পরীক্ষায় শব্দ বাজে না।
+.TP
+.BI "\-\-serve\-station " FILE
+স্টেশনকে ফোরগ্রাউন্ডে চালায়। ব্যান্ডউইডথ দিলে কনফিগার করা ডিভাইস এবং পৃথক কমান্ড ও ডেটা সকেটে পাঠানো ও গ্রহণ চালু হয়। ব্যান্ডউইডথ না দিলে কমান্ড সকেট JSON-এ রিসিভ ডায়াগনস্টিক দেয়। Windows-এ winlink_test_audio_port বিচ্ছিন্ন BW500 তরঙ্গরূপ পরীক্ষা বেছে নেয়। linkwise-station(5) দেখুন। ফোরগ্রাউন্ডে Unix-এর SIGINT ও SIGTERM এবং Windows-এর Ctrl-C ও Ctrl-Break সামলায়। Windows সেবা সার্ভিস কন্ট্রোল ম্যানেজারের Stop ও Shutdown সামলায়। সক্রিয় দ্বিমুখী স্টেশন তিন সেকেন্ডের মধ্যে মডেম বিচ্ছিন্ন করার চেষ্টা করে ও স্থানীয় সম্পদ ছেড়ে দেয়। কনফিগারেশন বদলালে সেবা পুনরায় চালু করুন। SIGKILL ও SIGSTOP অপারেটিং সিস্টেম সামলায়।
+.TP
+.B \-\-simulate
+সিমুলেট করা ডিভাইস দিয়ে স্থানীয় মডেম বিনিময় চালায়।
+.TP
+.BI "\-\-simulate\-audio " PROFILE
+কৃত্রিম BW500 তরঙ্গরূপ ও নির্দিষ্ট পরিমাপ প্রোফাইল দিয়ে স্থানীয় বিনিময় চালায়।
+.TP
+.BI "\-\-serve\-bench " CALL
+সিমুলেট করা ইকো পিয়ার চালায়। ডিফল্ট কমান্ড ও ডেটা পোর্ট 8300 ও 8301। বদলাতে দুটি পোর্টই দিন।
+.TP
+.BI "\-\-serve\-virtual\-bw500 " "CALL PROFILE"
+TCP তরঙ্গরূপ কেবলে BW500 পরীক্ষার স্টেশন চালায়। ডিফল্ট কমান্ড, ডেটা ও তরঙ্গরূপ পোর্ট 8300, 8301 ও 8302। বদলাতে তিনটি পোর্টই দিন।
+.TP
+.BI "\-\-serve\-virtual\-wide " "CALL BANDWIDTH"
+2300 বা 2750 Hz তরঙ্গরূপ কেবলের স্টেশন চালায়। পোর্টের নিয়ম --serve-virtual-bw500-এর মতো।
+.TP
+.BI "\-\-virtual\-audio\-device " "AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE"
+স্থানীয় তরঙ্গরূপ সকেটকে নির্বাচিত ক্যাপচার ও প্লেব্যাক ডিভাইসের শূন্য নম্বর চ্যানেলে যুক্ত করে। বিচ্ছিন্ন পরীক্ষায় স্বাধীন অডিও পথ ব্যবহার করুন।
+.SH "অপারেন্ড"
+FILE হলো linkwise-station(5)-এ বর্ণিত স্টেশনের JSON। PROFILE হলো JSON-এ BW500 পরিমাপ প্রোফাইল। CALL হলো স্থানীয় স্টেশনের কলসাইন। ফাঁক আছে এমন ডিভাইসের নাম উদ্ধৃতি চিহ্নে রাখুন।
+.SH "প্রস্থান অবস্থা"
+.TP
+.B 0
+কাজ সফল।
+.TP
+.B 1
+কাজ ব্যর্থ, যেমন অবৈধ ফাইল, অডিও বা সকেটের ত্রুটি।
+.TP
+.B 2
+কমান্ড লাইন স্বীকৃত কাজ নির্বাচন করেনি।
+.SH "পরিবেশ"
+.TP
+.B LINKWISE_LOG_LEVEL
+শুরু ও সেশনের তথ্যসূচক বার্তা বন্ধ করতে error দিন। ডিফল্ট অবস্থায় তথ্য ও ত্রুটি দুটোই দেখা যায়।
+.SH "উদাহরণ"
+USB অডিও ডিভাইস খুঁজুন। আগে সব নাম দেখুন, তারপর ছাঁকুন। পূর্ণ ইনপুট ও আউটপুট ডিভাইসের নাম কনফিগারেশনে কপি করুন।
+.EX
+linkwise-modemd --audio-devices
+linkwise-modemd --audio-devices | grep -i usb
+.EE
+স্টেশন কনফিগারেশন যাচাই করুন। ফাঁকযুক্ত পাথ উদ্ধৃতি চিহ্নে রাখুন। নিশ্চিতকরণ ও ডায়াগনস্টিক আলাদা ফাইলে সেভ করুন।
+.EX
+linkwise-modemd --check-config "Field Station/station.json" \e
+    >check.out 2>check.err
+.EE
+অডিও পরীক্ষা করে স্টেশন চালান। একই ডিভাইস বা পোর্ট ব্যবহার করা সেবা আগে বন্ধ করুন। দ্বিতীয় কমান্ড ফোরগ্রাউন্ডে থাকে; Ctrl-C দিয়ে বন্ধ করুন।
+.EX
+linkwise-modemd --check-station station.json &&
+    linkwise-modemd --serve-station station.json 2>station.log
+.EE
+JSON রিসিভ ডায়াগনস্টিক পড়ুন। bandwidth বাদ দিয়ে স্টেশন চালিয়ে দ্বিতীয় টার্মিনাল থেকে ডিফল্ট কমান্ড পোর্টে প্রশ্ন করুন। jq(1) দিয়ে ডিকোড হওয়া ফ্রেমের সংখ্যা বের করুন।
+.EX
+nc 127.0.0.1 8300 | jq '.received_frames'
+.EE
+রেডিও যন্ত্র ছাড়া বিনিময় অনুকরণ করুন। স্থানীয় বিনিময়ের জন্য বিল্ট-ইন সিমুলেশন চালান। সমস্যা নির্ণয়ে আউটপুট ও ডায়াগনস্টিক একসঙ্গে সেভ করুন।
+.EX
+linkwise-modemd --simulate >simulation.log 2>&1
+.EE
+.SH "আরও দেখুন"
+.BR linkwise (1),
+.BR linkwise-station (5)

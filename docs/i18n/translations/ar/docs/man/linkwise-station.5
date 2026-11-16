@@ -1,0 +1,60 @@
+.TH LINKWISE-STATION 5 "2026-11-15" "Linkwise"
+.SH NAME
+linkwise\-station \- إعداد محطة مودم Linkwise
+.SH "صيغة الاستخدام"
+.I station.json
+.SH "الوصف"
+إعداد المحطة كائن JSON بترميز UTF-8، ويبلغ الحد الأقصى للملف 16 KiB. تُرفض المفاتيح غير المعروفة. يقرأ linkwise-modemd(8) الملف المحدد في سطر الأوامر.
+.SH "الحقول"
+.TP
+.B version
+عدد صحيح إلزامي. استخدم 1 لهذه الصيغة.
+.TP
+.B callsign
+إشارة نداء المحطة إلزامية. يزيل Linkwise المسافات من البداية والنهاية ويحوّل الحروف اللاتينية إلى حروف كبيرة.
+.TP
+.BR input ", " output
+كائنان إلزاميان يحتويان على السلسلة name والعدد الصحيح channel الذي يبدأ ترقيمه من الصفر. استخدم أسماء الأجهزة كما يعرضها linkwise-modemd --audio-devices.
+.TP
+.B bandwidth
+عدد صحيح اختياري بالهرتز. استخدم 500 أو 2300 أو 2750 للصوت المحلي ثنائي الاتجاه. احذف الحقل لتشغيل تشخيص الاستقبال.
+.TP
+.BR command_port ", " data_port
+منفذا TCP اختياريان، وقيمتاهما الافتراضيتان 8300 و8301 على الترتيب. اختر منفذين مختلفين وغير صفريين. يستخدم تشخيص الاستقبال منفذ الأوامر وحده. في Winlink Express، خصّص للبيانات المنفذ الذي يلي منفذ الأوامر مباشرة.
+.TP
+.B bw500_profile
+مسار ملف قياس BW500 بصيغة JSON لا يتجاوز 128 KiB. تُفسر المسارات النسبية من دليل ملف المحطة. يلزم الملف للتشغيل ثنائي الاتجاه بتردد 500 Hz، وهو اختياري لتشخيص الاستقبال.
+.TP
+.B winlink_test_audio_port
+في Windows فقط. يفتح مقبس موجة BW500 دون بث لاسلكي على منفذ استرجاع محلي منفصل وغير صفري. احذف bandwidth وحدد bw500_profile واضبط منفذ DATA على منفذ الأوامر زائد واحد.
+.TP
+.B verify_bw500_fixture
+في Windows فقط. اضبطه على true ليحصي تشخيص الاستقبال التطابقات الدقيقة مع إشارة الاختبار BW500 من المستوى 2. استخدم مسار صوت معزولًا وأزل الإعداد بعد التحقق من الالتقاط.
+.SH "الملفات"
+.TP
+.I /etc/linkwise/station.json
+إعداد خدمة نظام Linux.
+.TP
+.I ~/.config/linkwise/station.json
+إعداد خدمة مستخدم Linux.
+.TP
+.I ~/Library/Application Support/Linkwise/station.json
+إعداد وكيل تسجيل الدخول في macOS.
+.TP
+.I %ProgramData%\eLinkwise\eStation.json
+إعداد خدمة Windows.
+.SH "أمثلة"
+إعداد محطة ثنائية الاتجاه بتردد 500 Hz.
+استبدل إشارة النداء وأسماء الأجهزة ومسار الملف بالقيم الخاصة بمحطتك.
+.EX
+{
+  "version": 1,
+  "callsign": "W1AW",
+  "input": {"name": "Radio input", "channel": 0},
+  "output": {"name": "Radio output", "channel": 0},
+  "bandwidth": 500,
+  "bw500_profile": "bw500-profile.json"
+}
+.EE
+.SH "انظر أيضًا"
+.BR linkwise-modemd (8)

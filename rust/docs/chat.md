@@ -27,11 +27,25 @@ VarAC, use BW500 and select a regular operating frequency in VarAC to avoid
 its calling-frequency QSY exchange. Use virtual audio with CAT, PTT, CQ,
 beacons, and reporting disabled during a radio-free test.
 
+## Verify a station identity
+
+Start both Linkwise clients with `--pki FILE` for certificate-authenticated
+chat. Select encryption with `--encrypt` when permitted. The
+[shared PKI guide](pki.md) covers station credentials, protected radio mail
+and exporting a message with `/proof PATH`. Enroll a peer over
+[`/cert`](pki.md#exchange-certificates-in-chat) or from a
+[QSL postcard](pki.md#mail-a-qsl-card-with-public-certificates).
+Use `/encrypt` on both terminals to upgrade an active verified call. Chat
+holds new text as a draft until the upgrade completes. To require hybrid
+key exchange set the [same PQC profile](pki.md#require-hybrid-post-quantum-chat)
+on both stations.
+
 ## Terminal controls
 
 | Command or key | Effect |
 | --- | --- |
 | `/status` | Show the link and listen state in the current window. |
+| `/who` | Show your callsign and the current peer. In the Status window, show the active call. |
 | `/window N` or Alt+0–9 | Select a numbered window. Window 0 is status. An asterisk indicates activity in another window. |
 | Up/Down | Recall recent input. |
 | Page Up/Down | Navigate the current window's scrollback. |
@@ -41,11 +55,76 @@ beacons, and reporting disabled during a radio-free test.
 
 Each window has its own draft and bounded scrollback. Chat keeps up to nine
 peer windows and 200 records per window in memory. A new peer evicts the
-oldest retained peer window once the limit is reached. There is no transcript
-file. A line can contain up to 1,024 UTF-8 bytes. The CLI sends one line at a
-time and keeps a draft when the modem is still sending the previous line.
-Review a draft in its peer window before sending it. The client never
-replays an interrupted line.
+oldest retained peer window once the limit is reached. Messages wrap at word
+boundaries and reflow when you resize the terminal. Long words and URLs
+can span several rows.
+
+Chat writes a signed message to disk when you request a proof export. A
+message can contain up to 1,024 UTF-8 bytes. The CLI sends one line at a time
+and keeps a draft while the modem is still sending the previous line. Review
+a draft in its peer window before sending it. The client never replays an
+interrupted line.
+
+## Presence
+
+The peer and Status windows show local-time notices when a station joins,
+leaves, disconnects, or hits a call timeout. A PKI peer joins after
+verification. A locally requested orderly disconnect is shown as a leave.
+An unqualified modem disconnect is shown as a disconnect. The client uses
+connection notices and existing call deadlines, so a quiet peer stays
+connected. Each roster covers one direct BW500 call.
+
+## Transfer a file
+
+Select the connected peer window and enter `/sendfile PATH`. The peer
+reviews the offer and enters `/accept 1` to save under the offered basename
+in the directory from which chat was started. Use `/accept 1 PATH` to
+save elsewhere or `/reject 1` to decline. Paths can contain spaces. Only
+one plain file transfer can run per connection. Each file is limited to
+32 KiB at the sender and after expansion, with a small allowance
+for gzip overhead on the wire.
+
+Linkwise compresses the file with gzip and verifies SHA-256 over the
+compressed bytes before publishing the received file. The received file is
+published only if the chosen path is free. `/transfers` shows progress.
+The sender reports delivery only after the peer sends its application
+receipt. If the receipt is lost, the peer may already have the file.
+`/cancel 1` stops queued file writes and notifies the peer at a record
+boundary. If cancellation would leave a partial record, the client
+aborts the call. The client does not automatically resume or resend.
+
+All file transfers require a build with the secure-transfer feature.
+Linkwise checks the AWS-LC provider's FIPS mode before hashing.
+Plain SHA-256 checks file integrity without authenticating the peer.
+Stock VarAC 16.1.8 advertises MD5 for files, so Linkwise declines those
+offers. Text chat with stock VarAC is still available.
+
+## Use an encrypted file session
+
+Build with the `secure-transfer` feature and follow the
+[secure transfer guide](secure-transfer.md) to configure certificates
+and peer pins on both stations. Each chat configuration must use the
+same local callsign and ports as the chat instance. Start both clients
+with `linkwise chat --secure-config FILE LOCAL [COMMAND_PORT DATA_PORT]`.
+
+The receiver enters `/receivefile --encrypt PATH` first and chooses the
+destination. The sender enters `/sendfile --encrypt PATH`. Each chat
+client uses its modem attachment for a dedicated mutually authenticated
+TLS 1.3 session. An active chat call closes before the transfer starts,
+and the chat terminal returns after the transfer. Reconnect to continue the conversation.
+While encrypted transfer is running, Ctrl-C interrupts it.
+
+The secure session requires the AWS-LC FIPS provider and authenticates
+the configured peer before sending the gzip stream. The receiver verifies the authenticated SHA-256 digest,
+enforces the configured size limit after decompression, and publishes
+without overwriting. The filename is selected locally by each operator.
+Errors stop the transfer without trying plaintext. Both peers need the
+Linkwise chat encryption feature. Deployment validation depends on the
+module version and operating environment described in the secure transfer
+guide. Use encryption on virtual audio or
+another transport where it is authorized. U.S. amateur-radio rules
+generally prohibit transmitting messages encoded to obscure their meaning.
+[47 CFR § 97.113(a)(4)](https://www.ecfr.gov/current/title-47/chapter-I/subchapter-D/part-97/subpart-B/section-97.113)
 
 ## Radio-free checkout
 

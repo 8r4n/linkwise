@@ -1,0 +1,32 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import { locales, loadMessages, pagePath } from "../../../../../docs/i18n/locales.mjs";
+import { catalog, translation } from "../../../../../docs/i18n/catalog.mjs";
+import { repository } from "../../../releases.mjs";
+
+export function getStaticPaths() {
+  const all = catalog().flatMap(({ paths }) => paths);
+  return locales.flatMap(locale => all.map(source => ({
+    params: { locale: locale.code, source }, props: { locale, source },
+  })));
+}
+const { locale, source } = Astro.props;
+const t = loadMessages(locale.code);
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const local = translation(locale.code, source);
+const manual = source.startsWith("docs/man/");
+const file = source.split("/").at(-1);
+const title = manual ? t.man[file === "linkwise.1" ? "cli" : file === "linkwise-modemd.8" ? "daemon" : "station"] : source;
+const summary = manual ? t[file === "linkwise.1" ? "guide" : "man"][file === "linkwise.1" ? "lede" : file === "linkwise-modemd.8" ? "daemonText" : "stationText"] : null;
+---
+<BaseLayout {title} description={t.docs.lede} {locale} {t} reference={source}>
+  <article class="wrap section guide">
+    <p><a href={base + pagePath(locale.code, "docs")}>{t.nav.docs}</a></p>
+    <h1><bdi>{title}</bdi></h1>
+    {summary && <p>{summary}</p>}
+    {manual && <p><a href={base + "/manuals/" + locale.code + "/" + file}>{t.ui.manuals} · <bdi>{file}</bdi></a></p>}
+    {local && !manual && <p><a href={base + "/editions/" + locale.code + "/" + source} hreflang={locale.code}>{t.ui.translation}</a></p>}
+    {!local && locale.code !== "en" && <p>{t.ui.fallback}</p>}
+    <p><a href={repository + "/blob/main/" + source} hreflang="en">{t.ui.source} ({t.ui.english})</a></p>
+  </article>
+</BaseLayout>

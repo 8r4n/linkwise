@@ -2,9 +2,9 @@ name: Linkwise website
 on:
   push:
     branches: [main]
-    paths: ['website/**', 'docs/install/**', 'docs/media/modem/**', '.github/workflows/website.yml']
+    paths: ['website/**', 'docs/**', 'rust/docs/**', 'rust/README.md', 'README.md', 'lab-notes/**', 'packaging/**', 'reference/**', 'tools/**/*.md', '.github/workflows/website.yml']
   pull_request:
-    paths: ['website/**', 'docs/install/**', 'docs/media/modem/**', '.github/workflows/website.yml']
+    paths: ['website/**', 'docs/**', 'rust/docs/**', 'rust/README.md', 'README.md', 'lab-notes/**', 'packaging/**', 'reference/**', 'tools/**/*.md', '.github/workflows/website.yml']
   release:
     types: [published]
   schedule:
@@ -32,6 +32,8 @@ jobs:
           cache-dependency-path: website/package-lock.json
       - run: npm ci
       - run: npm run build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - run: npm run check
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name == 'release' || github.ref == 'refs/heads/main'

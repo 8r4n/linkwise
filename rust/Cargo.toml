@@ -28,9 +28,19 @@ required-features = ["demo"]
 aws-lc-rs = { version = "=1.19.0", default-features = false, features = ["fips"], optional = true }
 rustls = { version = "0.23.46", default-features = false, features = ["std"], optional = true }
 tokio-rustls = { version = "0.26", default-features = false, optional = true }
-tempfile = { version = "3", optional = true }
+webpki = { package = "rustls-webpki", version = "0.103", default-features = false, features = ["std", "aws-lc-rs-fips"], optional = true }
+cms = { version = "0.2", default-features = false, features = ["std"], optional = true }
+der = { version = "0.7", optional = true }
+x509-cert = { version = "0.2", default-features = false, features = ["std"], optional = true }
+tempfile = "3"
+fs2 = { version = "0.4", optional = true }
 async-trait = "0.1"
 base64 = "=0.23.1"
+flate2 = "1"
+image = { version = "0.25.9", default-features = false, features = ["jpeg", "png"], optional = true }
+pdf-writer = { version = "0.14", optional = true }
+qrcode = { version = "0.14", default-features = false, optional = true }
+rqrr = { version = "0.10.1", optional = true }
 axum = { version = "0.8", features = ["json"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 cpal = { version = "0.15", optional = true }
@@ -48,6 +58,11 @@ uuid = { version = "1", features = ["v4", "serde"] }
 mail-parser = "=0.11.4"
 mail-builder = "=0.4.4"
 crossterm = { version = "0.29", default-features = false, features = ["events", "windows"] }
+unicode-segmentation = "1"
+unicode-width = { version = "0.2", default-features = false }
+openssl = { version = "0.10", optional = true }
+openssl-sys = { version = "0.9", optional = true }
+foreign-types = { version = "0.3", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
@@ -63,12 +78,12 @@ windows-sys = { version = "0.61", features = ["Win32_Security", "Win32_System_Ev
 tokio = { version = "1", features = ["test-util"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-openssl = { version = "0.10", optional = true }
 tokio-openssl = { version = "0.6", optional = true }
 
 [features]
 audio-device = ["dep:cpal"]
 demo = ["dep:axum", "dep:sha2", "dep:tokio-stream"]
 rocky-mail-tls = ["dep:openssl", "dep:tokio-openssl"]
+pqc-chat = ["secure-transfer", "dep:openssl", "dep:openssl-sys", "dep:foreign-types"]
 mail-tls = ["dep:rustls", "rustls/ring", "rustls/tls12", "dep:tokio-rustls"]
-secure-transfer = ["dep:aws-lc-rs", "dep:rustls", "rustls/fips", "dep:tokio-rustls", "dep:tempfile", "tokio/fs", "tokio/io-std"]
+secure-transfer = ["dep:aws-lc-rs", "dep:rustls", "rustls/fips", "dep:tokio-rustls", "dep:webpki", "dep:x509-cert", "dep:cms", "dep:der", "dep:fs2", "dep:image", "dep:pdf-writer", "dep:qrcode", "dep:rqrr", "tokio/fs", "tokio/io-std"]

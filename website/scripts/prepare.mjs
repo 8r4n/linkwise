@@ -1,4 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { locales, loadMessages, pages, pagePath } from "../../docs/i18n/locales.mjs";
+import { buildGuides, buildManuals } from "../../docs/i18n/manuals.mjs";
+import { catalog, translation } from "../../docs/i18n/catalog.mjs";
 
 const root = new URL("../../", import.meta.url);
 const publicDir = new URL("website/public/", root);
@@ -14,22 +17,40 @@ for (const guide of ["windows", "macos", "ubuntu", "fedora", "winlink-quick-star
 for (const [source, name] of [["modem-demo.png", "modem-demo.png"], ["winlink-prbs9/winlink-prbs9.mp4", "winlink-prbs9.mp4"]]) {
   await copyFile(new URL("docs/media/modem/" + source, root), new URL(name, publicDir));
 }
-await writeFile(new URL("llms.txt", publicDir), `# Linkwise
-
-> Open-source HF software modem preview for amateur radio.
-
-Native Rust peer-to-peer mail forwarding is in development. Virtual BW500 attachment delivery has been verified on the bench. Winlink Express is a P2P interoperability workflow.
-
-Read the manifest before selecting an installer. A pending manifest means there is no complete public installer release. Match the target OS, distro and architecture, verify the SHA-256, and use the linked installation and service verification instructions.
-
-- [Release manifest](${base}releases.json)
-- [Platform downloads](${base}downloads/)
-- [Winlink Express VARA HF P2P](${base}winlink/)
-- [Native Rust mail forwarding status](${base}mail/)
-`);
+for (const { code } of locales) {
+  const t = loadMessages(code);
+  const target = new URL(pagePath(code).slice(1), publicDir);
+  await mkdir(target, { recursive: true });
+  const overview = [
+    "# Linkwise", "", "> " + t.home.lede, "", t.downloads.verify, t.downloads.pending + " GitHub Releases.", "",
+    "- [" + t.downloads.manifest + "](" + base + "releases.json)",
+    ...Object.entries(t.nav).map(([page, label]) => "- [" + label + "](" + base + pagePath(code, page).slice(1) + ")"),
+  ];
+  await writeFile(new URL("llms.txt", target), overview.join("\n") + "\n");
+}
 await writeFile(new URL("sitemap.xml", publicDir), `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${["", "downloads/", "winlink/", "mail/"].map(path => `  <url><loc>${base}${path}</loc></url>`).join("\n")}
+${locales.flatMap(({ code }) => pages.map(page => pagePath(code, page).slice(1))).map(path => `  <url><loc>${base}${path}</loc></url>`).join("\n")}
 </urlset>
 `);
+const documents = catalog().flatMap(({ paths }) => paths);
+for (const { code } of locales) {
+  for (const source of documents) {
+    if (source.startsWith("docs/man/")) continue;
+    const local = translation(code, source);
+    if (!local) continue;
+    const destination = new URL("editions/" + code + "/" + source, publicDir);
+    await mkdir(new URL(".", destination), { recursive: true });
+    if (source.endsWith(".md")) {
+      const markdown = (await readFile(local, "utf8")).replace(
+        /\]\((?:\.\.\/){6}(?=[a-zA-Z])/g, "](https://github.com/8r4n/linkwise/blob/main/",
+      );
+      await writeFile(destination, markdown);
+    } else {
+      await copyFile(local, destination);
+    }
+  }
+}
+await buildManuals(new URL("manuals/", publicDir));
+await buildGuides(new URL("guides/", publicDir));
 await writeFile(new URL(".nojekyll", publicDir), "");

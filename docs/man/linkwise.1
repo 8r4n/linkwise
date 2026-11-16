@@ -1,4 +1,4 @@
-.TH LINKWISE 1 "2026-11-14" "Linkwise" "User Commands"
+.TH LINKWISE 1 "2026-11-15" "Linkwise" "User Commands"
 .SH NAME
 linkwise \- operate the Linkwise modem
 .SH SYNOPSIS
@@ -20,16 +20,21 @@ linkwise \- operate the Linkwise modem
 .RI [ "command-port data-port" ]
 .br
 .B linkwise chat
+.RI [ "\-\-pki file [\-\-encrypt | \-\-enroll]" ]
+.RI [ "\-\-secure-config file" ]
 .I local
 .RI [ "command-port data-port" ]
 .br
 .B linkwise mail queue
+.RI [ "\-\-pki file [\-\-encrypt]" ]
 .I mailbox envelope
 .br
 .B linkwise mail import
+.RI [ "\-\-pki file [\-\-encrypt]" ]
 .I mailbox input
 .br
 .B linkwise mail export
+.RI [ "\-\-pki file [\-\-encrypt]" ]
 .I mailbox message-id
 .br
 .B linkwise mail smtp
@@ -44,6 +49,39 @@ linkwise \- operate the Linkwise modem
 .RI { exchange | listen }
 .I mailbox local peer
 .RI [ "command-port data-port" ]
+.br
+.B linkwise pki
+.RI { check | verify-chat }
+.I profile
+.RI [ proof ]
+.br
+.B linkwise pki fingerprint
+.RI { ca | cert }
+.I certificate
+.br
+.B linkwise qsl card
+.I profile to pdf
+.B \-\-utc
+.I timestamp
+.B \-\-freq-khz
+.I frequency
+.B \-\-mode
+.I mode
+.B \-\-rst
+.I report
+.RI [ options ]
+.br
+.B linkwise qsl inspect
+.I photo
+.br
+.B linkwise qsl import
+.I profile from photo signing-sha256
+.RI [ encryption-sha256 ]
+.RB [ \-\-replace ]
+.br
+.B linkwise qsl receive
+.I profile from directory signing-sha256
+.RI [ encryption-sha256 ]
 .br
 .B linkwise secure
 .RI { send | receive }
@@ -122,12 +160,114 @@ to dial, and
 .B "/disconnect"
 to end a call. The peer window opens on connection. Enter sends one line
 of up to 1024 UTF-8 bytes. Prefix a literal leading slash with a second slash.
+Messages wrap at word boundaries and reflow when the terminal is resized.
+Timestamped presence notices appear in the peer and Status windows.
+A PKI peer joins after verification.
+Use
+.B /who
+to show your callsign and the current peer.
 Use
 .B "/window N"
 or Alt+number to switch windows, and
 .B /help
 to list commands and key bindings. Scrollback and input history are
-held in memory. The client records no transcript file.
+held in memory. Use the proof command to save a verified message.
+.TP
+.B "Authenticated chat"
+Start both clients with
+.B "\-\-pki FILE"
+to use the shared X.509 station profile.
+The clients check the certificate and prove possession of their keys
+before exchanging signed text.
+Inside the callsign brackets,
+.B |V
+indicates signed plaintext and
+.B |E
+indicates signed and encrypted chat.
+.B |X
+marks failed verification and
+.B |F
+marks an encryption or decryption failure.
+The callsign, status code, and start of the message occupy fixed columns.
+Add
+.B \-\-encrypt
+on both clients to protect the signed records with mutually authenticated
+TLS 1.3 using ephemeral P-256 and AES-256-GCM.
+Encrypted chat requires transport opt-in and the AWS-LC FIPS provider.
+The optional
+.B pqc-chat
+build feature supports the
+.B p256_mlkem768
+profile with OpenSSL FIPS provider 3.5.9.
+Both peers must select that profile to use hybrid key exchange.
+During a verified signed call, enter
+.B /encrypt
+to request an upgrade. The other operator enters the same command to accept.
+Chat holds new text as a draft until both clients confirm encryption.
+The call remains encrypted until disconnect.
+The
+.B secure-transfer
+build feature enables PKI.
+.TP
+.B "Certificate enrollment"
+Start both stations with
+.B "\-\-pki FILE \-\-enroll"
+and connect as usual.
+Enter
+.B "/cert offer"
+to send a public signing certificate, or add
+.B "\-\-encrypt"
+to include the public encryption certificate.
+The recipient runs
+.B "/cert inspect"
+and compares SHA-256 fingerprints over a trusted channel before running
+.B "/cert accept SIGNING [ENCRYPTION]" .
+Use
+.B "/cert accept replace SIGNING [ENCRYPTION]"
+to replace an installed certificate.
+Both stations must already trust the issuing authorities and have current CRLs.
+Profiles with multiple CA keys require a per-callsign CA key fingerprint.
+Enrollment writes accepted certificates to the shared station profile.
+Reconnect with
+.B "\-\-pki FILE"
+to verify the peer and exchange text.
+.TP
+.B "/proof PATH"
+Save the latest verified incoming message from the selected peer as a private
+file. This exports the message text even if the session was encrypted.
+.TP
+.B "Chat file transfer"
+In the connected peer window,
+.B /sendfile PATH
+offers a gzip file with a SHA-256 checksum.
+.B /accept 1
+saves to the offered basename in the current directory, and
+.B /accept 1 PATH
+chooses another destination. The receiver publishes a verified file
+without overwriting. The file limit is 32 KiB before compression.
+.B /reject 1
+declines an offer,
+.B /cancel 1
+stops the transfer and may abort the call to discard a partial record.
+.B /transfers
+shows the transfer state. File transfer requires the
+.B secure-transfer
+build feature and the AWS-LC provider in FIPS mode. Stock VarAC file
+offers advertise MD5 and are declined.
+.TP
+.B "Encrypted chat file transfer"
+Start chat with
+.B --secure-config FILE
+before the local callsign in a build with the
+.B secure-transfer
+feature. The receiver runs
+.B /receivefile --encrypt PATH
+before the sender runs
+.B /sendfile --encrypt PATH .
+The chat uses the attached modem for a dedicated mutually authenticated
+TLS session with gzip and SHA-256, then returns to chat. Both peers need
+Linkwise and matching certificate configurations. Authentication failure
+ends the transfer. See the chat guide for setup and transport restrictions.
 .TP
 .B "Chat shutdown"
 .B /quit
@@ -147,6 +287,64 @@ Import an RFC 5322/MIME file into the transmit queue with
 Export a received message as MIME to standard output with
 .BR "mail export" ,
 using its B2F message ID as the final operand.
+.TP
+.B "Protected radio mail"
+Pass
+.B "\-\-pki FILE"
+to mail queue, import, or export to use the shared station profile.
+Protected mail supports one recipient and covers the content and attachments.
+Add
+.B \-\-encrypt
+to encrypt on import or queue, or require encrypted input on export.
+Exchange and listen forward the protected envelope through the usual queue.
+.TP
+.B pki check
+Check the station profile, certificate roles, trust chain, and revocation.
+.TP
+.B pki fingerprint
+Print the SHA-256 fingerprint of the CA public key with
+.B ca
+or of the complete leaf certificate with
+.BR cert .
+.TP
+.B pki verify-chat
+Verify a proof exported by chat with the recipient's station profile and
+write the signed message as JSON.
+.TP
+.B qsl card
+Create a one-page landscape PDF for the blank side of a USPS 5.5 by 3.5
+inch stamped card. Print on matching stock at actual size (100 percent).
+Use
+.B "\-\-size 4x6"
+for 6 by 4 inch stock. Supply an RFC 3339 QSO timestamp, frequency in kHz,
+mode and RST report.
+.B "\-\-grid LOCATOR"
+adds a Maidenhead locator and
+.B "\-\-notes TEXT"
+adds up to 45 printable ASCII characters. The QR symbol carries public
+signing and mail-encryption certificate chains and binds them to the
+intended recipient with the sender's signature. Use
+.B \-\-signing-only
+to omit the mail-encryption certificate. Requires secure-transfer support.
+.TP
+.B qsl inspect, qsl import
+Read a JPEG or PNG photograph or a text file containing the QR payload.
+Inspection displays the unverified offer and certificate fingerprints.
+Import checks the signed sender and recipient, callsign and certificate
+roles, the configured CA pin and revocation status, and the complete
+SHA-256 leaf fingerprints obtained through an independent trusted channel.
+Import saves the public certificates to the shared chat and mail PKI
+profile. Supply the signing fingerprint first and the encryption fingerprint
+when included. Use
+.B \-\-replace
+to authorize a changed leaf after verifying the new fingerprints.
+.TP
+.B qsl receive
+Wait for a new or changed JPEG, PNG, or QR text file in a directory
+where a phone shares its photos, then import one verified offer.
+The existing peer's leaf certificates are preserved if the card offers a
+replacement. Use Ctrl-C to stop waiting. A phone can share through AirDrop
+or a synced folder. Export as JPEG or PNG if the original is HEIC.
 .TP
 .B mail smtp
 Accept local SMTP submissions and queue them for B2F peer-to-peer forwarding.
@@ -338,6 +536,19 @@ if the session ends before the sender obtains the receipt.
 Interrupting live audio releases the device.
 A closed stdout pipe causes a quiet output failure.
 .SH EXAMPLES
+.SS Print a QSL card with public certificates
+.EX
+linkwise qsl card station-pki.json BB2BB qsl.pdf \\
+  \-\-utc 2026-11-15T19:30:00Z \-\-freq-khz 7105 \-\-mode BW500 \-\-rst 59
+.EE
+.SS Receive a QSL card from a phone photo
+Start the receiver, then share a close JPEG or PNG photo of the QR symbol
+to the watched directory. Replace the fingerprint placeholders with the
+complete SHA-256 fingerprints obtained from the station.
+.EX
+linkwise qsl receive station-pki.json AA1AA "$HOME/Downloads" \\
+  SIGNING_SHA256 ENCRYPTION_SHA256
+.EE
 .SS Attach terminal chat to a configured BW500 station
 Start the station daemon, then open a second terminal using the callsign
 from its configuration.
@@ -405,6 +616,16 @@ linkwise secure send sender.json original.bin 2>secure-send.log
 With the receiver listening, use shell input redirection to send a file.
 .EX
 linkwise secure send sender.json - <original.bin
+.EE
+.SS Authenticate a station and verify a chat message
+.EX
+linkwise pki check station-pki.json
+linkwise chat --pki station-pki.json AA1AA
+linkwise pki verify-chat station-pki.json message-proof.json
+.EE
+.SS Queue signed radio email
+.EX
+linkwise mail import --pki station-pki.json ./mailbox outgoing.eml
 .EE
 .SH SEE ALSO
 .BR linkwise-modemd (8),

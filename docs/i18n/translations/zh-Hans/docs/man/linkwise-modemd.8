@@ -1,0 +1,107 @@
+.TH LINKWISE-MODEMD 8 "2026-11-15" "Linkwise"
+.SH NAME
+linkwise\-modemd \- 运行和诊断 Linkwise 软件调制解调器台站
+.SH "用法"
+.B linkwise\-modemd
+.RB { \-h | \-\-help | \-\-version | \-\-audio\-devices | \-\-simulate }
+.br
+.B linkwise\-modemd
+.RB { \-\-check\-config | \-\-check\-station | \-\-serve\-station }
+.I FILE
+.br
+.B linkwise\-modemd \-\-simulate\-audio
+.I PROFILE
+.br
+.B linkwise\-modemd \-\-serve\-bench
+.IR CALL " [" CONTROL_PORT " " DATA_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-bw500
+.IR CALL " " PROFILE " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-serve\-virtual\-wide
+.IR CALL " " BANDWIDTH " [" CONTROL_PORT " " DATA_PORT " " AUDIO_PORT ]
+.br
+.B linkwise\-modemd \-\-virtual\-audio\-device
+.I AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE
+.SH "说明"
+运行本机音频台站、检查台站配置，或在不使用射频的台架上测试调制解调器。每次调用只选择一种操作。音频安装包使用 48 kHz 音频。台站和台架监听器绑定到 IPv4 回环地址。
+.SH "选项"
+.TP
+.BR \-h ", " \-\-help
+打印用法并退出。
+.TP
+.B \-\-version
+打印程序版本并退出。
+.TP
+.B \-\-audio\-devices
+列出可用的采集和播放设备名称。
+.TP
+.BI "\-\-check\-config " FILE
+验证台站 JSON 和引用的 BW500 波形配置文件。
+.TP
+.BI "\-\-check\-station " FILE
+验证配置，等待采集样本，检查设备报告的输出格式，并临时保留控制和数据端口。此检查不播放音频。
+.TP
+.BI "\-\-serve\-station " FILE
+在前台运行台站。设置带宽后，使用配置的设备收发，并分别使用控制和数据套接字。未设置带宽时，控制套接字返回 JSON 接收诊断。在 Windows 上，winlink_test_audio_port 选择隔离的 BW500 波形测试。参阅 linkwise-station(5)。前台台站在 Unix 上处理 SIGINT 和 SIGTERM，在 Windows 上处理 Ctrl-C 和 Ctrl-Break。Windows 服务处理服务控制管理器的 Stop 和 Shutdown。正在运行的双向台站在三秒内尝试断开调制解调器，随后释放本地资源。修改配置后请重启服务。SIGKILL 和 SIGSTOP 由操作系统处理。
+.TP
+.B \-\-simulate
+使用模拟设备运行本地调制解调器交换。
+.TP
+.BI "\-\-simulate\-audio " PROFILE
+使用合成的 BW500 波形和指定测量配置文件运行本地交换。
+.TP
+.BI "\-\-serve\-bench " CALL
+提供模拟回显对端。默认控制和数据端口为 8300 和 8301；如需修改，必须同时指定两个端口。
+.TP
+.BI "\-\-serve\-virtual\-bw500 " "CALL PROFILE"
+提供通过 TCP 波形连线连接的 BW500 台架台站。默认控制、数据和波形端口分别为 8300、8301 和 8302；如需修改，必须同时指定三个端口。
+.TP
+.BI "\-\-serve\-virtual\-wide " "CALL BANDWIDTH"
+提供 2300 或 2750 Hz 波形连线台站。端口参数规则与 --serve-virtual-bw500 相同。
+.TP
+.BI "\-\-virtual\-audio\-device " "AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE"
+将本地波形套接字桥接到所选录音和播放设备的零号通道。请使用相互独立的音频路径进行隔离试验。
+.SH "操作数"
+FILE 是 linkwise-station(5) 描述的台站 JSON。PROFILE 是 BW500 JSON 测量配置文件。CALL 是本地台站呼号。含空格的设备名称必须用引号括起来。
+.SH "退出状态"
+.TP
+.B 0
+操作成功。
+.TP
+.B 1
+操作失败，例如文件无效、音频或套接字错误。
+.TP
+.B 2
+命令行没有选择可识别的操作。
+.SH "环境变量"
+.TP
+.B LINKWISE_LOG_LEVEL
+设置为 error 可隐藏启动和会话信息。默认输出信息和错误。
+.SH "示例"
+查找 USB 音频设备。先列出完整名称再筛选，将完整的输入和输出设备名称填入台站配置。
+.EX
+linkwise-modemd --audio-devices
+linkwise-modemd --audio-devices | grep -i usb
+.EE
+验证台站配置。含空格的路径必须加引号。把确认结果和诊断信息分别保存。
+.EX
+linkwise-modemd --check-config "Field Station/station.json" \e
+    >check.out 2>check.err
+.EE
+检查音频并运行台站。先停止占用相同设备或端口的服务。第二条命令在前台运行，按 Ctrl-C 停止。
+.EX
+linkwise-modemd --check-station station.json &&
+    linkwise-modemd --serve-station station.json 2>station.log
+.EE
+读取接收诊断 JSON。省略 bandwidth 启动台站，再用另一终端查询默认控制端口。安装 jq(1) 后可提取解码帧数。
+.EX
+nc 127.0.0.1 8300 | jq '.received_frames'
+.EE
+模拟无需无线电设备的交换。运行内置模拟进行本地交换，合并保存输出和诊断以便排查故障。
+.EX
+linkwise-modemd --simulate >simulation.log 2>&1
+.EE
+.SH "另请参阅"
+.BR linkwise (1),
+.BR linkwise-station (5)
