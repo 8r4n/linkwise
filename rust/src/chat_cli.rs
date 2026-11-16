@@ -427,12 +427,15 @@ async fn chat(local: &str, command_port: u16, data_port: u16) -> io::Result<()> 
             }
             _ = tick.tick() => {
                 let now = Instant::now();
+                let mut redraw = false;
                 if matches!(chat.link, Link::Dialing(_, deadline) if now >= deadline) {
                     chat.view.log(0, "Call timed out");
                     chat.close(&mut control).await?;
+                    redraw = true;
                 }
                 if matches!(chat.link, Link::ReceivingTail(_, deadline) if now >= deadline) {
                     chat.finish_disconnect();
+                    redraw = true;
                 }
                 if matches!(chat.link, Link::Closing { deadline: Some(deadline), .. } if now >= deadline) {
                     let _ = request(&mut control, "ABORT").await;
@@ -443,6 +446,7 @@ async fn chat(local: &str, command_port: u16, data_port: u16) -> io::Result<()> 
                 {
                     request(&mut control, "DISCONNECT").await?;
                     *deadline = Some(Instant::now() + CLOSE_WAIT);
+                    redraw = true;
                 }
                 if chat.listen_change.is_some_and(|(_, deadline)| now >= deadline) {
                     return Err(io::Error::other("modem did not acknowledge listen change"));
@@ -500,10 +504,10 @@ async fn chat(local: &str, command_port: u16, data_port: u16) -> io::Result<()> 
                             true
                         }
                         Event::Resize(..) => true,
-                        _ => false,
+                        _ => redraw,
                     }
                 } else {
-                    false
+                    redraw
                 }
             }
         };
