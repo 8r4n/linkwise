@@ -992,6 +992,36 @@ async fn request(control: &mut Control, command: &str) -> io::Result<()> {
     timeout(HOST_WAIT, control.request(command)).await?
 }
 
+#[cfg(feature = "secure-transfer")]
+async fn reset_after_failed_transfer(
+    control: &mut Control,
+    data: &mut TcpStream,
+) -> io::Result<()> {
+    timeout(HOST_WAIT, async {
+        control.request("ABORT").await?;
+        let (mut acknowledged, mut disconnected) = (false, false);
+        while !acknowledged || !disconnected {
+            match control.line().await?.as_str() {
+                "OK" => acknowledged = true,
+                "DISCONNECTED" => disconnected = true,
+                "WRONG" => return Err(io::Error::other("modem rejected transfer reset")),
+                _ => {}
+            }
+        }
+        control.command("LISTEN OFF").await?;
+        // The command and DATA streams are independent. Discard bytes already
+        // queued by the abandoned transfer before resuming chat.
+        let mut buffer = [0; 4096];
+        while let Ok(result) = timeout(DATA_TAIL_WAIT, data.read(&mut buffer)).await {
+            if result? == 0 {
+                return Err(io::Error::other("modem DATA port closed after transfer"));
+            }
+        }
+        Ok(())
+    })
+    .await?
+}
+
 async fn chat(
     local: &str,
     ports: (u16, u16),
@@ -1035,7 +1065,16 @@ async fn chat(
             println!("Linkwise encrypted file transfer in progress.");
             let status = match job.run(&mut control, &mut data).await {
                 Ok(()) => "Encrypted file transfer complete.".into(),
-                Err(error) => format!("Encrypted file transfer failed: {error}"),
+                Err(error) => {
+                    reset_after_failed_transfer(&mut control, &mut data)
+                        .await
+                        .map_err(|reset| {
+                            io::Error::other(format!(
+                                "Encrypted file transfer failed: {error}. Modem reset failed: {reset}"
+                            ))
+                        })?;
+                    format!("Encrypted file transfer failed: {error}")
+                }
             };
             state.view.log(state.view.selected, status);
             state.listening = false;

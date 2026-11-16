@@ -436,10 +436,7 @@ impl Pki {
         }
         for (call, peer) in &self.profile.peers {
             self.peer_certificate(&peer.signing_certificate, call, true)?;
-            if peer.require_encryption
-                && !self.chat_encryption_allowed()
-                && (peer.encryption_certificate.is_none() || self.profile.encryption.is_none())
-            {
+            if self.encryption_credentials_incomplete(peer) {
                 return Err(io::Error::other(format!(
                     "encryption is required for {call}, but its credentials are incomplete"
                 )));
@@ -464,6 +461,12 @@ impl Pki {
             }
         }
         Ok(())
+    }
+
+    fn encryption_credentials_incomplete(&self, peer: &Peer) -> bool {
+        peer.require_encryption
+            && !self.chat_encryption_allowed()
+            && (peer.encryption_certificate.is_none() || self.profile.encryption.is_none())
     }
 
     pub(crate) fn chat_encryption_allowed(&self) -> bool {

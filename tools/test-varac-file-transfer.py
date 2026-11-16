@@ -29,10 +29,10 @@ def file_pair(args, scenario):
         for source, destination in (audio, audio[::-1]):
             threading.Thread(target=CHAT["relay"], args=(source, destination), daemon=True).start()
 
-        if scenario in ("secure", "pin"):
+        if scenario in ("secure", "pin", "unexpected-peer"):
             SECURE["certificates"](directory)
             for index, call in enumerate(calls):
-                peer = calls[1 - index]
+                peer = "OTHER" if scenario == "unexpected-peer" and index == 1 else calls[1 - index]
                 pin = "OTHER" if scenario == "pin" and index == 0 else peer
                 settings = dict(
                     local_call=call, peer_call=peer, peer_dns=peer.lower() + ".test",
@@ -56,7 +56,27 @@ def file_pair(args, scenario):
         payload = b"".join(hashlib.sha256(bytes([i])).digest() for i in range(blocks))
         original.write_bytes(payload)
 
-        if scenario in ("secure", "pin"):
+        if scenario == "unexpected-peer":
+            receiver.enter(f"/receivefile --encrypt {destination}")
+            receiver.expect("Linkwise encrypted file transfer in progress")
+            sender.enter(f"/connect {calls[1]}")
+            sender.expect(f"Calling {calls[1]}")
+            receiver.expect("Encrypted file transfer failed: unexpected modem peer")
+            receiver.expect("Attached to Linkwise modem")
+            assert not destination.exists()
+            sender.enter("/disconnect")
+            sender.expect(" | idle | ")
+            receiver.enter("/listen on")
+            receiver.expect("Listening enabled")
+            sender.enter(f"/connect {calls[1]}")
+            for terminal in terminals:
+                terminal.expect("Connected at BW500")
+            sender.enter("Chat after failed handoff")
+            receiver.expect(f"<{calls[0]:9}   > Chat after failed handoff")
+            sender.enter("/disconnect")
+            for terminal in terminals:
+                terminal.expect(" | idle | ")
+        elif scenario in ("secure", "pin"):
             receiver.enter(f"/receivefile --encrypt {destination}")
             receiver.expect("Linkwise encrypted file transfer in progress")
             sender.enter(f"/sendfile --encrypt {original}")
@@ -86,7 +106,7 @@ def file_pair(args, scenario):
             receiver.expect("Received file 1", seconds=120)
             sender.expect("File 1 confirmed by peer", seconds=120)
             sender.enter("Chat after file transfer")
-            receiver.expect(f"<{calls[0]}> Chat after file transfer")
+            receiver.expect(f"<{calls[0]:9}   > Chat after file transfer")
             sender.expect("Modem acknowledged queued text")
             if scenario == "plain":
                 cancelled = directory / "cancelled.bin"
@@ -97,7 +117,7 @@ def file_pair(args, scenario):
                 sender.expect("File 1 cancelled")
                 receiver.expect("Peer rejected or aborted file 1")
 
-        if scenario != "pin":
+        if scenario in ("plain", "secure"):
             assert destination.read_bytes() == payload
         for terminal in terminals:
             terminal.quit()
@@ -109,7 +129,7 @@ if __name__ == "__main__":
     parser.add_argument("cli")
     parser.add_argument("modem")
     parser.add_argument("profile")
-    parser.add_argument("scenarios", choices=("plain", "secure", "pin"), nargs="+")
+    parser.add_argument("scenarios", choices=("plain", "secure", "pin", "unexpected-peer"), nargs="+")
     args = parser.parse_args()
     for scenario in args.scenarios:
         file_pair(args, scenario)

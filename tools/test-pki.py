@@ -175,7 +175,7 @@ def chat(args, configs, encrypted):
         a.enter("First authenticated line")
         a.expect(f"<{CALLS[0]:9} {indicator}> First authenticated line")
         b.expect(f"<{CALLS[0]:9} {indicator}> First authenticated line", seconds=90)
-        proof = configs[1].parent / "chat-proof.json"
+        proof = configs[1].parent / ("encrypted-chat-proof.json" if encrypted else "signed-chat-proof.json")
         b.enter(f"/proof {proof}")
         b.expect("Saved signed message")
         verified = run(args.cli, "pki", "verify-chat", configs[1], proof)
@@ -288,6 +288,10 @@ def enrollment(args, root):
         # The caller starts with an older peer certificate. The recipient has a new peer.
         if call == CALLS[1]:
             document["peers"] = {}
+        if not encrypted:
+            document["allow_chat_encryption"] = True
+            if call == CALLS[0]:
+                document["peers"][peer]["require_encryption"] = True
         config.write_text(json.dumps(document))
         configs.append(config)
     for config, peer in zip(configs, CALLS[::-1]):
@@ -341,6 +345,14 @@ def enrollment(args, root):
         if encrypted:
             assert "der" in stored["encryption_certificate"]
         run(args.cli, "pki", "check", config)
+    if not encrypted:
+        document = json.loads(configs[0].read_text())
+        renewed = document["peers"][CALLS[1]]
+        assert renewed["require_encryption"] and renewed["encryption_certificate"] is None
+        chat(args, configs, encrypted=True)
+        # The signed mail bench uses a profile that permits unencrypted mail.
+        renewed["require_encryption"] = False
+        configs[0].write_text(json.dumps(document))
     mail(args.cli, root, configs, encrypted)
     chat(args, configs, encrypted)
     print("enrollment: two CAs, explicit first acceptance and rotation, verified reuse in chat and mail")

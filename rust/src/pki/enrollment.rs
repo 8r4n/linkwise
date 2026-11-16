@@ -383,21 +383,19 @@ impl Pki {
             .as_ref()
             .map(|der| CertificateSource::Inline(InlineCertificate { der: der.clone() }))
             .or_else(|| old.and_then(|entry| entry.encryption_certificate));
-        if require_encryption && encryption_certificate.is_none() {
+        let updated = Peer {
+            signing_certificate: CertificateSource::Inline(InlineCertificate {
+                der: offered.signing.clone(),
+            }),
+            encryption_certificate,
+            require_encryption,
+        };
+        if current.encryption_credentials_incomplete(&updated) {
             return Err(other(
-                "the existing peer policy requires an encryption certificate",
+                "the existing peer policy requires complete mail-encryption credentials",
             ));
         }
-        current.profile.peers.insert(
-            peer.to_owned(),
-            Peer {
-                signing_certificate: CertificateSource::Inline(InlineCertificate {
-                    der: offered.signing.clone(),
-                }),
-                encryption_certificate,
-                require_encryption,
-            },
-        );
+        current.profile.peers.insert(peer.to_owned(), updated);
         let content = serde_json::to_vec_pretty(&current.profile)?;
         if content.len() as u64 + 1 > CONFIG_LIMIT {
             return Err(other("updated PKI profile exceeds the size limit"));
