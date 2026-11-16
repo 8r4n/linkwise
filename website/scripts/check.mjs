@@ -109,7 +109,16 @@ for (const { code, dir = "ltr" } of locales) {
   const guide = await readFile("dist/guides/" + code + ".md", "utf8");
   assert.ok(guide.includes(t.guide.title) && guide.includes("linkwise qsl card"));
   const agents = await readFile("dist" + pagePath(code) + "llms.txt", "utf8");
-  assert.ok(agents.includes(origin + pagePath(code, "guide")));
+  for (const anchor of ["chat-verification", "mail-client-tests", "performance"]) {
+    assert.ok(agents.includes(origin + pagePath(code, "guide") + "#" + anchor), code + " " + anchor);
+  }
+  for (const [, href] of agents.matchAll(/\]\((https:\/\/[^)]+)\)/g)) {
+    assert.ok(href.startsWith(origin + "/"), href);
+    const { pathname, hash } = new URL(href);
+    const target = "dist" + pathname.slice("/linkwise".length) + (pathname.endsWith("/") ? "index.html" : "");
+    if (hash) assert.ok((await readFile(target, "utf8")).includes('id="' + hash.slice(1) + '"'), href);
+    else await stat(target);
+  }
 }
 
 console.log(locales.length + " locales, " + reference.length + " references per locale, manual downloads, canonical URLs, and internal links passed.");
