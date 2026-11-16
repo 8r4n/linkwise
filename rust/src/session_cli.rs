@@ -29,36 +29,9 @@ pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
             "send requires SOURCE DESTINATION INPUT [COMMAND_PORT DATA_PORT]",
         ));
     };
-    let call = |value: &OsString| {
-        value
-            .to_str()
-            .filter(|value| {
-                !value.is_empty()
-                    && value.len() <= 12
-                    && value
-                        .bytes()
-                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-            })
-            .map(str::to_ascii_uppercase)
-            .ok_or_else(|| Failure::usage("invalid callsign"))
-    };
-    let source = call(source)?;
-    let destination = call(destination)?;
-    let port = |value: &OsString| {
-        value
-            .to_str()
-            .and_then(|value| value.parse::<u16>().ok())
-            .filter(|&value| value != 0)
-            .ok_or_else(|| Failure::usage("ports must be integers from 1 to 65535"))
-    };
-    let (command_port, data_port) = match ports {
-        [] => (8300, 8301),
-        [command, data] => (port(command)?, port(data)?),
-        _ => return Err(Failure::usage("supply both command and data ports")),
-    };
-    if command_port == data_port {
-        return Err(Failure::usage("command and data ports must differ"));
-    }
+    let source = callsign(source)?;
+    let destination = callsign(destination)?;
+    let (command_port, data_port) = parse_ports(ports)?;
     let (sender, mut receiver) = mpsc::channel(1);
     let path = input.clone();
     // Stdin may block indefinitely. Keep socket and signal processing on the
@@ -77,6 +50,39 @@ pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
             result.map_err(Failure::operation)
         }
     }
+}
+
+pub(crate) fn callsign(value: &std::ffi::OsStr) -> Result<String, Failure> {
+    value
+        .to_str()
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= 12
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        })
+        .map(str::to_ascii_uppercase)
+        .ok_or_else(|| Failure::usage("invalid callsign"))
+}
+
+pub(crate) fn parse_ports(ports: &[OsString]) -> Result<(u16, u16), Failure> {
+    let port = |value: &OsString| {
+        value
+            .to_str()
+            .and_then(|value| value.parse::<u16>().ok())
+            .filter(|&value| value != 0)
+            .ok_or_else(|| Failure::usage("ports must be integers from 1 to 65535"))
+    };
+    let ports = match ports {
+        [] => (8300, 8301),
+        [command, data] => (port(command)?, port(data)?),
+        _ => return Err(Failure::usage("supply both command and data ports")),
+    };
+    if ports.0 == ports.1 {
+        return Err(Failure::usage("command and data ports must differ"));
+    }
+    Ok(ports)
 }
 
 fn read_input(path: &OsString, output: &mpsc::Sender<io::Result<Vec<u8>>>) -> io::Result<()> {

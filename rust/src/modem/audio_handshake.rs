@@ -205,8 +205,12 @@ fn decode(
         }
         Expected::Setup => Burst::Setup(codec.read_setup(audio, candidate)?),
         Expected::ConnectedAck { caller, called } => {
-            if control::find_connected_ack(codec.bandwidth(), caller, audio, candidate.start)
-                .is_some()
+            let bandwidth = codec.bandwidth();
+            // Stock CHAT mode can begin with the caller-keyed poll ACK
+            // sequence. Accept it only while waiting for the setup reply.
+            if control::find_connected_ack(bandwidth, caller, audio, candidate.start).is_some()
+                || bandwidth == Bandwidth::Hz500
+                    && control::find_poll_ack(bandwidth, caller, audio, candidate.start).is_some()
             {
                 Burst::ConnectedAck {
                     caller: caller.into(),

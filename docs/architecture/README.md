@@ -16,6 +16,8 @@ integration.
   the current direction and delivery boundaries.
 - [Requirements and use cases](requirements-and-use-cases.md) — prioritized
   system requirements, actors, use cases, and proposed verification methods.
+- [VarAC chat implementation plan](varac-chat-plan.md) — proposed Rust terminal
+  client, modem integration, mixed-peer qualification, and documentation gates.
 - [Winlink link inventory and tracking](winlink-link-tracking-design.md) — the
   definitions, data model, counters, MCP tools, refresh strategy, and acceptance
   checks for managing gateway/channel opportunities and actual session history.

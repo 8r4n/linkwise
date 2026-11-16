@@ -173,6 +173,15 @@ impl Message {
         if bandwidth != Bandwidth::Hz500 {
             return None;
         }
+        if matches!(self, Self::ConnectResponse(Bandwidth::Hz500)) {
+            // VARA HF 4.9.1 in CHAT mode can omit all but the first
+            // preamble tone. The complete 15-tone keyed tail is unchanged.
+            let mut short = bins;
+            short.drain(1..RESPONSE_PREAMBLE.len());
+            if let Some(start) = find_single_tones(&short, audio, estimated_start, true) {
+                return Some(start);
+            }
+        }
         // The stock alternatives share a preamble but require a complete
         // match to their own callsign-keyed tail.
         let (head, seed, advances, count): (&[u8], _, &[_], _) = match self {
@@ -665,6 +674,17 @@ fn render<const N: usize>(symbols: impl IntoIterator<Item = [u8; N]>) -> Vec<f32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finds_stock_bw500_chat_response() {
+        let measured = [
+            62, 64, 62, 76, 64, 56, 76, 58, 54, 54, 74, 74, 60, 74, 70, 62,
+        ];
+        let audio = render(measured.into_iter().map(|tone| [tone]));
+        let response = Message::ConnectResponse(Bandwidth::Hz500);
+        assert!(response.find("BB2BB", &audio, 0).is_some());
+        assert!(response.find("KN6MQS", &audio, 0).is_none());
+    }
 
     #[test]
     fn accepts_stock_bw500_response_variants_with_the_full_keyed_tail() {
