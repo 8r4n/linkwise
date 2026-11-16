@@ -1,0 +1,95 @@
+const text = {
+  en: [
+    "Amateur Radio HF Modem for VarAC Chat and Winlink",
+    "VarAC chat with Linkwise over VARA HF BW500",
+    "Set up direct amateur radio chat between the Linkwise Rust modem and a station using VarAC with VARA HF. See the tested BW500 workflows and compatibility limits.",
+    "Configure Linkwise for BW500 and use a regular VarAC frequency to avoid calling-frequency QSY. On the VarAC station, enable listening. From the Linkwise terminal, connect to the peer’s callsign.",
+    "Two isolated audio-bench runs exchanged text in both directions after Linkwise placed the call and sent a follow-up line. A VarAC-originated call connected. Stock-side teardown and on-air conversation remain unqualified.",
+    "Use two Linkwise peers for certificate verification, encrypted chat, and SHA-256 file transfer. The stock VarAC file format uses MD5, and Linkwise declines those offers.",
+  ],
+  "zh-Hans": [
+    "面向 VarAC 聊天和 Winlink 的业余无线电 HF 调制解调器",
+    "通过 VARA HF BW500 使用 Linkwise 与 VarAC 聊天",
+    "在 Linkwise Rust 调制解调器与使用 VarAC 和 VARA HF 的电台之间进行业余无线电直连聊天。查看已测试的 BW500 操作和兼容范围。",
+    "将 Linkwise 设置为 BW500，并使用 VarAC 的普通工作频率以避免呼叫频率上的 QSY。启用 VarAC 电台的监听，再从 Linkwise 终端连接对方呼号。",
+    "隔离音频台架上，两次由 Linkwise 发起的呼叫均在补发一行后实现双向文本传输。由 VarAC 发起的呼叫也成功建立连接。原版端的断开流程和实际通联仍待验证。",
+    "证书验证、加密聊天和 SHA-256 文件传输需要双方使用 Linkwise。原版 VarAC 文件格式使用 MD5，Linkwise 会拒绝此类文件要约。",
+  ],
+  hi: [
+    "VarAC चैट और Winlink के लिए एमेच्योर रेडियो HF मॉडेम",
+    "VARA HF BW500 पर Linkwise से VarAC चैट",
+    "Linkwise Rust मॉडेम और VARA HF के साथ VarAC चलाने वाले स्टेशन के बीच सीधी एमेच्योर रेडियो चैट सेट करें। यहाँ जाँचे गए BW500 कार्यप्रवाह और संगतता की सीमाएँ हैं।",
+    "Linkwise को BW500 पर सेट करें और कॉलिंग फ़्रीक्वेंसी के QSY से बचने के लिए VarAC की सामान्य फ़्रीक्वेंसी चुनें। VarAC पर सुनना चालू करें। Linkwise टर्मिनल से दूसरे स्टेशन के कॉलसाइन से जुड़ें।",
+    "अलग-थलग ऑडियो परीक्षण में Linkwise ने दो बार कॉल करके एक और पंक्ति भेजी और दोनों दिशाओं में टेक्स्ट पहुँचा। VarAC से शुरू की गई कॉल जुड़ी। VarAC की तरफ़ से डिस्कनेक्ट और वास्तविक रेडियो चैट अभी सत्यापित नहीं हैं।",
+    "प्रमाणपत्र सत्यापन, एन्क्रिप्टेड चैट और SHA-256 फ़ाइल ट्रांसफ़र के लिए दोनों तरफ़ Linkwise इस्तेमाल करें। मूल VarAC का फ़ाइल फ़ॉर्मैट MD5 इस्तेमाल करता है और Linkwise उसके प्रस्ताव अस्वीकार करता है।",
+  ],
+  es: [
+    "Módem HF de radioafición para chat con VarAC y Winlink",
+    "Chat de VarAC con Linkwise por VARA HF BW500",
+    "Configura el chat directo de radioafición entre el módem Linkwise en Rust y una estación con VarAC y VARA HF. Consulta los procedimientos BW500 probados y los límites de compatibilidad.",
+    "Configura Linkwise en BW500 y usa una frecuencia habitual de VarAC para evitar el QSY de la frecuencia de llamada. Activa la escucha en VarAC y conecta con el indicativo del corresponsal desde el terminal Linkwise.",
+    "Dos pruebas por audio aislado intercambiaron texto en ambos sentidos después de que Linkwise llamara y enviara una línea adicional. Una llamada iniciada por VarAC logró conectarse. Quedan por verificar la desconexión en VarAC y el chat por radio.",
+    "Usa Linkwise en ambos extremos para verificar certificados, cifrar el chat y transferir archivos con SHA-256. El formato original de VarAC usa MD5 y Linkwise rechaza esas ofertas.",
+  ],
+  ar: [
+    "مودم HF لهواة الراديو لمحادثات VarAC وWinlink",
+    "محادثات VarAC مع Linkwise عبر VARA HF BW500",
+    "اضبط محادثة مباشرة لهواة الراديو بين مودم Linkwise المكتوب بلغة Rust ومحطة تستخدم VarAC مع VARA HF. راجع إجراءات BW500 المختبرة وحدود التوافق.",
+    "اضبط Linkwise على BW500 واستخدم تردداً عادياً في VarAC لتفادي تغيير التردد QSY من تردد النداء. فعّل الاستماع في محطة VarAC واتصل بعلامة نداء الطرف الآخر من طرفية Linkwise.",
+    "تبادل اختباران صوتيان معزولان النص في الاتجاهين بعدما بدأ Linkwise الاتصال وأرسل سطراً إضافياً. ونجح إنشاء اتصال بدأته VarAC. ما زال إنهاء الاتصال عند طرف VarAC والمحادثة عبر الأثير بحاجة إلى التحقق.",
+    "استخدم Linkwise في الطرفين للتحقق من الشهادات وتشفير المحادثة ونقل الملفات باستخدام SHA-256. يستخدم تنسيق ملفات VarAC الأصلي MD5 ويرفض Linkwise تلك العروض.",
+  ],
+  fr: [
+    "Modem HF radioamateur pour le chat VarAC et Winlink",
+    "Chat VarAC avec Linkwise en VARA HF BW500",
+    "Configurez un chat radioamateur direct entre le modem Linkwise en Rust et une station utilisant VarAC avec VARA HF. Consultez les procédures BW500 testées et les limites de compatibilité.",
+    "Configurez Linkwise en BW500 et utilisez une fréquence de trafic VarAC pour éviter le QSY depuis la fréquence d’appel. Activez l’écoute dans VarAC et appelez l’indicatif du correspondant depuis le terminal Linkwise.",
+    "Deux essais audio isolés ont échangé du texte dans les deux sens après un appel Linkwise suivi d’une ligne supplémentaire. Un appel émis par VarAC a établi la connexion. La déconnexion côté VarAC et le chat sur les ondes restent à vérifier.",
+    "Utilisez Linkwise aux deux extrémités pour vérifier les certificats, chiffrer le chat et transférer des fichiers avec SHA-256. Le format de fichiers VarAC d’origine utilise MD5 et Linkwise refuse ces offres.",
+  ],
+  bn: [
+    "VarAC চ্যাট ও Winlink-এর জন্য অ্যামেচার রেডিও HF মডেম",
+    "VARA HF BW500-এ Linkwise দিয়ে VarAC চ্যাট",
+    "Linkwise Rust মডেম ও VARA HF-সহ VarAC চালানো স্টেশনের মধ্যে সরাসরি অ্যামেচার রেডিও চ্যাট সেট করুন। পরীক্ষিত BW500 পদ্ধতি ও সামঞ্জস্যের সীমা দেখুন।",
+    "Linkwise-এ BW500 বেছে নিন। কলিং ফ্রিকোয়েন্সির QSY এড়াতে VarAC-এর নিয়মিত ফ্রিকোয়েন্সি ব্যবহার করুন। VarAC-এ শোনা চালু করে Linkwise টার্মিনাল থেকে অপর স্টেশনের কলসাইনে সংযোগ করুন।",
+    "বিচ্ছিন্ন অডিও পরীক্ষায় Linkwise কল করে অতিরিক্ত একটি লাইন পাঠানোর পর দুবারই দুই দিকে লেখা পৌঁছেছে। VarAC থেকে শুরু করা কল যুক্ত হয়েছে। VarAC-এর সংযোগ বিচ্ছিন্ন করা এবং বেতারে চ্যাট এখনও যাচাই করা হয়নি।",
+    "সার্টিফিকেট যাচাই, এনক্রিপ্টেড চ্যাট ও SHA-256 ফাইল আদান-প্রদানে দুই প্রান্তেই Linkwise ব্যবহার করুন। মূল VarAC ফাইল বিন্যাসে MD5 ব্যবহৃত হয়, তাই Linkwise সেই প্রস্তাব প্রত্যাখ্যান করে।",
+  ],
+  pt: [
+    "Modem HF para radioamadores com chat VarAC e Winlink",
+    "Chat VarAC com Linkwise via VARA HF BW500",
+    "Configure chat direto de radioamador entre o modem Linkwise em Rust e uma estação que usa VarAC com VARA HF. Veja os procedimentos BW500 testados e os limites de compatibilidade.",
+    "Configure o Linkwise em BW500 e use uma frequência normal do VarAC para evitar o QSY na frequência de chamada. Ative a escuta no VarAC e conecte-se ao indicativo da outra estação pelo terminal Linkwise.",
+    "Dois ensaios de áudio isolados trocaram texto nos dois sentidos após uma chamada Linkwise e o envio de uma linha adicional. Uma chamada iniciada pelo VarAC estabeleceu conexão. O encerramento pelo VarAC e o chat pelo rádio ainda precisam ser verificados.",
+    "Use Linkwise nos dois lados para verificar certificados, criptografar o chat e transferir arquivos com SHA-256. O formato original de arquivos VarAC usa MD5 e o Linkwise recusa essas ofertas.",
+  ],
+  id: [
+    "Modem HF radio amatir untuk obrolan VarAC dan Winlink",
+    "Obrolan VarAC dengan Linkwise melalui VARA HF BW500",
+    "Siapkan obrolan radio amatir langsung antara modem Linkwise berbasis Rust dan stasiun yang memakai VarAC dengan VARA HF. Lihat prosedur BW500 yang diuji dan batas kompatibilitasnya.",
+    "Atur Linkwise ke BW500 dan gunakan frekuensi operasi biasa di VarAC untuk menghindari QSY pada frekuensi panggilan. Aktifkan mode dengar di VarAC, lalu panggil tanda panggilan stasiun lawan dari terminal Linkwise.",
+    "Dua uji audio terisolasi bertukar teks dua arah setelah Linkwise memanggil dan mengirim satu baris tambahan. Panggilan dari VarAC berhasil tersambung. Pemutusan oleh VarAC dan obrolan lewat radio masih perlu diverifikasi.",
+    "Pakai Linkwise di kedua ujung untuk verifikasi sertifikat, obrolan terenkripsi, dan transfer berkas SHA-256. Format berkas VarAC asli memakai MD5 dan Linkwise menolak tawaran tersebut.",
+  ],
+  ru: [
+    "Любительский КВ-модем для чата VarAC и Winlink",
+    "Чат VarAC с Linkwise через VARA HF BW500",
+    "Настройте прямой любительский чат между модемом Linkwise на Rust и станцией с VarAC и VARA HF. Здесь описаны проверенные сценарии BW500 и пределы совместимости.",
+    "Настройте Linkwise на BW500 и выберите рабочую частоту VarAC, чтобы избежать QSY на частоте вызова. Включите прослушивание в VarAC и вызовите позывной корреспондента из терминала Linkwise.",
+    "В двух изолированных аудиоиспытаниях текст прошёл в обе стороны после вызова Linkwise и отправки дополнительной строки. Вызов со стороны VarAC установил соединение. Завершение связи со стороны VarAC и чат в эфире ещё предстоит проверить.",
+    "Для проверки сертификатов, зашифрованного чата и передачи файлов с SHA-256 используйте Linkwise на обеих станциях. Штатный файловый формат VarAC использует MD5, и Linkwise отклоняет такие предложения.",
+  ],
+  de: [
+    "Amateurfunk-KW-Modem für VarAC-Chat und Winlink",
+    "VarAC-Chat mit Linkwise über VARA HF BW500",
+    "Richten Sie einen direkten Amateurfunk-Chat zwischen dem Rust-Modem Linkwise und einer Station mit VarAC und VARA HF ein. Hier finden Sie getestete BW500-Abläufe und Grenzen der Kompatibilität.",
+    "Stellen Sie Linkwise auf BW500 und verwenden Sie eine reguläre VarAC-Betriebsfrequenz, um QSY von der Anruffrequenz zu vermeiden. Aktivieren Sie den Empfang in VarAC und rufen Sie das Gegenrufzeichen im Linkwise-Terminal an.",
+    "In zwei isolierten Audiotests ging Text in beide Richtungen, nachdem Linkwise angerufen und eine weitere Zeile gesendet hatte. Ein Anruf von VarAC stellte die Verbindung her. Verbindungsabbau bei VarAC und Chat im Funkbetrieb sind noch zu prüfen.",
+    "Verwenden Sie an beiden Enden Linkwise für Zertifikatsprüfung, verschlüsselten Chat und Dateitransfer mit SHA-256. Das ursprüngliche VarAC-Dateiformat verwendet MD5. Linkwise lehnt solche Angebote ab.",
+  ],
+};
+
+export function varacGuide(code) {
+  const [siteTitle, title, lede, setup, bench, scope] = text[code];
+  return { siteTitle, title, lede, setup, bench, scope };
+}

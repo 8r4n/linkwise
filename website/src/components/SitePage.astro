@@ -1,17 +1,24 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Button from "./Button.astro";
+import VisualGuide from "./VisualGuide.astro";
 import { publishedRelease, repository, targets } from "../releases.mjs";
 import { loadMessages, pagePath } from "../../../docs/i18n/locales.mjs";
 import { catalog, translation } from "../../../docs/i18n/catalog.mjs";
 import { operatorRuns, operatorSections } from "../../../docs/i18n/operator.mjs";
+import { varacGuide } from "../../../docs/i18n/varac.mjs";
+import { visualGuide } from "../../../docs/i18n/visual-guide.mjs";
 const { locale, page } = Astro.props;
 const t = loadMessages(locale.code);
+const varac = varacGuide(locale.code);
+const visual = page === "varac" ? visualGuide(locale.code) : null;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const link = (page) => base + pagePath(locale.code, page);
 const release = page === "downloads" ? await publishedRelease() : null;
-const meta = page ? t[page] : t.home;
+const meta = page === "varac" ? varac : page ? t[page] : t.home;
+const title = page === "" ? varac.siteTitle : meta.title;
 const description = meta.lede || t.downloads.verify;
+const chatBench = base + "/reference/" + locale.code + "/docs/testing/varac-chat.md/";
 const manuals = ["linkwise.1", "linkwise-station.5", "linkwise-modemd.8"];
 const translations = page === "docs" ? catalog() : [];
 const install = (id) => {
@@ -37,7 +44,7 @@ const software = page === "" ? {
 } : undefined;
 
 ---
-<BaseLayout title={meta.title} {description} {locale} {page} {t} {software}>
+<BaseLayout {title} {description} {locale} {page} {t} {software}>
   {page === "" && <>
     <section class="hero wrap">
       <div><h1>{t.home.title}</h1><p class="lede">{t.home.lede}</p>
@@ -54,6 +61,7 @@ const software = page === "" ? {
       <div class="cards">
         <article class="card"><h3>{t.mail.title}</h3><p>{t.mail.lede}</p><a href={link("mail")}>{t.nav.mail}</a></article>
         <article class="card"><h3>{t.winlink.title}</h3><p>{t.winlink.lede}</p><a href={link("winlink")}>{t.nav.winlink}</a></article>
+        <article class="card"><h3><a href={link("varac")}>{varac.title}</a></h3><p>{varac.lede}</p></article>
         <article class="card"><h3>{t.guide.title}</h3><p>{t.home.guideLede}</p><a href={link("guide")}>{t.nav.guide}</a></article>
       </div>
     </section>
@@ -80,7 +88,7 @@ const software = page === "" ? {
     <h1>{t.mail.title}</h1><p class="lede">{t.mail.lede}</p>
     <h2>{t.mail.bench}</h2><p>{t.mail.tested}</p><h2>{t.mail.status}</h2><p>{t.mail.scope}</p>
     <p><a href={repository + "/blob/main/docs/architecture/software-design.md"} hreflang="en">{t.mail.architecture} ({t.ui.english})</a></p>
-    <p><a href={link("guide") + "#mail"}>{t.guide.mail}</a> · <a href={link("winlink")}>{t.nav.winlink}</a></p>
+    <p><a href={link("guide") + "#mail-example"}>{t.guide.title}</a> · <a href={link("guide") + "#mail"}>{t.guide.mail}</a> · <a href={link("winlink")}>{t.nav.winlink}</a></p>
   </article>}
   {page === "winlink" && <article class="wrap section guide">
     <h1>{t.winlink.title}</h1><p class="lede">{t.winlink.lede}</p>
@@ -89,15 +97,33 @@ const software = page === "" ? {
     <h2>{t.winlink.verify}</h2><p>{t.winlink.test}</p><p>{t.winlink.scope}</p>
     <div class="actions"><Button href={link("downloads") + "#windows"}>Windows · {t.nav.downloads}</Button>
       <Button variant="outline" href={install("winlink-quick-start").href}>{t.winlink.full}{install("winlink-quick-start").language !== locale.code && " (" + t.ui.english + ")"}</Button></div>
-    <h2>{t.winlink.video}</h2><video controls preload="none" width="960" src={base + "/winlink-prbs9.mp4"}><a href={base + "/winlink-prbs9.mp4"}>{t.winlink.getVideo}</a></video>
+    <h2 id="bench-video">{t.winlink.video}</h2><video controls preload="none" width="960" src={base + "/winlink-prbs9.mp4"}><a href={base + "/winlink-prbs9.mp4"}>{t.winlink.getVideo}</a></video>
   </article>}
-  {page === "guide" && <article class="wrap section guide">
+  {page === "varac" && visual && <article class="wrap section guide">
+    <h1>{varac.title}</h1><p class="lede">{varac.lede}</p>
+    <div class="actions">
+      <Button href={link("guide") + "#chat-example"}>{t.guide.chat}</Button>
+      <Button href={link("downloads")} variant="outline">{t.nav.downloads}</Button>
+    </div>
+    <h2>{t.guide.start}</h2><p>{varac.setup}</p>
+    <pre dir="ltr"><code>{"linkwise-modemd --serve-station station.json\nlinkwise chat YOURCALL\n/connect PEERCALL"}</code></pre>
+    <p><a href={link("guide") + "#start"}>{t.guide.start}</a></p>
+    <h2>{visual.bench}</h2><p>{varac.bench}</p>
+    <p><a href={chatBench}>{t.ui.source}</a> · <a href={link("guide") + "#performance"}>{visual.performance}</a></p>
+    <h2>{t.guide.pki}</h2><p>{varac.scope}</p>
+    <p><a href={link("guide") + "#chat-verification"}>{t.guide.chat}</a> · <a href={link("guide") + "#files"}>{t.guide.files}</a></p>
+  </article>}
+  {page === "guide" && <article class="wrap section">
     <h1>{t.guide.title}</h1><p class="lede">{t.guide.lede}</p>
-    {operatorSections.map(([id, commands]) => <section id={id}><h2>{t.guide[id]}</h2><p>{operatorRuns(t.guide[id + "Text"], locale.dir).map(({ text, isolate }) => isolate ? <bdi dir="ltr">{text}</bdi> : text)}</p>
-      {commands.length > 0 && <pre dir="ltr"><code>{commands.join("\n")}</code></pre>}
-      <p><a href={base + "/reference/" + locale.code + "/" + more[id] + "/"}>{t.ui.source}</a></p>
-    </section>)}
-    <p><a href={base + "/guides/" + locale.code + ".md"} download>{t.nav.guide} · Markdown</a> · <a href={link("docs")}>{t.nav.docs}</a></p>
+    <p><a href={link("varac")}>{varac.title}</a></p>
+    <VisualGuide {locale} {t} {base} />
+    <div class="guide">
+      {operatorSections.map(([id, commands]) => <section id={id}><h2>{t.guide[id]}</h2><p>{operatorRuns(t.guide[id + "Text"], locale.dir).map(({ text, isolate }) => isolate ? <bdi dir="ltr">{text}</bdi> : text)}</p>
+        {commands.length > 0 && <pre dir="ltr"><code>{commands.join("\n")}</code></pre>}
+        <p><a href={base + "/reference/" + locale.code + "/" + more[id] + "/"}>{t.ui.source}</a></p>
+      </section>)}
+      <p><a href={base + "/guides/" + locale.code + ".md"} download>{t.nav.guide} · Markdown</a> · <a href={link("docs")}>{t.nav.docs}</a></p>
+    </div>
   </article>}
   {page === "docs" && <article class="wrap section guide">
     <h1>{t.docs.title}</h1><p class="lede">{t.docs.lede}</p>

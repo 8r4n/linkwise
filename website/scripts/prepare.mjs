@@ -2,10 +2,14 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { locales, loadMessages, pages, pagePath } from "../../docs/i18n/locales.mjs";
 import { buildGuides, buildManuals } from "../../docs/i18n/manuals.mjs";
 import { catalog, translation } from "../../docs/i18n/catalog.mjs";
+import { guideTrustMail } from "../../docs/i18n/guide-trust-mail.mjs";
+import { visualGuide } from "../../docs/i18n/visual-guide.mjs";
+import { varacGuide } from "../../docs/i18n/varac.mjs";
 
 const root = new URL("../../", import.meta.url);
 const publicDir = new URL("website/public/", root);
 const base = "https://8r4n.github.io/linkwise/";
+const commandLine = command => "- `" + command + "`";
 await mkdir(new URL("install/", publicDir), { recursive: true });
 for (const guide of ["windows", "macos", "ubuntu", "fedora", "winlink-quick-start"]) {
   const source = await readFile(new URL(`docs/install/${guide}.md`, root), "utf8");
@@ -19,12 +23,50 @@ for (const [source, name] of [["modem-demo.png", "modem-demo.png"], ["winlink-pr
 }
 for (const { code } of locales) {
   const t = loadMessages(code);
+  const trust = guideTrustMail(code);
+  const visual = visualGuide(code);
+  const varac = varacGuide(code);
   const target = new URL(pagePath(code).slice(1), publicDir);
+  const guide = base + pagePath(code, "guide").slice(1);
+  const link = (label, url) => "- [" + label + "](" + url + ")";
+  const reference = source => base + "reference/" + code + "/" + source + "/";
   await mkdir(target, { recursive: true });
   const overview = [
-    "# Linkwise", "", "> " + t.home.lede, "", t.downloads.verify, t.downloads.pending + " GitHub Releases.", "",
-    "- [" + t.downloads.manifest + "](" + base + "releases.json)",
-    ...Object.entries(t.nav).map(([page, label]) => "- [" + label + "](" + base + pagePath(code, page).slice(1) + ")"),
+    "# Linkwise", "", "> " + t.home.lede, "", t.guide.lede, "",
+    "## " + t.nav.downloads, "", t.downloads.verify, "",
+    link(t.downloads.manifest, base + "releases.json"),
+    link(t.nav.downloads, base + pagePath(code, "downloads").slice(1)),
+    link(t.ui.manuals, reference("docs/man/linkwise.1")), "",
+    "## " + t.nav.guide, "",
+    link(t.guide.title, guide),
+    link(t.guide.start, guide + "#start"),
+    link(t.nav.winlink, base + pagePath(code, "winlink").slice(1)),
+    link(t.nav.docs, base + pagePath(code, "docs").slice(1)), "",
+    "## " + varac.title, "", varac.lede, "", varac.setup, "", varac.bench, varac.scope, "",
+    link(varac.title, base + pagePath(code, "varac").slice(1)),
+    link(visual.bench, reference("docs/testing/varac-chat.md")), "",
+    "## " + trust.verify, "", t.guide.chatText, "", trust.trust, trust.proof, "",
+    link(trust.verify, guide + "#chat-verification"),
+    link(t.guide.pki, reference("rust/docs/pki.md")),
+    link(t.guide.files, guide + "#files"),
+    link(t.guide.qsl, guide + "#qsl"),
+    commandLine("linkwise pki check station-pki.json"),
+    commandLine("linkwise chat --pki station-pki.json --enroll YOURCALL"),
+    commandLine("/cert offer [--encrypt]"),
+    commandLine("/cert inspect"),
+    commandLine("/cert accept SIGNING [ENCRYPTION]"),
+    commandLine("/proof message-proof.json"),
+    commandLine("linkwise pki verify-chat station-pki.json message-proof.json"), "",
+    "## " + trust.clients, "", trust.flow, "", trust.tls, trust.radio, "",
+    link(trust.clients, guide + "#mail-example"),
+    link(trust.setup, reference("rust/docs/mobile-development.md")),
+    link(trust.tested, guide + "#mail-client-tests"),
+    link(t.guide.mail, guide + "#mail"),
+    commandLine("linkwise mail smtp MAILBOX CALLSIGN 2525 --starttls cert.pem key.pem"),
+    commandLine("linkwise mail imap MAILBOX 1143 --tls cert.pem key.pem"), "",
+    "## " + visual.performance, "", visual.payloadNote, visual.turnNote, "", visual.limits, t.guide.securityText, "",
+    link(visual.performance, guide + "#performance"),
+    link(visual.bench, reference("docs/testing/vara-interoperability.md")),
   ];
   await writeFile(new URL("llms.txt", target), overview.join("\n") + "\n");
 }
