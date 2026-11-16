@@ -1,5 +1,8 @@
 # Linkwise test documents
 
+See the [VarAC direct chat bench](varac-chat.md) for socket captures and
+BW500 chat qualification results.
+
 The KiwiSDR modem test plan follows the engineering sections of the
 [acq-latex-templates Test Plan](https://github.com/8r4n/acq-latex-templates/blob/fef160e37542fd7bc8e62de81404a83b8634a396/templates/engineering/verification/test-plan/main.tex),
 tailored to Linkwise project metadata and an exploratory RF-observation campaign.

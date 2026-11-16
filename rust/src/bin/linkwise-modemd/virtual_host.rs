@@ -753,7 +753,12 @@ impl Engine<'_> {
                 )
             };
             match self.phase {
-                Phase::ConfirmAck if ack() => {
+                Phase::ConfirmAck
+                    if ack()
+                        || bandwidth == Hz500
+                            && control::find_poll_ack(bandwidth, &link.caller, samples, start)
+                                .is_some() =>
+                {
                     self.phase = Phase::CallerReady;
                     self.deadline = None;
                     self.connected()?;

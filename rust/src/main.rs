@@ -1,10 +1,11 @@
 use std::{env, path::Path, sync::Arc};
 
+mod chat_cli;
 mod frame_cli;
 mod mail_cli;
-mod session_cli;
 #[cfg(feature = "secure-transfer")]
 mod secure_cli;
+mod session_cli;
 mod wav_analysis;
 mod wav_synthesis;
 
@@ -22,11 +23,13 @@ Usage:
   linkwise audio-inputs      List input devices (requires audio-device feature)
   linkwise audio-outputs     List output devices (requires audio-device feature)
   linkwise receive-audio SECONDS  Receive BW500 DATA as JSON lines
+  linkwise receive-pcm       Stream mono 48 kHz s16le stdin to BW500 JSON lines
   linkwise render-wav REQUEST_JSON OUTPUT_WAV  Render a file-only BW500 handshake stimulus
   linkwise encode-frame LEVEL CONTROL INPUT OUTPUT [wav|pcm-f32le]
   linkwise decode-frame INPUT  Write one decoded payload as raw bytes
   linkwise transmit-frame LEVEL CONTROL INPUT  Play one BW500 frame
   linkwise send SOURCE DESTINATION INPUT [COMMAND_PORT DATA_PORT]  Send via local P2P modem
+  linkwise chat LOCAL [COMMAND_PORT DATA_PORT]  Direct BW500 terminal chat
   linkwise mail queue MAILBOX ENVELOPE
   linkwise mail import MAILBOX MESSAGE.eml
   linkwise mail export MAILBOX MESSAGE_ID
@@ -58,6 +61,12 @@ async fn main() {
     use std::io::Write;
 
     let mut args: Vec<_> = env::args_os().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "chat") {
+        if let Err(error) = chat_cli::run(&args[1..]).await {
+            fail(error.status, error.source);
+        }
+        return;
+    }
     if args.first().is_some_and(|arg| arg == "secure") {
         #[cfg(feature = "secure-transfer")]
         {
@@ -67,7 +76,10 @@ async fn main() {
             return;
         }
         #[cfg(not(feature = "secure-transfer"))]
-        fail(2, "secure transfer support is unavailable in this build".into());
+        fail(
+            2,
+            "secure transfer support is unavailable in this build".into(),
+        );
     }
     if matches!(
         args.first().and_then(|arg| arg.to_str()),
@@ -147,6 +159,11 @@ async fn main() {
                 }
             }
         }
+        (Some(arg), None, None) if arg == "receive-pcm" => {
+            if let Err(error) = receive_pcm() {
+                fail(1, error);
+            }
+        }
         #[cfg(feature = "audio-device")]
         (Some(arg), Some(seconds), None) if arg == "receive-audio" => {
             let seconds = seconds.to_string_lossy();
@@ -211,10 +228,7 @@ fn fail(status: i32, error: Box<dyn std::error::Error>) -> ! {
 #[cfg(feature = "audio-device")]
 async fn receive_audio(seconds: &str) -> Result<(), Box<dyn std::error::Error>> {
     use linkwise::audio::device::Capture;
-    use std::{
-        io::Write,
-        time::{Duration, Instant},
-    };
+    use std::time::{Duration, Instant};
 
     let seconds: u64 = seconds.parse()?;
     if !(1..=3600).contains(&seconds) {
@@ -234,14 +248,7 @@ async fn receive_audio(seconds: &str) -> Result<(), Box<dyn std::error::Error>> 
         if output_error.is_some() {
             return;
         }
-        let frames: Vec<_> = event.frames.into_iter().map(|frame| serde_json::json!({
-            "level": frame.level, "samples": frame.samples,
-            "control": frame.frame.control,
-            "payload_hex": frame.frame.payload.iter().map(|b| format!("{b:02x}")).collect::<String>(),
-        })).collect();
-        let event = serde_json::json!({"burst_candidate": event.candidate,
-            "truncated": event.truncated, "bw500_data_frames": frames});
-        if let Err(error) = writeln!(output, "{event}").and_then(|_| output.flush()) {
+        if let Err(error) = write_reception(&mut output, event) {
             output_error = Some(error);
             failed.set(true);
         }
@@ -257,6 +264,67 @@ async fn receive_audio(seconds: &str) -> Result<(), Box<dyn std::error::Error>> 
     if !failed.get() {
         receiver.finish(&mut emit);
     }
+    if let Some(error) = output_error {
+        return Err(error.into());
+    }
+    Ok(())
+}
+
+fn write_reception(
+    output: &mut impl std::io::Write,
+    event: linkwise::modem::receiver::Reception,
+) -> std::io::Result<()> {
+    let frames: Vec<_> = event.frames.into_iter().map(|frame| serde_json::json!({
+            "level": frame.level, "samples": frame.samples,
+            "control": frame.frame.control,
+            "payload_hex": frame.frame.payload.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+        })).collect();
+    let event = serde_json::json!({"burst_candidate": event.candidate,
+            "truncated": event.truncated, "bw500_data_frames": frames});
+    writeln!(output, "{event}")?;
+    output.flush()
+}
+
+fn receive_pcm() -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{BufRead, BufReader};
+
+    let mut input = BufReader::new(std::io::stdin().lock());
+    let mut output = std::io::stdout().lock();
+    let mut receiver = wav_analysis::configured_receiver()?;
+    let mut output_error = None;
+    let failed = std::cell::Cell::new(false);
+    let mut emit = |event| {
+        if output_error.is_none() {
+            output_error = write_reception(&mut output, event).err();
+            failed.set(output_error.is_some());
+        }
+    };
+    let mut carry = None;
+    let mut samples = Vec::with_capacity(4096);
+    while !failed.get() {
+        let bytes = input.fill_buf()?;
+        if bytes.is_empty() {
+            break;
+        }
+        let count = bytes.len();
+        samples.clear();
+        for &byte in bytes {
+            if let Some(low) = carry.take() {
+                samples.push(f32::from(i16::from_le_bytes([low, byte])) / 32768.0);
+            } else {
+                carry = Some(byte);
+            }
+        }
+        receiver.push(&samples, &mut emit)?;
+        input.consume(count);
+    }
+    if failed.get() {
+        return Err(output_error.unwrap().into());
+    }
+    if carry.is_some() {
+        return Err("incomplete 16-bit PCM sample at end of input".into());
+    }
+    receiver.finish(&mut emit);
     if let Some(error) = output_error {
         return Err(error.into());
     }

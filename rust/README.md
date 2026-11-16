@@ -41,6 +41,11 @@ The [BW500 audio loopback](docs/modem-runtime.md#run-the-bw500-audio-loopback)
 exercises two-way audio transfer and loss recovery using a verified level-4
 profile and bench-only framing.
 
+## Direct terminal chat
+
+Use the [chat guide](docs/chat.md) for the BW500 client, terminal controls,
+and a radio-free two-station walkthrough.
+
 ## Development
 
 Install the stable Rust toolchain, then run:

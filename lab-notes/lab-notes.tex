@@ -3032,6 +3032,164 @@ offset 20 remains unidentified.
 
 \includepdf[pages={1,2},fitpaper=true,pagecommand={\thispagestyle{empty}}]{figures/kiwisdr-beacon-map-dsp.pdf}
 
+\section{2026-11-15 -- Matched VarAC beacon SNR sweep}
+
+The held-out set comprised the two CRC-valid Kitchener KiwiSDR
+beacons on 7105.0 kHz USB used in the matched replay
+(\texttt{KW9Q}/\texttt{EN40KJ} and \texttt{N9PMI}/\texttt{EM78EG}).
+Both clips came from the same receiver recording. Linkwise used the
+rolling BW500 receiver from \texttt{e506089}, unchanged in \texttt{d753f52}.
+Stock VARA HF 4.9.1 replayed the same samples through the Windows
+virtual audio cable. The input files used the same quantized PCM, in mono for Linkwise
+and duplicated to both channels for stock VARA. The Windows mixer
+and virtual cable are part of the stock playback route.
+The Windows guest verified each WAV by SHA-256.
+
+The fixed grid covered $-16$ to $+12$ dB in 4 dB steps. At each level,
+ten independent Gaussian noise realizations per clip were filtered to
+300--3300 Hz. Playback was randomized. SNR was defined as
+$10\log_{10}(P_{\mathrm{burst}}/P_{\mathrm{added}})$, with both average
+powers measured over the same 228 level-2 symbols. The original
+off-air noise remains part of the recorded waveform and was unmeasured.
+The stated ratios are for injected noise in PCM. A common gain on the
+mixture prevented clipping. A trial passed when the decoder emitted
+the exact 20-byte KISS payload from the matched clean capture.
+
+\begin{center}
+\begin{tabular}{@{}rrr@{}}
+\toprule
+Added-noise SNR (dB) & Linkwise exact & Stock VARA exact \\
+\midrule
+$-16$ & 0/20 & 0/20 \\
+$-12$ & 0/20 & 0/20 \\
+$-8$ & 3/20 & 12/20 \\
+$-4$ & 11/20 & 19/20 \\
+$0$ & 20/20 & 15/20 \\
+$+4$ & 20/20 & 20/20 \\
+$+8$ & 20/20 & 18/20 \\
+$+12$ & 20/20 & 16/20 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Linkwise first met the criterion at $0$ dB (20/20). At $-4$ dB it recovered 11/20.
+Stock VARA first reached 19/20 at $-4$ dB and reached 20/20 at $+4$ dB.
+It fell below the criterion at $0$, $+8$, and $+12$ dB, so the sweep
+did not establish a sustained 95\% cutoff for the stock playback route.
+Both decoders passed all six clean checks.
+The count of unexpected payloads was 0 for Linkwise and 0 for stock VARA.
+A diagnostic replay with a three-second inter-clip gap recovered 3/3 of the previously missed stock VARA trials selected at $+12$ dB. The repeat also changed playback order and started fresh modem instances.
+The change in recovery does not isolate the cause of the initial misses.
+These repeats were kept separate from the primary counts.
+
+The empirical cutoff was fixed before playback as the lowest tested
+level with at least 19/20 exact replays at that level and every higher
+level. Twenty successes in twenty trials give a 95\% Wilson interval
+of approximately 84--100\%. The repeated trials vary the noise
+realization, with two source frames from one recording. Finer SNR
+steps, independent off-air captures, and an absolute RF SNR
+calibration remain unmeasured.
+
+The protocol, noise seeds, WAV hashes, modem logs, and per-trial
+scores are retained under \pathtext{2026-11-15-main-retest.sajUbP/snr-sweep}.
+
+
+
+\clearpage
+\section{2026-11-15 -- VarAC terminal chat and live BW500 receive}
+\label{sec:varac-chat-20261115}
+
+\subsection{Stock application baseline}
+Two instances of stock VarAC 16.1.8 ran in separate profiles in a Windows 11
+ARM64 UTM guest. KISS, CAT, PTT, automatic beacons, and reporting were
+disabled. A loopback relay supplied modem-shaped command responses and
+passed DATA bytes unchanged. Both applications exchanged text and closed
+the call. This stage exercised application framing without modem audio.
+
+DATA carried a decimal byte count, one ASCII space, and exactly that many
+body bytes. The trace contained \texttt{4 \&IT\&}, then \texttt{30 Alpha confirms stock text 123.} The reply was \texttt{30 Bravo confirms stock text 456.} No separator
+followed a body. The Rust decoder counted bytes across TCP reads and
+skipped the typing indicator. The stock trace covered ASCII. See the
+\href{../docs/testing/varac-chat.md}{wire trace and bench procedure}.
+
+\subsection{Rust terminal and mixed audio bench}
+The irssi-inspired terminal attached to the Linkwise modem's local command
+and DATA sockets in BW500 mode. The two-peer waveform bench delivered short
+and multi-frame text, drained transmit queues, disconnected, reconnected
+with the opposite caller, and restored both Unix terminals. The CLI manual
+and operator guide document attachment, listening, peer windows, and shutdown.
+
+Over an isolated virtual audio cable, stock VARA HF 4.9.1 in CHAT mode
+returned a 16-symbol connect response with the first preamble tone and
+the full 15-symbol keyed tail. Its setup ACK matched the caller-keyed
+BW500 poll ACK. Linkwise accepted both sequences during the corresponding
+negotiation states.
+
+Two Linkwise-originated runs exchanged exact operator text with stock
+VarAC. A Linkwise follow-up gave the queued stock reply a transmit turn.
+Linkwise reported local disconnect. The second run recorded no stock-side
+disconnect notice in the following 20 seconds. The stock-originated
+test established a link, with stock keyboard DATA still unobserved.
+A third repeat, mixed-peer reconnect, and two-way on-air chat remain open.
+
+\subsection{Independent on-air receive observations}
+On 15 November UTC, public KiwiSDR streams on 7102.0 kHz USB were
+converted to 48 kHz mono signed 16-bit PCM and fed directly to
+\verb|linkwise receive-pcm|. Rockport used live I/Q channelization and
+Ontario used a narrow USB stream. Both yielded CRC-valid BW500 Level 3
+DATA. Offsets are measured from the start of each input stream.
+
+\begin{center}
+\begin{tabular}{@{}llrrl@{}}
+\toprule
+Receiver & Stream offset (s) & Control & Wire CRC & Payload \\
+\midrule
+Rockport, Maine & 37.056--41.877 & \texttt{42} & \texttt{03AC} & Plain text \\
+Ontario, Canada & 95.931--100.752 & \texttt{29} & \texttt{8822} & Compressed text \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Each decoded frame comprised 34 payload bytes, one control byte, and
+two big-endian CRC bytes. The Rockport payload held an ASCII fragment
+ending \emph{how repeaters work.} Its remaining fields were closing
+delimiter \texttt{14}, caller-key byte \texttt{36}, 11 zero pad bytes,
+and next receive level \texttt{03}. Ontario carried continuing DATA
+with text compression. Linkwise verified the RF frame. The
+\href{https://github.com/sstjohn/hfmodem/blob/952f79245240132f4af209afbad1f4b2ba256613/packages/hfmodem/hfmodem/kestrel/vara/compression.py}{hfmodem reference decoder}
+expanded the text. Both results were conversational fragments. The
+receive-only run yielded no full session, transmitter attribution,
+or frame-error denominator.
+
+\begin{samepage}
+The retained PCM has the following SHA-256 hashes. Recordings and the
+demo are local artifacts under \pathtext{docs/build/chat/}.
+\begin{itemize}[leftmargin=*]
+  \item Rockport: \hashtext{7650a38b1d87ff9d}{7e1548453c5dc33c}{43bd17122fc31d6a}{e35ac1c92739ea22}.
+  \item Ontario: \hashtext{b9ab2f46f70ae580}{424da99ea3cfb128}{dee22a14369b0490}{0e302071b2787b78}.
+\end{itemize}
+\end{samepage}
+
+The 69-second field demo pairs the receiver audio with a GNU Radio
+3.10.9.2 spectrogram, waveform envelope, and measured rolloff. Receiver
+filtering contributes to the rolloff. The TikZ-DSP anatomy plates show
+frame-aligned envelopes, byte offsets, CRC coverage, and either ASCII
+expansion or the first eight compressed symbols and pad bits.
+
+\subsection{Review and closure}
+\href{https://github.com/8r4n/linkwise/pull/17}{Pull request 17} added
+the terminal, streaming receiver, and documentation. Review found that
+disconnect could precede the last DATA bytes, progressing sends could
+exceed a fixed deadline, and Page Up skipped the beginning of wrapped
+records. The fixes retain the closing decoder through a bounded idle
+drain, drive transmit timeouts by acknowledgment progress, and page by
+wrapped rows. The PTY retest also caught a missing redraw after the
+drain, which was fixed.
+
+The final local run passed 123 audio-enabled Rust tests, the two-peer PTY
+bench, exact replay of both on-air frames, and manual-page lint. All three
+review threads were resolved.
+
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]
