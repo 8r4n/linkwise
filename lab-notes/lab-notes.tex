@@ -3032,6 +3032,69 @@ offset 20 remains unidentified.
 
 \includepdf[pages={1,2},fitpaper=true,pagecommand={\thispagestyle{empty}}]{figures/kiwisdr-beacon-map-dsp.pdf}
 
+\section{2026-11-15 -- Matched VarAC beacon SNR sweep}
+
+The held-out set comprised the two CRC-valid Kitchener KiwiSDR
+beacons on 7105.0 kHz USB used in the matched replay
+(\texttt{KW9Q}/\texttt{EN40KJ} and \texttt{N9PMI}/\texttt{EM78EG}).
+Both clips came from the same receiver recording. Linkwise used the
+rolling BW500 receiver from \texttt{e506089}, unchanged in \texttt{d753f52}.
+Stock VARA HF 4.9.1 replayed the same samples through the Windows
+virtual audio cable. The input files used the same quantized PCM, in mono for Linkwise
+and duplicated to both channels for stock VARA. The Windows mixer
+and virtual cable are part of the stock playback route.
+The Windows guest verified each WAV by SHA-256.
+
+The fixed grid covered $-16$ to $+12$ dB in 4 dB steps. At each level,
+ten independent Gaussian noise realizations per clip were filtered to
+300--3300 Hz. Playback was randomized. SNR was defined as
+$10\log_{10}(P_{\mathrm{burst}}/P_{\mathrm{added}})$, with both average
+powers measured over the same 228 level-2 symbols. The original
+off-air noise remains part of the recorded waveform and was unmeasured.
+The stated ratios are for injected noise in PCM. A common gain on the
+mixture prevented clipping. A trial passed when the decoder emitted
+the exact 20-byte KISS payload from the matched clean capture.
+
+\begin{center}
+\begin{tabular}{@{}rrr@{}}
+\toprule
+Added-noise SNR (dB) & Linkwise exact & Stock VARA exact \\
+\midrule
+$-16$ & 0/20 & 0/20 \\
+$-12$ & 0/20 & 0/20 \\
+$-8$ & 3/20 & 12/20 \\
+$-4$ & 11/20 & 19/20 \\
+$0$ & 20/20 & 15/20 \\
+$+4$ & 20/20 & 20/20 \\
+$+8$ & 20/20 & 18/20 \\
+$+12$ & 20/20 & 16/20 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Linkwise first met the criterion at $0$ dB (20/20). At $-4$ dB it recovered 11/20.
+Stock VARA first reached 19/20 at $-4$ dB and reached 20/20 at $+4$ dB.
+It fell below the criterion at $0$, $+8$, and $+12$ dB, so the sweep
+did not establish a sustained 95\% cutoff for the stock playback route.
+Both decoders passed all six clean checks.
+The count of unexpected payloads was 0 for Linkwise and 0 for stock VARA.
+A diagnostic replay with a three-second inter-clip gap recovered 3/3 of the previously missed stock VARA trials selected at $+12$ dB. The repeat also changed playback order and started fresh modem instances.
+The change in recovery does not isolate the cause of the initial misses.
+These repeats were kept separate from the primary counts.
+
+The empirical cutoff was fixed before playback as the lowest tested
+level with at least 19/20 exact replays at that level and every higher
+level. Twenty successes in twenty trials give a 95\% Wilson interval
+of approximately 84--100\%. The repeated trials vary the noise
+realization, with two source frames from one recording. Finer SNR
+steps, independent off-air captures, and an absolute RF SNR
+calibration remain unmeasured.
+
+The protocol, noise seeds, WAV hashes, modem logs, and per-trial
+scores are retained under \pathtext{2026-11-15-main-retest.sajUbP/snr-sweep}.
+
+
+
 \clearpage
 \section{2026-11-15 -- VarAC terminal chat and live BW500 receive}
 \label{sec:varac-chat-20261115}
