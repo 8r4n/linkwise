@@ -72,7 +72,7 @@ one modem delivery and checks acknowledgment, disconnect, and terminal restore.
 | Call times out | Check the peer's listen setting, the audio route, and the station configurations. The client aborts a call after 90 seconds. |
 | Stock VarAC reply stays queued after sign-on | In the tested Linkwise-originated call, a follow-up text line opened a new transmit turn and allowed the queued reply to arrive. |
 | Pending output followed by link loss | Delivery is unconfirmed. Reconnect and resend manually if appropriate. |
-| Disconnect takes too long | The client allows up to 30 seconds for drain and disconnection, then requests an abort. |
+| Disconnect takes too long | The client allows 120 seconds without transmit acknowledgment progress while draining, then 30 seconds for the modem to disconnect. It requests an abort if either deadline expires. |
 
 ## Stream audio from a KiwiSDR
 

@@ -40,6 +40,51 @@ pub struct Window {
     scroll: usize,
 }
 
+impl Window {
+    fn rows(&self, width: usize) -> Vec<&str> {
+        self.lines
+            .iter()
+            .flat_map(|line| wrap_rows(line, width))
+            .collect()
+    }
+
+    fn scroll_by_page(&mut self, up: bool, width: usize, height: usize) {
+        let max = self.rows(width).len().saturating_sub(height);
+        let step = height.saturating_sub(1).max(1);
+        let offset = self.scroll.min(max);
+        self.scroll = if up {
+            (offset + step).min(max)
+        } else {
+            offset.saturating_sub(step)
+        };
+    }
+
+    fn visible_rows(&self, width: usize, height: usize) -> Vec<&str> {
+        let rows = self.rows(width);
+        let offset = self.scroll.min(rows.len().saturating_sub(height));
+        let end = rows.len() - offset;
+        rows[end.saturating_sub(height)..end].to_vec()
+    }
+}
+
+fn wrap_rows(line: &str, width: usize) -> Vec<&str> {
+    let mut rows = Vec::new();
+    let mut start = 0;
+    let mut cells = 0;
+    for (index, ch) in line.char_indices() {
+        // Reserve two cells for non-ASCII characters to keep wide text inside the viewport.
+        let size = if ch.is_ascii() { 1 } else { 2 };
+        if cells + size > width {
+            rows.push(&line[start..index]);
+            start = index;
+            cells = 0;
+        }
+        cells += size;
+    }
+    rows.push(&line[start..]);
+    rows
+}
+
 pub struct View {
     pub windows: Vec<Window>,
     pub selected: usize,
@@ -79,24 +124,28 @@ impl View {
 
     pub fn log(&mut self, index: usize, line: impl Into<String>) {
         let window = &mut self.windows[index];
+        let line = line.into();
+        if window.scroll > 0
+            && let Ok((width, _)) = terminal::size()
+        {
+            window.scroll += wrap_rows(&line, usize::from(width.saturating_sub(1)).max(2)).len();
+        }
         if window.lines.len() == SCROLLBACK {
             window.lines.pop_front();
         }
-        window.lines.push_back(line.into());
+        window.lines.push_back(line);
         window.unread |= self.selected != index;
-        if window.scroll > 0 {
-            window.scroll = (window.scroll + 1).min(window.lines.len() - 1);
-        }
     }
 
     pub fn page(&mut self, up: bool) -> io::Result<()> {
-        let step = usize::from(terminal::size()?.1.saturating_sub(5)).max(1);
-        let window = &mut self.windows[self.selected];
-        window.scroll = if up {
-            (window.scroll + step).min(window.lines.len().saturating_sub(1))
-        } else {
-            window.scroll.saturating_sub(step)
-        };
+        let (width, height) = terminal::size()?;
+        if width >= 16 && height >= 5 {
+            self.windows[self.selected].scroll_by_page(
+                up,
+                usize::from(width - 1),
+                usize::from(height - 4),
+            );
+        }
         Ok(())
     }
 
@@ -134,30 +183,7 @@ impl View {
         )?;
 
         let rows = usize::from(height - 4);
-        let mut visible = VecDeque::new();
-        for line in window
-            .lines
-            .iter()
-            .take(window.lines.len().saturating_sub(window.scroll))
-        {
-            // Reserve two cells for non-ASCII characters to keep wide text inside the viewport.
-            let mut row = String::new();
-            let mut cells = 0;
-            for ch in line.chars() {
-                let size = if ch.is_ascii() { 1 } else { 2 };
-                if cells + size > width {
-                    visible.push_back(std::mem::take(&mut row));
-                    cells = 0;
-                }
-                row.push(ch);
-                cells += size;
-            }
-            visible.push_back(row);
-            while visible.len() > rows {
-                visible.pop_front();
-            }
-        }
-        for (index, line) in visible.into_iter().enumerate() {
+        for (index, line) in window.visible_rows(width, rows).into_iter().enumerate() {
             queue!(out, MoveTo(0, index as u16 + 1), Print(line))?;
         }
         let status = format!("{local} | {status} | {} | /help", window.peer);
@@ -179,5 +205,28 @@ impl View {
             .collect();
         queue!(out, Print(tail))?;
         out.flush()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn page_up_reaches_the_start_of_a_long_wrapped_record() {
+        let mut window = Window {
+            lines: [format!("START{}END", "x".repeat(1_016))].into(),
+            ..Window::default()
+        };
+        assert!(window.visible_rows(39, 6).last().unwrap().ends_with("END"));
+        for _ in 0..10 {
+            window.scroll_by_page(true, 39, 6);
+        }
+        assert_eq!(window.visible_rows(39, 6).len(), 6);
+        assert!(window.visible_rows(39, 6)[0].starts_with("START"));
+        for _ in 0..10 {
+            window.scroll_by_page(false, 39, 6);
+        }
+        assert!(window.visible_rows(39, 6).last().unwrap().ends_with("END"));
     }
 }

@@ -41,6 +41,7 @@ const HOST_WAIT: Duration = Duration::from_secs(5);
 const LINK_WAIT: Duration = Duration::from_secs(90);
 const SEND_WAIT: Duration = Duration::from_secs(120);
 const CLOSE_WAIT: Duration = Duration::from_secs(30);
+const DATA_TAIL_WAIT: Duration = Duration::from_millis(250);
 
 pub async fn run(args: &[OsString]) -> Result<(), Failure> {
     if args.len() == 1 && (args[0] == "--help" || args[0] == "-h") {
@@ -70,15 +71,15 @@ enum Link {
     Connected(usize),
     Closing {
         window: Option<usize>,
-        deadline: Instant,
-        drain: bool,
+        deadline: Option<Instant>,
     },
+    ReceivingTail(usize, Instant),
 }
 
 impl Link {
     fn window(&self) -> Option<usize> {
         match self {
-            Self::Connected(index) => Some(*index),
+            Self::Connected(index) | Self::ReceivingTail(index, _) => Some(*index),
             Self::Closing { window, .. } => *window,
             _ => None,
         }
@@ -99,6 +100,21 @@ struct Chat {
 }
 
 impl Chat {
+    fn new() -> Self {
+        Self {
+            link: Link::Idle,
+            listening: false,
+            listen_change: None,
+            pending: None,
+            quitting: false,
+            view: View::new(),
+            decoder: codec::Decoder::default(),
+            early_data: Vec::new(),
+            history: VecDeque::new(),
+            recall: None,
+        }
+    }
+
     fn status(&self) -> String {
         let listening = if self.listening {
             "listen on"
@@ -109,7 +125,7 @@ impl Chat {
             Link::Idle => "idle".into(),
             Link::Dialing(peer, _) => format!("calling {peer}"),
             Link::Connected(index) => format!("connected {}", self.view.windows[*index].peer),
-            Link::Closing { drain: true, .. } => "draining".into(),
+            Link::Closing { deadline: None, .. } | Link::ReceivingTail(..) => "draining".into(),
             Link::Closing { .. } => "disconnecting".into(),
         };
         let pending = if self.pending.is_some() {
@@ -122,6 +138,9 @@ impl Chat {
 
     fn notice(&mut self, local: &str, line: &str) -> io::Result<()> {
         if let Some(rest) = line.strip_prefix("CONNECTED ") {
+            if matches!(self.link, Link::ReceivingTail(..)) {
+                self.finish_disconnect();
+            }
             let parts: Vec<_> = rest.split_ascii_whitespace().collect();
             let [caller, called, "500"] = parts.as_slice() else {
                 return Err(io::Error::other("unexpected modem connection notice"));
@@ -146,16 +165,13 @@ impl Chat {
             let early = std::mem::take(&mut self.early_data);
             self.inbound(&early)?;
         } else if line == "DISCONNECTED" {
-            let index = self.link.window().unwrap_or(0);
-            let message = if self.pending.take().is_some() {
-                "Disconnected. Delivery unconfirmed. Nothing will be resent."
+            if let Some(index) = self.link.window() {
+                // DATA and command notices are written by separate socket tasks.
+                // Keep routing the tail to this peer while the DATA socket drains.
+                self.link = Link::ReceivingTail(index, Instant::now() + DATA_TAIL_WAIT);
             } else {
-                "Disconnected"
-            };
-            self.view.log(index, message);
-            self.link = Link::Idle;
-            self.decoder = codec::Decoder::default();
-            self.early_data.clear();
+                self.finish_disconnect();
+            }
         } else if line == "OK" {
             if let Some((value, _)) = self.listen_change.take() {
                 self.listening = value;
@@ -182,10 +198,14 @@ impl Chat {
                 return Err(io::Error::other("modem rejected chat command"));
             }
         } else if let Some(value) = line.strip_prefix("BUFFER ")
-            && let Some((remaining, previous, _)) = &mut self.pending
+            && let Some((remaining, previous, deadline)) = &mut self.pending
         {
             let current: usize = value.parse().map_err(io::Error::other)?;
-            *remaining = remaining.saturating_sub(previous.saturating_sub(current));
+            let acknowledged = previous.saturating_sub(current);
+            if acknowledged > 0 {
+                *remaining = remaining.saturating_sub(acknowledged);
+                *deadline = Instant::now() + SEND_WAIT;
+            }
             *previous = current;
             if current == 0 && *remaining == 0 {
                 self.pending = None;
@@ -198,6 +218,19 @@ impl Chat {
         Ok(())
     }
 
+    fn finish_disconnect(&mut self) {
+        let index = self.link.window().unwrap_or(0);
+        let message = if self.pending.take().is_some() {
+            "Disconnected. Delivery unconfirmed. Nothing will be resent."
+        } else {
+            "Disconnected"
+        };
+        self.view.log(index, message);
+        self.link = Link::Idle;
+        self.decoder = codec::Decoder::default();
+        self.early_data.clear();
+    }
+
     fn inbound(&mut self, bytes: &[u8]) -> io::Result<()> {
         if let Some(index) = self.link.window() {
             let peer = self.view.windows[index].peer.clone();
@@ -207,6 +240,11 @@ impl Chat {
                         .log(index, format!("<{peer}> {}", codec::display(record)));
                 }
             })?;
+            if let Link::ReceivingTail(_, deadline) = &mut self.link
+                && !bytes.is_empty()
+            {
+                *deadline = Instant::now() + DATA_TAIL_WAIT;
+            }
         } else if matches!(self.link, Link::Dialing(..))
             || self.listening
             || self.listen_change.is_some_and(|(on, _)| on)
@@ -223,19 +261,17 @@ impl Chat {
 
     async fn close(&mut self, control: &mut Control) -> io::Result<()> {
         let (command, window) = match self.link {
-            Link::Idle | Link::Closing { .. } => return Ok(()),
+            Link::Idle | Link::Closing { .. } | Link::ReceivingTail(..) => return Ok(()),
             Link::Dialing(..) => ("ABORT", None),
             Link::Connected(index) => ("DISCONNECT", Some(index)),
         };
-        let drain = self.pending.is_some();
-        if !drain {
+        let deadline = if self.pending.is_none() {
             request(control, command).await?;
-        }
-        self.link = Link::Closing {
-            window,
-            deadline: Instant::now() + CLOSE_WAIT,
-            drain,
+            Some(Instant::now() + CLOSE_WAIT)
+        } else {
+            None
         };
+        self.link = Link::Closing { window, deadline };
         Ok(())
     }
 
@@ -357,18 +393,7 @@ async fn chat(local: &str, command_port: u16, data_port: u16) -> io::Result<()> 
         .map_err(|error| io::Error::other(format!("modem setup failed; check callsign, BW500 mode, and whether another client owns it: {error}")))?;
 
     let _terminal = Terminal::enter()?;
-    let mut chat = Chat {
-        link: Link::Idle,
-        listening: false,
-        listen_change: None,
-        pending: None,
-        quitting: false,
-        view: View::new(),
-        decoder: codec::Decoder::default(),
-        early_data: Vec::new(),
-        history: VecDeque::new(),
-        recall: None,
-    };
+    let mut chat = Chat::new();
     let (mut read, mut write) = data.into_split();
     let mut buffer = [0; 4096];
     let mut tick = interval(Duration::from_millis(25));
@@ -406,22 +431,25 @@ async fn chat(local: &str, command_port: u16, data_port: u16) -> io::Result<()> 
                     chat.view.log(0, "Call timed out");
                     chat.close(&mut control).await?;
                 }
-                if matches!(chat.link, Link::Closing { deadline, .. } if now >= deadline) {
+                if matches!(chat.link, Link::ReceivingTail(_, deadline) if now >= deadline) {
+                    chat.finish_disconnect();
+                }
+                if matches!(chat.link, Link::Closing { deadline: Some(deadline), .. } if now >= deadline) {
                     let _ = request(&mut control, "ABORT").await;
                     return Err(io::Error::other("disconnect timed out; delivery may be unconfirmed"));
                 }
-                if let Link::Closing { ref mut drain, .. } = chat.link
-                    && *drain && chat.pending.is_none()
+                if let Link::Closing { ref mut deadline, .. } = chat.link
+                    && deadline.is_none() && chat.pending.is_none()
                 {
                     request(&mut control, "DISCONNECT").await?;
-                    *drain = false;
+                    *deadline = Some(Instant::now() + CLOSE_WAIT);
                 }
                 if chat.listen_change.is_some_and(|(_, deadline)| now >= deadline) {
                     return Err(io::Error::other("modem did not acknowledge listen change"));
                 }
-                if chat.pending.is_some_and(|(_, _, deadline)| now >= deadline) && !matches!(chat.link, Link::Closing { .. }) {
-                    chat.view.log(chat.link.window().unwrap_or(0), "Transmit timed out; attempting to disconnect");
-                    chat.close(&mut control).await?;
+                if chat.pending.is_some_and(|(_, _, deadline)| now >= deadline) && !matches!(chat.link, Link::ReceivingTail(..)) {
+                    let _ = request(&mut control, "ABORT").await;
+                    return Err(io::Error::other("transmit made no progress; delivery may be unconfirmed"));
                 }
                 if event::poll(Duration::ZERO)? {
                     match event::read()? {
@@ -485,5 +513,42 @@ async fn chat(local: &str, command_port: u16, data_port: u16) -> io::Result<()> 
         if redraw {
             chat.view.draw(local, &chat.status())?;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn final_data_after_disconnect_stays_with_the_old_peer() {
+        let mut chat = Chat::new();
+        chat.listening = true;
+        chat.notice("KN6MQS", "CONNECTED BB2BB KN6MQS 500").unwrap();
+        chat.inbound(b"5 he").unwrap();
+        chat.notice("KN6MQS", "DISCONNECTED").unwrap();
+        assert!(matches!(chat.link, Link::ReceivingTail(1, _)));
+        chat.inbound(b"llo").unwrap();
+        assert!(chat.early_data.is_empty());
+        chat.finish_disconnect();
+        chat.notice("KN6MQS", "CONNECTED CC3CC KN6MQS 500").unwrap();
+        assert!(matches!(chat.link, Link::Connected(2)));
+        chat.inbound(b"5 world").unwrap();
+    }
+
+    #[test]
+    fn only_acknowledgement_progress_extends_the_send_deadline() {
+        let mut chat = Chat::new();
+        let initial = Instant::now();
+        chat.pending = Some((20, 0, initial));
+        chat.notice("KN6MQS", "BUFFER 20").unwrap();
+        chat.notice("KN6MQS", "BUFFER 20").unwrap();
+        assert_eq!(chat.pending, Some((20, 20, initial)));
+        chat.notice("KN6MQS", "BUFFER 10").unwrap();
+        let (remaining, queued, resumed) = chat.pending.unwrap();
+        assert_eq!((remaining, queued), (10, 10));
+        assert!(resumed >= initial + SEND_WAIT);
+        chat.notice("KN6MQS", "BUFFER 0").unwrap();
+        assert!(chat.pending.is_none());
     }
 }

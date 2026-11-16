@@ -132,9 +132,10 @@ held in memory. The client records no transcript file.
 .B "Chat shutdown"
 .B /quit
 and Ctrl-C drain pending output and disconnect before exiting.
-The drain and close deadline is 30 seconds. An expired deadline requests
-an abort and exits with an operation error. Queued text after link loss
-has unconfirmed delivery and is never resent automatically.
+The client aborts after 120 seconds without transmit acknowledgment progress
+or after 30 seconds waiting for the modem to disconnect once the queue drains.
+Queued text after link loss has unconfirmed delivery and is never resent
+automatically.
 .TP
 .B mail queue
 Queue a Winlink B2F envelope of up to 1 MiB in a private mailbox directory.
