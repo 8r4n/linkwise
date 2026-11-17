@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Linkwise BW500 Offline Demo
+Comment=Run the radio-free chat and mail bench
+Exec=/usr/bin/python3 /usr/share/linkwise-live/demo.py
+Terminal=true
+Categories=Network;HamRadio;

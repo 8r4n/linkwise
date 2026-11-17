@@ -2,10 +2,12 @@
 set -euo pipefail
 . /etc/os-release
 [[ $ID == rocky && $VERSION_ID == 9.* ]]
+live=${1:-}
+[[ -z $live || $live == --live-image ]]
 # This guest uses local accounts and SSH public-key access, so select local PAM.
 authselect select minimal with-faillock --force
 install -d -m 0755 /var/log/faillock
-restorecon -R /var/log/faillock
+if [[ -z $live ]]; then restorecon -R /var/log/faillock; fi
 cat >/etc/security/faillock.conf <<'CONF'
 audit
 deny = 3
@@ -33,16 +35,19 @@ chage -m 1 -M 60 -I 35 lwadmin
 useradd -D -f 35
 sed -i -E 's/^PASS_MAX_DAYS[[:space:]].*/PASS_MAX_DAYS 60/;s/^PASS_MIN_DAYS[[:space:]].*/PASS_MIN_DAYS 1/' /etc/login.defs
 printf '%s\n' 'readonly TMOUT=600' 'export TMOUT' >/etc/profile.d/99-linkwise-timeout.sh
-chmod 0600 /etc/ssh/sshd_config.d/01-linkwise.conf /etc/ssh/ssh_host_*_key
-sshd -t
+if [[ -z $live ]]; then
+    chmod 0600 /etc/ssh/sshd_config.d/01-linkwise.conf /etc/ssh/ssh_host_*_key
+    sshd -t
+fi
 find /root -maxdepth 1 -type f -name '.*' -exec chmod go-wx,o-r {} +
-dnf -y install audispd-plugins
-bash "$(dirname "$0")/apply-login-audit.sh"
+if [[ -z $live ]]; then dnf -y install audispd-plugins; fi
+bash "$(dirname "$0")/apply-login-audit.sh" "$live"
 printf '%s\n' '-e 2' >/etc/audit/rules.d/99-finalize.rules
 chmod 0600 /etc/audit/rules.d/55-linkwise-login.rules /etc/audit/rules.d/99-finalize.rules
 sed -i -E '/^freq[[:space:]]*=/s/=.*/= 100/; /^name_format[[:space:]]*=/s/=.*/= HOSTNAME/; /^space_left[[:space:]]*=/s/=.*/= 25%/; /^space_left_action[[:space:]]*=/s/=.*/= EMAIL/; /^admin_space_left[[:space:]]*=/s/=.*/= 10%/; /^admin_space_left_action[[:space:]]*=/s/=.*/= SINGLE/; /^disk_full_action[[:space:]]*=/s/=.*/= HALT/; /^disk_error_action[[:space:]]*=/s/=.*/= HALT/' /etc/audit/auditd.conf
-restorecon -R /etc/security /etc/audit /etc/profile.d
+if [[ -z $live ]]; then restorecon -R /etc/security /etc/audit /etc/profile.d; fi
 authselect check
+if [[ -n $live ]]; then exit 0; fi
 usbguard generate-policy > /etc/usbguard/rules.conf
 chmod 0600 /etc/usbguard/rules.conf
 sed -i -E 's/^AuditBackend=.*/AuditBackend=LinuxAudit/' /etc/usbguard/usbguard-daemon.conf

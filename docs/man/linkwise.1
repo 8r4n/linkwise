@@ -346,6 +346,13 @@ The existing peer's leaf certificates are preserved if the card offers a
 replacement. Use Ctrl-C to stop waiting. A phone can share through AirDrop
 or a synced folder. Export as JPEG or PNG if the original is HEIC.
 .TP
+.B mail submit --pki FILE MAILBOX RECIPIENT
+Read a MIME message from standard input. Verify the From address against
+the station profile and the To address against RECIPIENT, which must be
+the single callsign@winlink.org destination. Sign and encrypt the message
+before it enters the B2F outbox. Requires secure-transfer support and a
+trusted encryption certificate for the recipient.
+.TP
 .B mail smtp
 Accept local SMTP submissions and queue them for B2F peer-to-peer forwarding.
 The listener defaults to IPv4 loopback on port 2525.

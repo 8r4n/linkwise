@@ -34,6 +34,8 @@ class Chat:
             stdin=slave,
             stdout=slave,
             stderr=slave,
+            # Crossterm otherwise reads the launching terminal's size from /dev/tty.
+            start_new_session=True,
         )
         stack.callback(self.stop)
         self.output = bytearray()

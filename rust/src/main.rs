@@ -44,6 +44,7 @@ Usage:
   linkwise mail queue [--pki FILE [--encrypt]] MAILBOX ENVELOPE
   linkwise mail import [--pki FILE [--encrypt]] MAILBOX MESSAGE.eml
   linkwise mail export [--pki FILE [--encrypt]] MAILBOX MESSAGE_ID
+  linkwise mail submit --pki FILE MAILBOX RECIPIENT   Sign and encrypt MIME from stdin
   linkwise mail smtp MAILBOX CALLSIGN [PORT [--tls CERT.pem KEY.pem]]
   linkwise mail imap MAILBOX [PORT [--tls CERT.pem KEY.pem]]
   linkwise mail exchange|listen MAILBOX LOCAL PEER [COMMAND_PORT DATA_PORT]

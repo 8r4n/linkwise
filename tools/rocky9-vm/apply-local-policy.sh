@@ -2,6 +2,8 @@
 set -euo pipefail
 . /etc/os-release
 [[ $ID == rocky && $VERSION_ID == 9.* ]]
+live=${1:-}
+[[ -z $live || $live == --live-image ]]
 # Keep the local PAM profile and remove permissive password options.
 if [[ ! -d /etc/authselect/custom/linkwise ]]; then
     authselect create-profile linkwise -b minimal
@@ -12,7 +14,7 @@ done
 authselect select custom/linkwise with-faillock
 semanage fcontext -a -t faillog_t '/var/log/faillock(/.*)?' ||
     semanage fcontext -m -t faillog_t '/var/log/faillock(/.*)?'
-restorecon -R /var/log/faillock
+if [[ -z $live ]]; then restorecon -R /var/log/faillock; fi
 sed -i -E 's/^#([[:blank:]]*auth[[:blank:]]+required[[:blank:]]+pam_wheel\.so[[:blank:]]+use_uid)/\1/' /etc/pam.d/su
 grep -q '^FAIL_DELAY[[:blank:]]' /etc/login.defs || printf 'FAIL_DELAY 4\n' >> /etc/login.defs
 printf '* hard maxlogins 10\n' > /etc/security/limits.d/99-linkwise-stig.conf
@@ -22,6 +24,8 @@ if ! grep -q '^net.ipv4.conf.all.forwarding' /etc/sysctl.d/99-linkwise-stig.conf
     printf 'net.ipv4.conf.all.forwarding = 0\n' >> /etc/sysctl.d/99-linkwise-stig.conf
 fi
 printf 'kernel.kexec_load_disabled = 1\n' > /etc/sysctl.d/99-linkwise-kexec.conf
-sysctl -p /etc/sysctl.d/99-linkwise-kexec.conf
 authselect check
-sshd -t
+if [[ -z $live ]]; then
+    sysctl -p /etc/sysctl.d/99-linkwise-kexec.conf
+    sshd -t
+fi

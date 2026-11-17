@@ -261,6 +261,14 @@ checks the protection before writing any MIME output. Add `--encrypt`
 to export when you require encryption for that message. The local SMTP
 and IMAP listeners do not use this profile.
 
+On the hardened Rocky Live USB, start Mutt with
+`linkwise-mutt --pki station-pki.json YOURCALL`. Press `m` to compose
+and `y` to send to one `PEERCALL@winlink.org` recipient. Mutt sends the
+message directly to `linkwise mail submit --pki FILE MAILBOX RECIPIENT`
+on standard input. This command always signs and encrypts before queuing.
+Mutt displays a send error if the profile or recipient certificate cannot
+be used. Run the normal B2F exchange from another console.
+
 ## Cryptographic profile
 
 Linkwise uses ECDSA P-256 with SHA-256 via AWS-LC FIPS for signatures.

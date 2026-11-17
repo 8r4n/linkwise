@@ -1,0 +1,15 @@
+[Unit]
+Description=Linkwise offline BW500 live media smoke test
+ConditionKernelCommandLine=linkwise.live-smoke=1
+After=local-fs.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+PrivateTmp=yes
+ExecStart=/usr/bin/python3 /usr/share/linkwise-live/demo.py
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

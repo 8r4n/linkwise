@@ -1,0 +1,29 @@
+# Rocky console live root. The hardened USB step provisions the operator.
+lang en_US.UTF-8
+keyboard us
+timezone UTC --utc
+network --bootproto=dhcp --device=link --activate --onboot=off
+rootpw --lock
+firstboot --disable
+skipx
+selinux --enforcing
+bootloader --location=none
+url --url=https://dl.rockylinux.org/pub/rocky/9/BaseOS/@ARCH@/os/
+repo --name=AppStream --baseurl=https://dl.rockylinux.org/pub/rocky/9/AppStream/@ARCH@/os/
+part / --fstype=ext4 --size=4096
+shutdown
+
+%packages --excludedocs --exclude-weakdeps
+@^minimal-environment
+alsa-lib
+alsa-utils
+dracut-live
+grub2-efi-@EFI@
+grub2-tools
+kernel
+kernel-modules
+openssl-fips-provider
+python3
+shim-@EFI@
+-openssh-server
+%end

@@ -18,8 +18,8 @@ CHAT = runpy.run_path(str(Path(__file__).with_name("test-varac-chat.py")))
 CALLS = ("KN6MQS", "BB2BB")
 
 
-def run(*args, cwd=None, check=True):
-    result = subprocess.run(args, cwd=cwd, capture_output=True)
+def run(*args, cwd=None, check=True, input=None):
+    result = subprocess.run(args, cwd=cwd, capture_output=True, input=input)
     if check and result.returncode:
         raise AssertionError((args, result.returncode, result.stdout, result.stderr))
     return result
@@ -105,7 +105,7 @@ def profile(directory, name, peer, openssl=None, provider_config=None):
     return path
 
 
-def mail(cli, directory, profiles, encrypted):
+def mail(cli, directory, profiles, encrypted, submission=False):
     sender, recipient = CALLS
     original = directory / "message.eml"
     original.write_bytes(
@@ -119,9 +119,20 @@ def mail(cli, directory, profiles, encrypted):
         "Content-Transfer-Encoding: base64\r\n\r\nAAEC/w==\r\n"
         "--sample--\r\n".encode()
     )
-    mailbox = directory / "mailbox"
+    mailbox = directory / ("submission-mailbox" if submission else "mailbox")
     flags = ["--encrypt"] if encrypted else []
-    run(cli, "mail", "import", "--pki", profiles[0], *flags, mailbox, original)
+    if submission:
+        command = [cli, "mail", "submit", "--pki", profiles[0], mailbox]
+        draft = original.read_bytes()
+        unknown = b"CC3CC@winlink.org"
+        mismatch = run(*command, unknown, input=draft, check=False)
+        assert mismatch.returncode and b"differs from the message To header" in mismatch.stderr, mismatch
+        rejected = run(*command, unknown, input=draft.replace(f"{recipient}@winlink.org".encode(), unknown),
+                       check=False)
+        assert rejected.returncode and not list((mailbox / "outbox").iterdir()), rejected
+        run(*command, f"{recipient}@winlink.org", input=draft)
+    else:
+        run(cli, "mail", "import", "--pki", profiles[0], *flags, mailbox, original)
     queued = next((mailbox / "outbox").glob("*.b2f"))
     envelope = queued.read_bytes()
     assert b"Signed content from the bench" not in envelope
@@ -142,7 +153,8 @@ def mail(cli, directory, profiles, encrypted):
     failure = run(cli, "mail", "export", "--pki", profiles[1], *flags, mailbox,
                   mid, check=False)
     assert failure.returncode and not failure.stdout
-    print(f"mail ({'encrypted' if encrypted else 'signed'}): verified message and attachment, rejected tampering")
+    mode = "encrypted submission from stdin" if submission else "encrypted" if encrypted else "signed"
+    print(f"mail ({mode}): verified message and attachment, rejected tampering")
 
 
 def chat_stations(stack, args, options):
@@ -443,6 +455,8 @@ if __name__ == "__main__":
             run(args.cli, "pki", "check", config)
         encrypted = bool(args.openssl_fips)
         mail(args.cli, directory, configs, encrypted)
+        if encrypted:
+            mail(args.cli, directory, configs, encrypted=True, submission=True)
         if not args.skip_chat:
             chat(args, configs, encrypted)
             rejected_chat(args, configs, encrypted)

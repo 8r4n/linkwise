@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Linkwise Station Check
+Comment=Inspect available radio audio and serial interfaces
+Exec=xfce4-terminal --hold --execute /usr/bin/python3 /usr/share/linkwise-live/station-check.py
+Icon=audio-card
+OnlyShowIn=XFCE;
+Categories=Network;HamRadio;

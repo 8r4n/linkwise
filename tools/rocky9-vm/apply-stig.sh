@@ -3,8 +3,15 @@
 set -euo pipefail
 . /etc/os-release
 [[ $ID == rocky && $VERSION_ID == 9.* ]]
-[[ $(getenforce) == Enforcing && $(cat /proc/sys/crypto/fips_enabled) == 1 ]]
-dnf -y install gnutls-utils nss-tools rsyslog-gnutls
+live=${1:-}
+case "$live" in
+    '')
+        [[ $(getenforce) == Enforcing && $(cat /proc/sys/crypto/fips_enabled) == 1 ]]
+        dnf -y install gnutls-utils nss-tools rsyslog-gnutls
+        ;;
+    --live-image) ;;
+    *) exit 2 ;;
+esac
 grep -q '^localpkg_gpgcheck=1$' /etc/dnf/dnf.conf ||
     sed -i '/^\[main\]$/a localpkg_gpgcheck=1' /etc/dnf/dnf.conf
 printf '%s\n' 'Defaults timestamp_timeout=0' 'Defaults !rootpw, !targetpw, !runaspw' > /etc/sudoers.d/90-linkwise-stig
@@ -13,7 +20,9 @@ visudo -cf /etc/sudoers
 systemctl mask --force debug-shell.service ctrl-alt-del.target
 install -d /etc/systemd/system.conf.d
 printf '[Manager]\nCtrlAltDelBurstAction=none\n' > /etc/systemd/system.conf.d/90-linkwise-stig.conf
-grubby --update-kernel=ALL --args="boot=UUID=$(findmnt -no UUID /boot) audit_backlog_limit=8192 init_on_free=1"
+if [[ -z $live ]]; then
+    grubby --update-kernel=ALL --args="boot=UUID=$(findmnt -no UUID /boot) audit_backlog_limit=8192 init_on_free=1"
+fi
 cat >/etc/sysctl.d/99-linkwise-stig.conf <<'SYSCTL'
 net.ipv4.ip_forward = 0
 net.ipv4.conf.all.accept_redirects = 0
@@ -37,8 +46,11 @@ net.ipv6.conf.default.accept_redirects = 0
 net.ipv6.conf.all.accept_source_route = 0
 net.ipv6.conf.default.accept_source_route = 0
 SYSCTL
-sysctl --system
-for module in atm can firewire-core sctp tipc bluetooth cramfs usb-storage; do
+if [[ -z $live ]]; then sysctl --system; fi
+modules=(atm can firewire-core sctp tipc bluetooth cramfs)
+# The live system needs its USB storage driver throughout the session.
+if [[ -z $live ]]; then modules+=(usb-storage); fi
+for module in "${modules[@]}"; do
     printf 'install %s /bin/false\nblacklist %s\n' "$module" "$module"
 done > /etc/modprobe.d/99-linkwise-stig.conf
 python3 - <<'PY'
@@ -61,5 +73,7 @@ for line in fstab.read_text().splitlines():
 lines.append("tmpfs\t/dev/shm\ttmpfs\tdefaults,nodev,nosuid,noexec\t0\t0")
 fstab.write_text("\n".join(lines) + "\n")
 PY
-findmnt --verify
-restorecon /etc/fstab /etc/sudoers.d/90-linkwise-stig
+if [[ -z $live ]]; then
+    findmnt --verify
+    restorecon /etc/fstab /etc/sudoers.d/90-linkwise-stig
+fi

@@ -1,0 +1,97 @@
+#!/usr/bin/python3
+"""Run Mutt against the operator's Linkwise mail store over loopback."""
+import argparse
+from contextlib import ExitStack
+import os
+from pathlib import Path
+import re
+import socket
+import subprocess
+import sys
+import time
+
+
+def ready(process, port, greeting, logout):
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            break
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2) as connection:
+                with connection.makefile("rb") as stream:
+                    if stream.readline(512).startswith(greeting) and process.poll() is None:
+                        connection.sendall(logout)
+                        stream.read(2048)
+                        return
+        except OSError:
+            pass
+        time.sleep(0.05)
+    raise SystemExit(f"Linkwise mail could not start on loopback port {port}.")
+
+
+def stop(process):
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
+def submit(arguments):
+    if len(arguments) != 2 or arguments[0] != "--":
+        raise SystemExit("Linkwise encrypted mail requires exactly one To recipient.")
+    profile = os.environ.get("LINKWISE_MUTT_PKI")
+    store = os.environ.get("LINKWISE_MUTT_STORE")
+    if not profile or not store:
+        raise SystemExit("Start Mutt with linkwise-mutt --pki PROFILE CALLSIGN.")
+    os.execv("/usr/bin/linkwise", [
+        "/usr/bin/linkwise", "mail", "submit", "--pki", profile, store, arguments[1],
+    ])
+
+
+def main():
+    if sys.argv[1:2] == ["--submit"]:
+        return submit(sys.argv[2:])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--store", type=Path, default=Path.home() / ".local/share/linkwise/mail")
+    parser.add_argument("--pki", type=Path, help="sign and encrypt all outgoing mail using this station profile")
+    parser.add_argument("callsign")
+    parser.add_argument("mutt_args", nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,12}", args.callsign):
+        parser.error("invalid callsign")
+    call = args.callsign.upper()
+    os.umask(0o077)
+    env = {name: value for name, value in os.environ.items()
+           if not name.startswith(("LINKWISE_IMAP_", "LINKWISE_SMTP_", "LINKWISE_MUTT_"))}
+    listeners = [("imap", 1143, b"* PREAUTH ", b"a LOGOUT\r\n", ())]
+    settings = []
+    if args.pki is not None:
+        if not args.pki.is_file():
+            parser.error(f"PKI profile is not a file: {args.pki}")
+        env.update(LINKWISE_MUTT_PKI=str(args.pki.resolve()),
+                   LINKWISE_MUTT_STORE=str(args.store.resolve()))
+        settings = [
+            "-e", 'unset smtp_url use_8bitmime use_envelope_from dsn_notify dsn_return',
+            "-e", 'set sendmail="/usr/bin/linkwise-mutt --submit" sendmail_wait=0 copy=no',
+        ]
+    else:
+        listeners.append(("smtp", 2525, b"220 localhost Linkwise SMTP", b"QUIT\r\n", (call,)))
+    with ExitStack() as cleanup:
+        for protocol, port, greeting, logout, suffix in listeners:
+            process = subprocess.Popen(
+                ["/usr/bin/linkwise", "mail", protocol, str(args.store), *suffix, str(port)],
+                env=env,
+            )
+            cleanup.callback(stop, process)
+            ready(process, port, greeting, logout)
+        return subprocess.call([
+            "/usr/bin/mutt", "-n", "-F", "/etc/linkwise-live/muttrc",
+            "-e", f"set from={call}@winlink.org", *settings, *args.mutt_args,
+        ], env=env)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
