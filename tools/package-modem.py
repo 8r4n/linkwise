@@ -128,11 +128,17 @@ def build_deb(work, binary_dir, version, architecture, output, third_party):
 
 def build_rpm(work, binary_dir, version, architecture, output, third_party, release="1"):
     payload = work / "payload"
-    stage(payload / "usr/bin", payload / "usr/share/doc/linkwise-modem", binary_dir, "",
-          "rocky-server" if release == "1.rockymail" else "fedora", third_party)
+    full = release == "3.rockyfull"
+    mail = full or release == "1.rockymail"
+    docs = payload / "usr/share/doc/linkwise-modem"
+    stage(payload / "usr/bin", docs, binary_dir, "", "rocky-server" if mail else "fedora", third_party)
     stage_man_pages(payload / "usr/share/man")
     stage_linux_units(payload)
-    if release == "1.rockymail":
+    if full:
+        shutil.copy2(binary_dir / "modem-demo", payload / "usr/bin/modem-demo")
+        for name in ("chat.md", "pki.md", "secure-transfer.md", "modem-demo.md"):
+            shutil.copyfile(ROOT / "rust/docs" / name, docs / name)
+    if mail:
         for protocol in ("smtp", "imap"):
             name = f"linkwise-mail-{protocol}.service"
             shutil.copyfile(ROOT / "packaging/systemd" / name, payload / "usr/lib/systemd/system" / name)
@@ -228,14 +234,15 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=ROOT / "dist")
     parser.add_argument("--cargo", default="cargo")
     parser.add_argument("--mail-tls", action="store_true", help="include system OpenSSL FIPS SMTP and IMAP TLS in a Rocky RPM")
+    parser.add_argument("--full", action="store_true", help="build the Rocky runtime with PKI, hybrid PQC chat, TLS mail, and the local modem demo")
     parser.add_argument("--iscc", default="ISCC.exe", help="path to the Inno Setup 6 compiler")
     parser.add_argument("--macos-installer-identity", help="Developer ID Installer certificate")
     parser.add_argument("--macos-application-identity", help="Developer ID Application certificate")
     parser.add_argument("--windows-signing-thumbprint", help="Authenticode certificate thumbprint")
     parser.add_argument("--macos-notary-profile", help="notarytool keychain profile")
     args = parser.parse_args()
-    if args.mail_tls and args.format != "rpm":
-        parser.error("--mail-tls is supported for RPM builds")
+    if (args.mail_tls or args.full) and args.format != "rpm":
+        parser.error("--mail-tls and --full are supported for RPM builds")
     if args.macos_notary_profile and not (args.macos_application_identity and args.macos_installer_identity):
         parser.error("macOS notarization requires both Developer ID signing identities")
     system = platform.system()
@@ -256,7 +263,13 @@ def main():
     version = next(item["version"] for item in metadata["packages"] if item["name"] == "linkwise")
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         parser.error(f"expected a three-part numeric Cargo version, got {version}")
-    features = "audio-device,rocky-mail-tls" if args.mail_tls else "audio-device"
+    features = "audio-device"
+    programs = PROGRAMS
+    if args.mail_tls or args.full:
+        features += ",rocky-mail-tls"
+    if args.full:
+        features += ",pqc-chat,demo"
+        programs += ("modem-demo",)
     third_party = notices(args.cargo, target, features)
     build_env = os.environ.copy()
     if system == "Windows":
@@ -272,7 +285,7 @@ def main():
             )
     run(
         args.cargo, "build", "--locked", "--release", "--target", target, "--manifest-path", cargo_manifest,
-        "--features", features, "--bin", "linkwise", "--bin", "linkwise-modemd",
+        "--features", features, *(arg for program in programs for arg in ("--bin", program)),
         env=build_env,
     )
     binary_dir = Path(metadata["target_directory"]) / target / "release"
@@ -284,7 +297,7 @@ def main():
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     deb_arch, rpm_arch, windows_arch = ARCHITECTURES[architecture]
-    rpm_release = "1.rockymail" if args.mail_tls else "1"
+    rpm_release = "3.rockyfull" if args.full else "1.rockymail" if args.mail_tls else "1"
     filenames = {
         "deb": f"linkwise-modem_{version}_{deb_arch}.deb",
         "rpm": f"linkwise-modem-{version}-{rpm_release}.{rpm_arch}.rpm",

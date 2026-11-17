@@ -1,5 +1,8 @@
 //! Signed and optionally encrypted inner B2F messages.
-use std::{io, path::Path};
+use std::{
+    io::{self, Read},
+    path::Path,
+};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use linkwise::winlink::{Attachment, Message, mailbox::DirectoryMailbox, mime};
@@ -38,11 +41,23 @@ fn recipient<'a>(message: &'a Message<'a>) -> io::Result<&'a str> {
     }
 }
 
-fn protect(config: &Pki, wire: &[u8], encrypted: bool) -> io::Result<Vec<u8>> {
+fn protect(
+    config: &Pki,
+    wire: &[u8],
+    encrypted: bool,
+    submitted_to: Option<&str>,
+) -> io::Result<Vec<u8>> {
     let msg = Message::decode(wire, LIMIT)?;
     let to = recipient(&msg)?;
     if !msg.from.eq_ignore_ascii_case(config.callsign()) {
         return Err(invalid("radio email sender does not match the PKI station"));
+    }
+    if let Some(address) = submitted_to
+        && !address.eq_ignore_ascii_case(&format!("{to}@winlink.org"))
+    {
+        return Err(invalid(
+            "submission recipient differs from the message To header",
+        ));
     }
     let peer = to.to_ascii_uppercase();
     let signed = config.sign(pki::MAIL_CONTEXT, &peer, wire)?;
@@ -130,7 +145,19 @@ pub fn run(args: &[std::ffi::OsString]) -> Result<(), Failure> {
             } else {
                 bytes
             };
-            let protected = protect(&config, &original, encrypted).map_err(Failure::operation)?;
+            let protected = protect(&config, &original, encrypted, None).map_err(Failure::operation)?;
+            mailbox.enqueue(&protected).map_err(Failure::operation)
+        }
+        Some("submit") => {
+            let to = argument.to_str().ok_or_else(usage)?;
+            let mut raw = Vec::new();
+            io::stdin()
+                .lock()
+                .take(2 * LIMIT as u64 + 1)
+                .read_to_end(&mut raw)
+                .map_err(Failure::operation)?;
+            let original = mime::import(&raw, LIMIT).map_err(Failure::operation)?;
+            let protected = protect(&config, &original, true, Some(to)).map_err(Failure::operation)?;
             mailbox.enqueue(&protected).map_err(Failure::operation)
         }
         Some("export") => {
@@ -146,5 +173,7 @@ pub fn run(args: &[std::ffi::OsString]) -> Result<(), Failure> {
 }
 
 fn usage() -> Failure {
-    Failure::usage("mail import|queue|export --pki FILE [--encrypt] MAILBOX FILE_OR_ID")
+    Failure::usage(
+        "mail import|queue|export --pki FILE [--encrypt] MAILBOX FILE_OR_ID, or mail submit --pki FILE MAILBOX RECIPIENT",
+    )
 }

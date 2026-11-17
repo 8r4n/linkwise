@@ -8,6 +8,6 @@ for arch in b32 b64; do
         printf -- '-a always,exit -F arch=%s -F path=%s -F perm=wa -F auid>=1000 -F auid!=unset -k logins\n' "$arch" "$path"
     done
 done > "$rules"
-restorecon "$rules"
+if [[ ${1:-} != --live-image ]]; then restorecon "$rules"; fi
 # Immutable rules take effect at the next boot.
 augenrules

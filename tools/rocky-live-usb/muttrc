@@ -1,0 +1,8 @@
+set folder = "imap://127.0.0.1:1143/"
+set spoolfile = "+INBOX"
+set smtp_url = "smtp://127.0.0.1:2525"
+set ssl_starttls = no
+set ssl_force_tls = no
+set use_from = yes
+set move = no
+unset record

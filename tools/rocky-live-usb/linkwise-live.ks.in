@@ -1,0 +1,31 @@
+%post --nochroot --erroronfail
+set -eu
+root=${ANA_INSTALL_PATH:-/mnt/sysroot}
+if [ ! -e "$root/etc/rocky-release" ]; then
+    root=/mnt/sysimage
+fi
+test -e "$root/etc/rocky-release"
+
+cp @PAYLOAD@/linkwise.rpm "$root/tmp/linkwise.rpm"
+cp @PAYLOAD@/signer.asc "$root/tmp/linkwise-signer.asc"
+chroot "$root" rpmkeys --import /tmp/linkwise-signer.asc
+chroot "$root" rpmkeys --checksig /tmp/linkwise.rpm
+chroot "$root" rpm -U /tmp/linkwise.rpm
+rm "$root/tmp/linkwise.rpm" "$root/tmp/linkwise-signer.asc"
+
+install -d "$root/usr/share/linkwise-live"
+install -m 0644 @PAYLOAD@/share/* "$root/usr/share/linkwise-live/"
+if [ -x "$root/usr/bin/xfce4-terminal" ]; then
+    install -Dm0644 @PAYLOAD@/linkwise-live.desktop "$root/usr/share/applications/linkwise-live.desktop"
+    install -Dm0644 @PAYLOAD@/linkwise-station-check.desktop "$root/usr/share/applications/linkwise-station-check.desktop"
+    install -Dm0644 @PAYLOAD@/linkwise-station-check.desktop "$root/etc/xdg/autostart/linkwise-station-check.desktop"
+fi
+install -Dm0644 @PAYLOAD@/linkwise-live-smoke.service "$root/etc/systemd/system/linkwise-live-smoke.service"
+systemctl --root="$root" enable linkwise-live-smoke.service
+systemctl --root="$root" mask udisks2.service sshd.service
+systemctl --root="$root" disable linkwise-modem.service
+rm -f "$root/usr/share/applications/liveinst.desktop" "$root/usr/bin/liveinst"
+chroot "$root" rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' | LC_ALL=C sort > @INVENTORY@
+setfiles -r "$root" -e "$root/dev" -e "$root/proc" -e "$root/run" -e "$root/sys" \
+    "$root/etc/selinux/targeted/contexts/files/file_contexts" "$root"
+%end

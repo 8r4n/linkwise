@@ -1,0 +1,43 @@
+#!/bin/sh
+set -efu
+
+if [ "$#" -ne 1 ] || [ "$1" != --destroy-usb ]; then
+    echo "Usage: sudo linkwise-shred --destroy-usb" >&2
+    echo "Irreversibly erase the boot USB's LUKS keys and boot partition, then power off." >&2
+    exit 2
+fi
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Run this command with sudo." >&2
+    exit 1
+fi
+
+. /usr/libexec/linkwise-usb-identify
+mapper=$(findmnt -n -o SOURCE --mountpoint /run/initramfs/live)
+case "$mapper" in /dev/mapper/luks-*) ;; *) exit 1 ;; esac
+data=$(cryptsetup status "$mapper" | awk '$1 == "device:" {print $2}')
+disk="/dev/$(lsblk -dnro PKNAME "$data")"
+boot_uuid=
+root=
+for option in $(cat /proc/cmdline); do
+    case "$option" in
+        boot=UUID=*) boot_uuid=${option#boot=UUID=} ;;
+        root=live:*) root=${option#root=live:} ;;
+    esac
+done
+luks_uuid=${mapper#/dev/mapper/luks-}
+if [ "$data" != "$disk"2 ] || [ "$root" != "$mapper" ] || [ -z "$boot_uuid" ] ||
+    ! linkwise_check_usb "$disk" "$boot_uuid" "$luks_uuid"; then
+    echo "Could not verify that the target is the running Linkwise boot USB." >&2
+    exit 1
+fi
+
+umask 077
+request=$(mktemp /run/initramfs/.linkwise-shred.XXXXXX)
+trap 'rm -f "$request"' EXIT HUP INT TERM
+printf '%s %s %s\n' "$disk" "$boot_uuid" "$luks_uuid" > "$request"
+mv -T "$request" /run/initramfs/linkwise-shred-request
+echo "Erasing $disk during poweroff."
+if ! systemctl poweroff; then
+    rm -f /run/initramfs/linkwise-shred-request
+    exit 1
+fi
