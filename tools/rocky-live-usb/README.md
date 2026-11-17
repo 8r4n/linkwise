@@ -244,8 +244,9 @@ check records the kernel's activation message when present. Consult the
 for the distinction between advertised capability and active SME.
 
 Normal poweroff and reboot use the dracut memory-overwrite hook, with the
-USB contents preserved. The hook waits for LUKS
-mapping teardown, overwrites reclaimable pages with bytes from Linux
+USB contents preserved. After dracut unmounts the old root, the hook
+releases the live image's remaining mounts and closes the boot LUKS mapping.
+It overwrites reclaimable pages with bytes from Linux
 `getrandom`, and logs the byte count on the console. It leaves 128 MiB
 available for shutdown and caps the overwrite at 60 seconds. Abrupt
 power loss bypasses the hook, and Linux keeps kernel and firmware
