@@ -3220,6 +3220,252 @@ rejection. The receiver published no file in the wrong-certificate
 case. Cryptographic module certification remains a deployment property.
 
 \clearpage
+\section{2026-11-17 -- Weak VarAC beacon acquisition diagnosis}
+
+The fixed decoder replay and all 160 noisy trials from the November 15
+sweep were retained. An offline probe compiled copies of the production
+BW500 frame decoder, tone metrics, and error-correction code. The copied
+sources agreed with revision \texttt{e506089}. Expected bytes were used
+only for final exact-frame scoring. The timing calibration used pilot
+scores from each original clean clip, searching samples 95000--97000
+and frequency offsets up to $\pm60$ Hz. It selected sample 96232 for
+\texttt{KW9Q} and 96392 for \texttt{N9PMI}, both at $+12$ Hz.
+Calibration was fixed across noisy trials.
+
+\begin{center}
+\begin{tabular}{@{}rrrrr@{}}
+\toprule
+SNR (dB) & Normal & Known alignment & Known window & Pilot search \\
+\midrule
+$-16$ & 0/20 & 0/20 & 0/20 & 0/20 \\
+$-12$ & 0/20 & 0/20 & 0/20 & 0/20 \\
+$-8$ & 3/20 & 18/20 & 0/20 & 17/20 \\
+$-4$ & 11/20 & 20/20 & 0/20 & 20/20 \\
+$0$ & 20/20 & 20/20 & 0/20 & 20/20 \\
+$+4$ & 20/20 & 20/20 & 0/20 & 20/20 \\
+$+8$ & 20/20 & 20/20 & 0/20 & 20/20 \\
+$+12$ & 20/20 & 20/20 & 0/20 & 20/20 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Known alignment bypassed acquisition and retained the normal decoder
+and CRC check. Known window used the legacy \texttt{decode\_burst}
+entry point with the supplied burst boundaries and its original pilot
+gate. It differs from the rolling pilot receiver used by the normal
+replay. Even with calibrated timing, the legacy 0.65 pilot gate
+rejected every trial on this corpus. Its score normalization differs
+from the rolling scanner's 0.35 level-2 gate, so these thresholds
+cannot be compared numerically.
+
+The experimental pilot search selected timing and frequency from the
+impaired audio inside a supplied roughly 43 ms timing window. It searched
+the rolling receiver's five frequency offsets, refined timing to 16
+samples, and called the existing decoder without a pilot acceptance gate.
+Every successful trial required the original wire CRC and exact bytes.
+At $-8$ dB, supplying alignment recovered 15 additional frames and the
+experimental search recovered 14 additional frames. Acquisition therefore
+accounts for most of the observed weak-frame losses on this corpus.
+Two $-8$ dB trials still failed with calibrated alignment.
+
+A separate check used 60 previously unused noise seeds on the same
+two source frames, with ten trials per frame at $-8$, $-4$, and $0$ dB.
+Gaussian noise was FFT-filtered to 300--3300 Hz for this check, differing
+from the original Butterworth noise filter. Normal replay recovered
+6/20, 14/20, and 20/20 respectively. The experimental pilot search
+recovered 19/20, 20/20, and 20/20. These results validate new noise
+realizations within a supplied timing window. Independent recordings,
+continuous acquisition, adjacent bursts, noise-only false detections,
+and mixed stock interoperability of an integrated change remain untested.
+
+Stock VARA HF 4.9.1 was restarted and replayed the four selected
+$+12$ dB clips again with three-second gaps. It recovered all four,
+including the three prior misses, and both clean checks. Guest WAV
+hashes matched the originals. The repeat demonstrates repeatable
+recovery under these replay conditions. Windows input-loopback capture
+and a controlled timing/state experiment remain needed to identify the
+cause of the original stock misses.
+
+The production modem was not modified during this diagnosis.
+The diagnostic sources, compiler log, source and binary hashes,
+per-trial CSVs, and new-seed scores are retained under
+\pathtext{2026-11-15-main-retest.sajUbP/snr-sweep/diagnostic-2026-11-17}.
+The stock replay evidence is in the adjacent
+\pathtext{diagnostic-stock} directory. A 1 dB comparison on independent
+recordings and confidence-qualified 95\% thresholds remain pending.
+
+\section{2026-11-17 -- Continuous VarAC acquisition change and fresh replay}
+
+The receiver change lowers the BW500 level-2 rolling pilot acceptance
+score from 0.35 to 0.20. Candidates continue through the existing
+timing refinement, tone demodulation, turbo decoding, and wire CRC.
+A failed CRC does not advance the accepted-frame interval. The
+transmitted waveform and framing are unchanged. The regression
+increases the out-of-band guard tone from 0.24 to 0.36 amplitude:
+the baseline misses this frame and the updated receiver recovers it.
+
+On the original 160-trial corpus, the updated continuous receiver
+recovered 15/20 at $-8$ dB and 20/20 at $-4$ dB, against the
+baseline's 3/20 and 11/20. Both recovered 0/20 at $-16$ and $-12$ dB,
+and 20/20 at $0$, $+4$, $+8$, and $+12$ dB. No supplied frame
+boundary or symbol timing was used. Repeating the previous
+diagnostic's separate noise seeds yielded 18/20 versus 6/20 at
+$-8$ dB, 20/20 versus 14/20 at $-4$ dB, and 20/20 for both at
+$0$ dB. These seeds had been inspected in the preceding diagnostic.
+
+The noise controls yielded zero CRC-valid frames across twenty
+15-second Gaussian-noise records, and zero in eight preselected
+13-second off-air negative windows. The noise controls took about
+1.5 seconds to process 300 seconds of audio on this Mac.
+The full audio-enabled release library suite passed 97 tests with two
+ignored fixture sweeps. The consecutive-frame, chunk-independence,
+and frequency-offset regressions passed.
+
+\subsection{Fresh off-air collection and paired noise sweep}
+
+Two public KiwiSDRs, Rockport and Kitchener, recorded approximately
+three minutes each at 7105.0 kHz USB on 17 November, around
+23:32--23:35 UTC. Uncompressed audio used a 250--3150 Hz passband.
+The original WAVs and sequence logs were retained. Neither recording
+had a sequence gap. Both the baseline and updated receivers decoded
+one level-2 frame at Rockport and two at Kitchener. One beacon appeared
+at both receivers. The new paired sweep used the Rockport frame and
+Kitchener's first frame, representing two distinct beacon payloads.
+
+At each of $-8$, $-4$, $0$, and $+4$ dB, ten independent noise
+realizations were generated for each source frame, using seeds
+starting at 951000. Gaussian noise was FFT-filtered to 300--3300 Hz.
+The burst-to-added-noise power ratio was set over the 228-symbol
+interval, including the original off-air noise in the reference
+burst power. Gain on the entire mixture prevented clipping.
+Both receivers used the same quantized PCM. Six clean checks were
+interleaved through randomized stock playback. WAV checksums were
+verified in the Windows guest.
+
+\begin{center}
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+SNR (dB) & Baseline Linkwise & Updated Linkwise & Stock VARA \\
+\midrule
+$-8$ & 5/20 & 10/20 & 10/20 \\
+$-4$ & 10/20 & 10/20 & 10/20 \\
+$0$ & 10/20 & 20/20 & 15/20 \\
+$+4$ & 11/20 & 20/20 & 20/20 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+Updated Linkwise passed all six clean checks and first reached the
+observed 95\% criterion at $0$ dB, with 20/20 at that point and
+$+4$ dB. The baseline never reached 19/20 on this grid.
+Stock VARA recovered 20/20 at $+4$ dB, but passed only five of six
+clean checks. Its results therefore do not establish a reliable
+comparative sensitivity threshold. Twenty trials per cell and two
+source frames leave substantial uncertainty: 20/20 gives a 95\%
+Wilson interval of approximately 84--100\%.
+
+At $-8$ dB the updated receiver recovered 10/10 Rockport trials and
+0/10 Kitchener trials, against 5/10 and 0/10 for the baseline.
+At $0$ dB it improved Kitchener from 0/10 to 10/10, and at $+4$ dB
+from 1/10 to 10/10. The two source recordings therefore have markedly
+different recovery curves. Their unknown original noise floors also
+limit interpretation of a pooled added-noise ratio.
+
+A 40-second shared-input capture of CABLE Output during stock playback
+contained two complete trial waveforms. After integer-sample alignment,
+their normalized correlations with the corresponding input files were
+0.9927 and 0.9949. The converted 48 kHz input contained no full-scale
+clipped samples. This establishes delivery of those waveforms during
+the sampled interval. It does not explain the earlier clean-control
+failure or establish sample-exact audio delivery.
+
+On the fresh $-8$ and $-4$ dB trials, supplying timing and frequency
+calibrated from each clean clip recovered the same 10/20 trials at
+each level as the updated continuous receiver. The exact successful
+trial sets agreed. Supplied alignment rescued no additional trial
+in this fresh weak-signal subset.
+
+\subsection{Interoperability and evidence}
+
+The rebuilt daemon completed stock VARA HF 4.9.1 exchanges in both
+roles, delivering exact $13+6+13$ bytes and observing both disconnects:
+51.228 seconds as responder and 49.777 seconds as caller.
+A separately rebuilt baseline caller passed in 49.876 seconds.
+The earlier updated caller trial reached setup and timed out; its
+cause remains unresolved. A preceding setup attempt had failed
+before the stock listener was started. The final passing exchanges
+used the isolated virtual audio bench without RF transmission or
+injected noise. These results qualify the tested short exchanges.
+
+Evidence is retained under
+\pathtext{2026-11-15-main-retest.sajUbP/snr-sweep/diagnostic-2026-11-17/continuous},
+with originals in the adjacent \pathtext{fresh} directory and the
+paired sweep under \pathtext{snr-sweep/fresh-sweep-20261117}.
+The finite source-frame count, unknown original RF SNR, and
+earlier bench startup failures limit the conclusions.
+
+
+\section{2026-11-17 -- Likelihood decoding assessment for sequence estimation}
+
+The current BW500 receiver forms soft bit metrics from tone energies
+and performs iterative max-log-MAP decoding on the terminated
+eight-state constituent trellises. MLSE equalization would additionally
+model channel memory between transmitted symbols. Its likelihood
+requires an estimated channel response and a suitable noise model.
+The current receiver code does not implement that equalizer.
+
+An isolated likelihood-decoding experiment replaced the constituent
+max operations with log-sum-exp, retaining the existing turbo
+interleaver, eight decoding iterations, termination, frame CRC, and
+exact-frame comparison. Known timing and frequency from the clean
+clips isolated decoding performance. The baseline decoder supplied
+the clean reference frame for scoring. A metric scale was required
+because the existing normalized tone-energy differences are
+approximate soft evidence.
+
+The experiment used the 40 fresh-sweep trials at $-8$ and $-4$ dB.
+Alternating pairs of trial indices split each source evenly into
+development and validation, yielding five trials per source per SNR
+in each subset. These recordings and seeds had already been examined
+in the acquisition study. This is validation of a decoder configuration
+within the retained corpus.
+
+\begin{center}
+\begin{tabular}{@{}rr@{}}
+\toprule
+Log-MAP metric scale & Development exact frames \\
+\midrule
+4 & 4/20 \\
+16 & 10/20 \\
+64 & 10/20 \\
+256 & 10/20 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The lowest scale tied for best development recovery, 16, was selected
+before validation. It passed both clean checks. On the validation
+subset, the existing max-log-MAP decoder and the selected full log-MAP
+decoder each recovered 10/20 exact frames: 5/10 at $-8$ dB and 5/10
+at $-4$ dB. Their successful trial sets were identical.
+The experiment therefore demonstrated no additional recovery.
+It evaluated error-correction likelihood calculations; an MLSE
+equalizer was not implemented or tested.
+
+A subsequent MLSE study should first estimate channel memory from
+pilots and establish whether symbol overlap explains the residual
+errors. A channel-specific soft-output sequence detector can then
+be compared against the existing demodulator on fixed multipath
+development fixtures and independent validation recordings.
+The evidence must include exact payload recovery, false decodes,
+runtime, and stock VARA interoperability. All production decoder
+code remains at the acquisition-tested version during this assessment.
+
+Sources, compiler logs, decoder variants, per-trial results and the
+selected configuration are retained under
+\pathtext{2026-11-15-main-retest.sajUbP/snr-sweep/diagnostic-2026-11-17/likelihood}.
+
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]

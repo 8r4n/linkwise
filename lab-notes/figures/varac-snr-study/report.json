@@ -1,0 +1,66 @@
+{
+  "table": [
+    [
+      -8,
+      5,
+      10,
+      10
+    ],
+    [
+      -4,
+      10,
+      10,
+      10
+    ],
+    [
+      0,
+      10,
+      20,
+      15
+    ],
+    [
+      4,
+      11,
+      20,
+      20
+    ]
+  ],
+  "controls": [
+    {
+      "name": "clean-0",
+      "linkwise": 1,
+      "stock": 0
+    },
+    {
+      "name": "clean-1",
+      "linkwise": 1,
+      "stock": 1
+    },
+    {
+      "name": "mid-0",
+      "linkwise": 1,
+      "stock": 1
+    },
+    {
+      "name": "mid-1",
+      "linkwise": 1,
+      "stock": 1
+    },
+    {
+      "name": "end-0",
+      "linkwise": 1,
+      "stock": 1
+    },
+    {
+      "name": "end-1",
+      "linkwise": 1,
+      "stock": 1
+    }
+  ],
+  "comparator_qualified": false,
+  "reason": "Stock VARA missed opening clean-0. Later clean controls passed.",
+  "unexpected_payloads": {
+    "linkwise": 0,
+    "stock": 0
+  }
+}
