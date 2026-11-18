@@ -11,8 +11,9 @@ const ROTATED_OFFSETS_HZ: [f32; 3] = [0.0, -12.0, 12.0];
 const BIN_OFFSET_HZ: f32 = SAMPLE_RATE_HZ as f32 / 1024.0;
 const LEVEL_TWO_OFFSETS_HZ: [f32; 5] = [0.0, -12.0, 12.0, -BIN_OFFSET_HZ, BIN_OFFSET_HZ];
 const MIN_SCORE: f32 = 0.65;
-// Level 2 can still pass the wire CRC on fading signals with weak pilots.
-const MIN_LEVEL_TWO_SCORE: f32 = 0.35;
+// Weak level-2 pilots can still carry recoverable DATA. Every candidate
+// must pass the existing frame CRC before it can advance the receiver.
+const MIN_LEVEL_TWO_SCORE: f32 = 0.20;
 const MAX_BINS: usize = 21;
 // Longer than the complete level-1 frame, measured in scan hops.
 const HISTORY: usize = 2000;
@@ -287,7 +288,7 @@ mod tests {
         // normalization window. It lowers the score without destroying DATA.
         let step = TAU * 38.0 / 1024.0;
         let noise: Vec<_> = (0..burst.len() + 2048)
-            .map(|i| 0.24 * (step * i as f32).sin())
+            .map(|i| 0.36 * (step * i as f32).sin())
             .collect();
         let mut receiver = Receiver::new().with_pilot_acquisition();
         let mut hits = Vec::new();

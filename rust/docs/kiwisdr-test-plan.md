@@ -1,9 +1,9 @@
 # Draft: Linkwise modem testing with the KiwiSDR network
 
 Plan ID: LW-MODEM-KIWI-001  
-Revision: 0.8, 10 November 2026
+Revision: 0.9, 17 November 2026
 
-Status: one live receive frame verified in exploratory monitoring. The controlled campaign with known transmitted payloads remains unscheduled.
+Status: live receive evidence recorded. The controlled campaign with known transmitted payloads and the VOACAP comparison remain unscheduled.
 
 Presentation rule: all figures, tables, and diagrams in the LaTeX/PDF edition
 use dedicated landscape pages, scaled within both page dimensions with room for
@@ -16,6 +16,12 @@ Use geographically separated KiwiSDR receivers to capture known Linkwise
 transmissions, measure one-way frame recovery under actual HF conditions, and
 build a reproducible decoder regression corpus. Test the native modem first;
 agent chat, global routing, and message-service behavior are outside this plan.
+
+Test whether point-to-point VOACAP predictions improve the choice of band and
+UTC hour for one-way Linkwise BW500 reception. The primary endpoint is the
+probability of exact level-2 DATA frame recovery, conditional on confirmed RF
+transmission and a usable capture. Assess predicted SNR against measured SNR
+as a separate propagation endpoint.
 
 The controlled campaign scores a receiver observation when a known RF
 transmission overlaps a valid capture and Linkwise recovers the expected frame
@@ -236,6 +242,39 @@ attribute the result to one variable. Native transmit-version A/B comparisons
 need interleaved, balanced RF trials; unlike decoder replay, different RF
 transmissions do not experience identical channels.
 
+### 5.1 VOACAP pilot and multi-region campaign
+
+1. Extend K2/K3 from one transmitter to a registry of 4–6 cooperating KiwiSDRs,
+   using up to three simultaneous receivers per block and rotating by a fixed
+   schedule. Reuse the 30-burst stimulus design with unique burst IDs across
+   blocks. Hold power, antenna and decoder configuration fixed. Score level 2
+   as the primary endpoint and levels 1 and 3 as secondary endpoints. Repeat
+   blocks on different UTC dates in hours with both high and low predicted SNR.
+2. Use pilot estimates of availability, decode rates and within-day/path
+   correlation to size the evaluation for precision on the difference in Brier
+   score against the baseline. Freeze the precision target, sample size and
+   stopping rule before evaluation. Start planning with 3–5 transmitters,
+   12–20 cooperating receivers and two bands over 4–6 weeks. Stratify by
+   distance, latitude and day/night/terminator geometry, including
+   intercontinental paths. Repeat each selected path, band and UTC-hour cell
+   on multiple dates within a month. Use the resulting coverage to bound any
+   generalization beyond the participating sites and sampled months.
+3. Use local VOACAPL. Verify its parser and UTC-hour mapping against a checked
+   point-to-point case. Freeze input decks, raw outputs and schedule before
+   recording. Record the engine and coefficient revisions, month, smoothed
+   sunspot number and source, station coordinates and path choice, channel
+   frequency and USB dial offset, logged transmitter output and feedline loss,
+   antenna patterns and azimuths, receiver noise assumptions and required SNR.
+   Flag estimated inputs and freeze sensitivity cases for uncertain receive
+   antennas or noise. Record departures from the planned configuration.
+   See the [Linkwise propagation toolbox](../../reference/propagation-toolbox.md).
+
+Include background-only windows to check false detections. Log opportunistic
+VarAC activity separately as observed examples with unknown transmission
+counts. A stock VARA comparison can use its own interleaved matched-power,
+matched-bandwidth and matched-level blocks with a byte oracle for each source.
+That comparison is optional and separate from the primary Linkwise endpoint.
+
 ## 6. Per-session execution procedure
 
 1. Assign experiment, session, burst, and receiver IDs; freeze source commits,
@@ -358,6 +397,50 @@ frames on one fading path and simultaneous observations of one transmission
 are correlated; use session/contact-block summaries or a justified clustered
 interval method. A pilot's high score is not a global reliability estimate.
 
+### 8.1 Comparing predictions and observations
+
+Join each scheduled burst/receiver pair to a frozen prediction by transmitter,
+receiver, modeled frequency, UTC month and UTC hour. Record the actual burst
+timestamp and flag out-of-window transmissions. Every planned pair must have
+one disposition. Confirmed RF plus eligible capture yields an exact decode or
+a valid miss. Unusable capture and unconfirmed or partial transmission stay
+outside the decode denominator. Report capture availability and its reasons by
+path, time and predicted SNR so coverage gaps are visible.
+
+VOACAP predicts a distribution across days at a given hour of a month. Save
+median SNR and the lower and upper decile departures in dB-Hz, plus REL and
+its required SNR when computed. Compare the median prediction with medians of
+daily observed SNR summaries for the same path, band, month and UTC hour.
+Report signed error, absolute error, and the number of contributing days.
+Measure on scheduled burst windows independently of decoder output using
+matched background windows. Convert valid in-band SNR to dB-Hz by adding
+10 log10 of the effective noise bandwidth in Hz. Prefer fixed gain or
+calibrated IQ. Record defensible upper limits for signals below the measurement
+floor, and mark SNR unavailable when interference or gain changes invalidate
+it. Report censoring and missingness, and use a censored estimate or bounds
+where the data cannot resolve a median. Include these windows in decode scoring
+when the capture is decode-eligible. [VOACAP output definitions](https://www.voacap.com/2023/voacap-windows-output.html)
+
+Measure the level-2 decode-versus-SNR curve in the bench with the frozen
+decoder and capture filter. Include representative HF fading and delay spread
+profiles. Use the median VOACAP SNR as a ranking score and, as a physical
+baseline, average the bench curve over the predicted SNR distribution using
+a declared approximation to its deciles. A threshold-based REL comparison
+may use a bench-derived required SNR fixed in advance. REL gives the modeled
+frequency of exceeding that threshold across days. Decode probabilities and
+their calibration must be evaluated against observed bursts.
+[VOACAP reliability calculation](https://www.voacap.com/2023/understanding/rel.html)
+
+Fit a band-and-UTC-hour decode baseline and, if used, a VOACAP calibration
+model on development data. Freeze both before evaluation. Hold out entire UTC
+dates for the primary comparison and entire receivers for a separate
+transfer check. Report paired Brier score differences and calibration by
+predicted probability. Report how often the higher-scored band or hour has
+higher observed recovery within the same path, using prespecified comparisons
+and a declared tie rule. Estimate uncertainty with a method that accounts for
+both UTC-date and path clustering. Summarize receiver availability and results
+by path length, latitude, daylight and noise floor with raw denominators.
+
 ## 9. Acceptance and progression gates
 
 These are proposed experimental gates, not achieved modem service levels.
@@ -394,6 +477,17 @@ training corpus, then freeze thresholds and test on held-out captures. Do not
 select the easiest receivers or adjust gain/thresholds on evaluation recordings
 and report the outcome as unbiased performance.
 
+- **VOACAP pilot exit:** every planned observation reconciles to its terminal
+  status and frozen path-hour prediction, and the SNR estimator passes replay
+  controls for signal, noise-only and gain changes. Inspect coverage, censored
+  SNR and dependence before freezing the expansion design. Campaign progression
+  depends on measurement readiness and achievable statistical precision.
+- **VOACAP evaluation:** keep the held-out schedule and scoring independent of
+  model fitting. Claim predictive improvement for the sampled settings only
+  if the prespecified interval for the paired Brier score difference favors
+  the VOACAP model over the band-and-hour baseline. Report inconclusive
+  results and sparse strata with their uncertainty.
+
 ## 10. Evidence package and report
 
 Store large originals outside the source repository until storage and
@@ -402,6 +496,7 @@ redistribution terms are settled. Suggested logical structure:
 ```text
 experiment-id/
   plan.json                   # revision, matrix, limits, selection rules
+  predictions/                # frozen VOACAPL inputs, raw output and path-hour table
   transmit/                   # expected frames, waveform, local monitor, logs
   receiver-id/session-id/
     capture.json              # effective settings, continuity, timing validity
@@ -409,6 +504,7 @@ experiment-id/
     derived/                  # 48 kHz WAVs and exact conversion recipe
     results/baseline.json
     results/candidate.json
+  observations.csv            # every planned burst/receiver pair and prediction ID
   report.json                 # denominators, exclusions, comparisons, uncertainty
   report.md                   # interpretation and bounded claims
 ```
@@ -425,6 +521,12 @@ invalid/missing observation, distinguish raw and corrected results, and retain
 receiver/path/session strata. Include waterfall/spectrum views as explanation,
 not as substitutes for exact-byte results.
 
+Publish a path-by-hour map showing predicted SNR, observed exact recovery and
+capture availability in separate panels. Pair it with calibration and SNR
+residual plots, counts of unique dates and paths, and intervals for the held-out
+comparison. Identify the frozen version IDs and archive the analysis script,
+split membership and exclusions so the figures can be regenerated.
+
 ## 11. Initial implementation backlog and commands
 
 1. Use `tools/kiwisdr-bench.py prepare` and `verify` for 30 uniquely identified
@@ -438,6 +540,9 @@ not as substitutes for exact-byte results.
 4. Add a comparator/report harness around the existing Rust WAV CLI. Add missing
    acquisition/soft-decision metrics only as separately tested instrumentation.
 5. Complete K0 before arranging K1 receiver access and a qualified RF transmission.
+6. Qualify a pinned VOACAPL run and UTC-hour parser against a reference case.
+   Build the planned-observation join, SNR estimator and held-out analysis
+   before running the VOACAP pilot extension.
 
 Existing commands from the repository root:
 
@@ -464,6 +569,11 @@ Primary technical sources reviewed on 9 November 2026:
 - [Kiwi recorder implementation](https://github.com/jks-prv/kiwiclient/blob/master/kiwirecorder.py):
   effective gain/AGC, compression, resampling, and sample-writing behavior.
 - [Linkwise modem implementation status](modem.md) and the current Rust WAV CLI.
+
+Propagation sources reviewed on 17 November 2026 include the
+[VOACAP output definitions](https://www.voacap.com/2023/voacap-windows-output.html),
+[circuit reliability calculation](https://www.voacap.com/2023/understanding/rel.html)
+and [VOACAPL source](https://github.com/jawatson/voacapl).
 
 The source links follow upstream `master`; resolve and record an immutable
 revision before implementing the capture adapter. The supplied
@@ -520,6 +630,7 @@ A = analysis, I = inspection. Gate IDs retain the definitions in section 9.
 | KW-OBJ-03: sampled path/time repeatability | T/A, K3 | Enter with K2 evidence; exit with three distinct complete session blocks | Receiver/path/session-stratified counts and uncertainty; no global reliability inference |
 | KW-OBJ-04: decoder regression comparison | T/A, K4 | Enter with a frozen holdout corpus and fixed machine/profile; apply K4 release criteria | Paired gained/lost frames, mismatches, failures, resource costs, and disposition |
 | KW-OBJ-05: diagnostic characterization | T/A, K5 | Enter after K0–K2 with a predeclared single-variable matrix; complete it or record why it stopped | Raw/corrected separation, estimator validity, all variable settings and unresolved limits |
+| KW-OBJ-06: VOACAP prediction skill | T/A, K2–K3 extension | Freeze predictions for the pilot. Qualify the estimator and size the expansion before collecting held-out data | SNR error, exact recovery, availability, and paired held-out scores with clustered intervals |
 
 A test result references the objective, phase/gate, plan revision, procedure
 revision, configuration manifest, and raw/reduced evidence. Deviations receive
