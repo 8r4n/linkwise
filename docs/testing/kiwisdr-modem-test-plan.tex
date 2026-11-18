@@ -24,7 +24,7 @@
   backgroundcolor=\color{pale},frame=single,framerule=0pt,xleftmargin=4pt,xrightmargin=4pt}
 \pagestyle{fancy}\fancyhf{}
 \lhead{\small LINKWISE / MODEM TESTING}
-\rhead{\small LW-MODEM-KIWI-001 / Draft 0.8}
+\rhead{\small LW-MODEM-KIWI-001 / Draft 0.9}
 \cfoot{\small\thepage\ of \pageref{LastPage}}
 \setcounter{tocdepth}{2}
 
@@ -53,12 +53,12 @@
 \vspace{0.2in}
 {\LARGE KiwiSDR Network Test Plan\par}
 \vspace{0.5in}
-{\large One-way RF observation and decoder regression\par}
+{\large One-way RF observation, VOACAP evaluation, and decoder regression\par}
 \vfill
 \begin{minipage}{0.7\textwidth}
 \textbf{Document:} LW-MODEM-KIWI-001\par
-\textbf{Revision:} 0.8 (Draft)\par
-\textbf{Date:} 10 November 2026\par
+\textbf{Revision:} 0.9 (Draft)\par
+\textbf{Date:} 17 November 2026\par
 \textbf{Prepared for:} Linkwise project\par
 \textbf{Test lead / operator:} Not assigned\par
 \textbf{Execution status:} Live receive evidence recorded. Controlled trial unscheduled.
@@ -67,7 +67,8 @@
 \begin{minipage}{0.88\textwidth}
 Exploratory monitoring recovered one live BW500 frame from a KiwiSDR
 recording. The controlled trial will measure exact recovery of known
-transmissions. Bidirectional modem and Winlink qualification remain open.
+transmissions and test whether VOACAP improves band and UTC-hour selection.
+Bidirectional modem and Winlink qualification remain open.
 \end{minipage}
 \vspace{0.5in}
 \end{titlepage}
@@ -83,7 +84,8 @@ transmissions. Bidirectional modem and Winlink qualification remain open.
 0.5 & 9 November 2026 & Julian-centered GIS map and candidate register\\
 0.6 & 9 November 2026 & Exact command sequence, expected results and bench helper\\
 0.7 & 9 November 2026 & Capture procedures and access checks\\
-0.8 & 10 November 2026 & Live receive evidence and pilot acquisition regression\\\bottomrule
+0.8 & 10 November 2026 & Live receive evidence and pilot acquisition regression\\
+0.9 & 17 November 2026 & VOACAP pilot and multi-region statistical evaluation\\\bottomrule
 \end{tabular}
 \end{adjustbox}
 \captionof{table}{Document revision history}
@@ -98,6 +100,8 @@ transmissions. Bidirectional modem and Winlink qualification remain open.
 \label{tp:scope}
 
 Use geographically separated KiwiSDR receivers to capture known Linkwise transmissions, measure one-way frame recovery under actual HF conditions, and build a reproducible decoder regression corpus. Test the native modem first; agent chat, global routing, and message-service behavior are outside this plan.
+
+Test whether point-to-point VOACAP predictions improve the choice of band and UTC hour for one-way Linkwise BW500 reception. The primary endpoint is the probability of exact level-2 DATA frame recovery, conditional on confirmed RF transmission and a usable capture. Assess predicted SNR against measured SNR as a separate propagation endpoint.
 
 The controlled campaign scores a receiver observation when a known RF transmission overlaps a valid capture and Linkwise recovers the expected frame bytes. Exploratory monitoring verified one CRC-valid BW500 level-2 frame from the full Lake Merwin KiwiSDR recording on 7.105 MHz USB at about 5:25 p.m. PST on 10 November 2026. Six filter settings reproduced that same frame. The transmitter-side frame count and payload were unavailable, so this result establishes receive capability for one observed frame. The controlled trial will measure recovery rates with a known denominator. Two-way VARA and Winlink qualification require separate station tests. \href{../../../rust/docs/../../lab-notes/lab-notes.pdf}{Lab notes}
 
@@ -142,6 +146,8 @@ Primary technical sources reviewed on 9 November 2026:
 \item \href{https://github.com/jks-prv/kiwiclient/blob/master/kiwirecorder.py}{Kiwi recorder implementation}: effective gain/AGC, compression, resampling, and sample-writing behavior.
 \item \href{../../../rust/docs/modem.md}{Linkwise modem implementation status} and the current Rust WAV CLI.
 \end{itemize}
+Propagation sources reviewed on 17 November 2026 include the \href{https://www.voacap.com/2023/voacap-windows-output.html}{VOACAP output definitions}, \href{https://www.voacap.com/2023/understanding/rel.html}{circuit reliability calculation} and \href{https://github.com/jawatson/voacapl}{VOACAPL source}.
+
 The source links follow upstream \path{master}; resolve and record an immutable revision before implementing the capture adapter. The supplied \href{http://kiwisdr.com/public/}{public directory} failed to load directly. Section 4.1 now records a dated mirror-derived shortlist cross-checked against receiver metadata; recording access and campaign readiness remain unconfirmed.
 
 
@@ -216,6 +222,14 @@ K5: diagnostic extension & One variable at a time: bounded offset, power setting
 A complete K2 block contains 30 transmitted bursts and up to 90 receiver/burst observations, not 90 independent transmissions. K3 repeats that block across sessions. Randomize or balance level order within each block and preserve the ordering seed. Final block length and airtime are computed from actual waveform durations before scheduling; abort if they exceed station or receiver limits.
 
 Do not vary power, passband, gain, level, and software simultaneously and then attribute the result to one variable. Native transmit-version A/B comparisons need interleaved, balanced RF trials; unlike decoder replay, different RF transmissions do not experience identical channels.
+
+\subsubsection{VOACAP pilot and multi-region campaign}
+\begin{enumerate}
+\item Extend K2/K3 from one transmitter to a registry of 4--6 cooperating KiwiSDRs, using up to three simultaneous receivers per block and rotating by a fixed schedule. Reuse the 30-burst stimulus design with unique burst IDs across blocks. Hold power, antenna and decoder configuration fixed. Score level 2 as the primary endpoint and levels 1 and 3 as secondary endpoints. Repeat blocks on different UTC dates in hours with both high and low predicted SNR.
+\item Use pilot estimates of availability, decode rates and within-day/path correlation to size the evaluation for precision on the difference in Brier score against the baseline. Freeze the precision target, sample size and stopping rule before evaluation. Start planning with 3--5 transmitters, 12--20 cooperating receivers and two bands over 4--6 weeks. Stratify by distance, latitude and day/night/terminator geometry, including intercontinental paths. Repeat each selected path, band and UTC-hour cell on multiple dates within a month. Use the resulting coverage to bound any generalization beyond the participating sites and sampled months.
+\item Use local VOACAPL. Verify its parser and UTC-hour mapping against a checked point-to-point case. Freeze input decks, raw outputs and schedule before recording. Record the engine and coefficient revisions, month, smoothed sunspot number and source, station coordinates and path choice, channel frequency and USB dial offset, logged transmitter output and feedline loss, antenna patterns and azimuths, receiver noise assumptions and required SNR. Flag estimated inputs and freeze sensitivity cases for uncertain receive antennas or noise. Record departures from the planned configuration. See the \href{../../../rust/docs/../../reference/propagation-toolbox.md}{Linkwise propagation toolbox}.
+\end{enumerate}
+Include background-only windows to check false detections. Log opportunistic VarAC activity separately as observed examples with unknown transmission counts. A stock VARA comparison can use its own interleaved matched-power, matched-bandwidth and matched-level blocks with a byte oracle for each source. That comparison is optional and separate from the primary Linkwise endpoint.
 
 
 \subsection{Per-session execution procedure}
@@ -305,6 +319,16 @@ Report per receiver, level, band, UTC session, capture profile, and software rev
 
 \landscapetikz{figures/signal-annotation}{Conceptual annotation example, not measured RF data. Burst windows and noise references must be independently defined; visual energy alone is not exact recovery.}{fig:signal-annotation}
 
+\subsubsection{Comparing predictions and observations}
+Join each scheduled burst/receiver pair to a frozen prediction by transmitter, receiver, modeled frequency, UTC month and UTC hour. Record the actual burst timestamp and flag out-of-window transmissions. Every planned pair must have one disposition. Confirmed RF plus eligible capture yields an exact decode or a valid miss. Unusable capture and unconfirmed or partial transmission stay outside the decode denominator. Report capture availability and its reasons by path, time and predicted SNR so coverage gaps are visible.
+
+VOACAP predicts a distribution across days at a given hour of a month. Save median SNR and the lower and upper decile departures in dB-Hz, plus REL and its required SNR when computed. Compare the median prediction with medians of daily observed SNR summaries for the same path, band, month and UTC hour. Report signed error, absolute error, and the number of contributing days. Measure on scheduled burst windows independently of decoder output using matched background windows. Convert valid in-band SNR to dB-Hz by adding 10 log10 of the effective noise bandwidth in Hz. Prefer fixed gain or calibrated IQ. Record defensible upper limits for signals below the measurement floor, and mark SNR unavailable when interference or gain changes invalidate it. Report censoring and missingness, and use a censored estimate or bounds where the data cannot resolve a median. Include these windows in decode scoring when the capture is decode-eligible. \href{https://www.voacap.com/2023/voacap-windows-output.html}{VOACAP output definitions}
+
+Measure the level-2 decode-versus-SNR curve in the bench with the frozen decoder and capture filter. Include representative HF fading and delay spread profiles. Use the median VOACAP SNR as a ranking score and, as a physical baseline, average the bench curve over the predicted SNR distribution using a declared approximation to its deciles. A threshold-based REL comparison may use a bench-derived required SNR fixed in advance. REL gives the modeled frequency of exceeding that threshold across days. Decode probabilities and their calibration must be evaluated against observed bursts. \href{https://www.voacap.com/2023/understanding/rel.html}{VOACAP reliability calculation}
+
+Fit a band-and-UTC-hour decode baseline and, if used, a VOACAP calibration model on development data. Freeze both before evaluation. Hold out entire UTC dates for the primary comparison and entire receivers for a separate transfer check. Report paired Brier score differences and calibration by predicted probability. Report how often the higher-scored band or hour has higher observed recovery within the same path, using prespecified comparisons and a declared tie rule. Estimate uncertainty with a method that accounts for both UTC-date and path clustering. Summarize receiver availability and results by path length, latitude, daylight and noise floor with raw denominators.
+
+
 \subsection{Acceptance and progression gates}
 \label{md:9}
 
@@ -320,6 +344,10 @@ These are proposed experimental gates, not achieved modem service levels. Pre-re
 \end{itemize}
 If sensitivity targets are desired, define them after the pilot using a separate training corpus, then freeze thresholds and test on held-out captures. Do not select the easiest receivers or adjust gain/thresholds on evaluation recordings and report the outcome as unbiased performance.
 
+\begin{itemize}
+\item \textbf{VOACAP pilot exit:} every planned observation reconciles to its terminal status and frozen path-hour prediction, and the SNR estimator passes replay controls for signal, noise-only and gain changes. Inspect coverage, censored SNR and dependence before freezing the expansion design. Campaign progression depends on measurement readiness and achievable statistical precision.
+\item \textbf{VOACAP evaluation:} keep the held-out schedule and scoring independent of model fitting. Claim predictive improvement for the sampled settings only if the prespecified interval for the paired Brier score difference favors the VOACAP model over the band-and-hour baseline. Report inconclusive results and sparse strata with their uncertainty.
+\end{itemize}
 
 \landscapegraphic{../build/kiwisdr-test-plan/diagrams/Kiwi_Qualification_Gates}{Proposed progression from tooling through pilot, replication, replay and optional diagnostics. These gates do not qualify a bidirectional operational link.}{fig:qualification-gates}
 
@@ -341,6 +369,7 @@ KW-OBJ-02: exact one-way RF frame recovery & T/A, K2 & Enter after tooling/captu
 KW-OBJ-03: sampled path/time repeatability & T/A, K3 & Enter with K2 evidence; exit with three distinct complete session blocks & Receiver/path/session-stratified counts and uncertainty; no global reliability inference\\[5pt]
 KW-OBJ-04: decoder regression comparison & T/A, K4 & Enter with a frozen holdout corpus and fixed machine/profile; apply K4 release criteria & Paired gained/lost frames, mismatches, failures, resource costs, and disposition\\[5pt]
 KW-OBJ-05: diagnostic characterization & T/A, K5 & Enter after K0--K2 with a predeclared single-variable matrix; complete it or record why it stopped & Raw/corrected separation, estimator validity, all variable settings and unresolved limits\\[5pt]
+KW-OBJ-06: VOACAP prediction skill & T/A, K2--K3 extension & Freeze predictions for the pilot. Qualify the estimator and size the expansion before collecting held-out data & SNR error, exact recovery, availability, and paired held-out scores with clustered intervals\\[5pt]
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -453,6 +482,7 @@ K1 and K2 capture & Valid preflight, qualified station chain and readiness revie
 K3 replication & K2 dataset and reviewed disposition & Three complete session blocks\\[5pt]
 K4 replay and report & Frozen holdout corpus; baseline/candidate builds & Paired results, exclusions and disposition\\[5pt]
 Optional K5 block & Separate variable matrix and readiness & Diagnostic report, no stronger qualification claim\\[5pt]
+VOACAP pilot and expansion & K2/K3 readiness and frozen path-hour predictions & Qualified measurement pipeline, then a held-out multi-region evaluation\\[5pt]
 \bottomrule
 \end{tabular}
 \end{adjustbox}
@@ -473,6 +503,7 @@ Store large originals outside the source repository until storage and redistribu
 \begin{lstlisting}
 experiment-id/
   plan.json                   # revision, matrix, limits, selection rules
+  predictions/                # frozen VOACAPL inputs, raw output and path-hour table
   transmit/                   # expected frames, waveform, local monitor, logs
   receiver-id/session-id/
     capture.json              # effective settings, continuity, timing validity
@@ -480,12 +511,15 @@ experiment-id/
     derived/                  # 48 kHz WAVs and exact conversion recipe
     results/baseline.json
     results/candidate.json
+  observations.csv            # every planned burst/receiver pair and prediction ID
   report.json                 # denominators, exclusions, comparisons, uncertainty
   report.md                   # interpretation and bounded claims
 \end{lstlisting}
 Each manifest needs commit IDs, dependency/profile versions, SHA-256 hashes, planned and actual UTC times with clock confidence, transmitter configuration, receiver endpoint/location provenance, mode/passband/gain settings, source sample rate, sequence-gap ranges, processing transforms, expected-frame IDs/bytes, transmission evidence, observation eligibility, and terminal reasons. Keep credentials outside exported manifests.
 
 The report must show infrastructure availability beside RF recovery, list every invalid/missing observation, distinguish raw and corrected results, and retain receiver/path/session strata. Include waterfall/spectrum views as explanation, not as substitutes for exact-byte results.
+
+Publish a path-by-hour map showing predicted SNR, observed exact recovery and capture availability in separate panels. Pair it with calibration and SNR residual plots, counts of unique dates and paths, and intervals for the held-out comparison. Identify the frozen version IDs and archive the analysis script, split membership and exclusions so the figures can be regenerated.
 
 
 For execution, develop a separately revisioned procedure using the repository's \href{https://github.com/8r4n/acq-latex-templates/blob/fef160e37542fd7bc8e62de81404a83b8634a396/templates/engineering/verification/test-procedure/main.tex}{Test Procedure template}, with step, action, expected result, actual result, and disposition fields. Report observations through the \href{https://github.com/8r4n/acq-latex-templates/blob/fef160e37542fd7bc8e62de81404a83b8634a396/templates/engineering/verification/test-report/main.tex}{Test Report template}, including as-tested configuration, deviations, anomalies, and evidence-backed conclusions. These companion deliverables are planned, not yet executable or completed records. A program-level TEMP is unnecessary for this bounded pilot; its broader strategy role remains with the whitepaper and implementation roadmap.
@@ -727,6 +761,7 @@ Local draft-validation result (9 November 2026): all 30 generated WAVs decoded w
 \item Add deterministic audio/IQ import and a manifest validator, including gap and sample-position handling. Neither component currently exists in Linkwise.
 \item Add a comparator/report harness around the existing Rust WAV CLI. Add missing acquisition/soft-decision metrics only as separately tested instrumentation.
 \item Complete K0 before arranging K1 receiver access and a qualified RF transmission.
+\item Qualify a pinned VOACAPL run and UTC-hour parser against a reference case. Build the planned-observation join, SNR estimator and held-out analysis before running the VOACAP pilot extension.
 \end{enumerate}
 Existing commands from the repository root:
 
