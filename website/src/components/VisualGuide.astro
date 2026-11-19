@@ -3,6 +3,7 @@ import { visualGuide } from "../../../docs/i18n/visual-guide.mjs";
 import { guideTrustMail } from "../../../docs/i18n/guide-trust-mail.mjs";
 import { pagePath } from "../../../docs/i18n/locales.mjs";
 import { repository } from "../releases.mjs";
+import { websiteLabels } from "../../../docs/i18n/website-upgrade.mjs";
 
 const { locale, t, base } = Astro.props;
 const labels = visualGuide(locale.code);
@@ -155,6 +156,7 @@ const bench = base + "/reference/" + locale.code + "/docs/testing/vara-interoper
   <p class="assessment-limits">{labels.limits}</p>
   <div class="bench-links">
     <a href={bench}>{labels.bench}</a>
+    <a href={base + pagePath(locale.code, "research") + "#acquisition"}>{websiteLabels(locale.code).research}</a>
     <a href={repository + "/blob/b85dbb12512009756fb4aaca760f79dd8a95dd15/lab-notes/lab-notes.tex#L2111-L2135"} hreflang="en">{labels.notes} ({t.ui.english})</a>
   </div>
 </section>

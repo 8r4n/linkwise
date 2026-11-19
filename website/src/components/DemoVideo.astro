@@ -1,0 +1,10 @@
+---
+const { title, file, base, transcript, poster } = Astro.props;
+const url = `${base}/${file}`;
+---
+<video controls playsinline preload="none" aria-label={title} src={url} poster={poster && `${base}/${poster}`}>
+  <a href={url}>{title} (MP4)</a>
+</video>
+<p class="media-links"><a href={url} download>Download video (MP4)</a>
+  {transcript && <a href={`${base}/${transcript}`}>Read narration transcript</a>}
+</p>

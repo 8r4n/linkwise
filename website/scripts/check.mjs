@@ -5,8 +5,11 @@ import { locales, loadMessages, pages, pagePath } from "../../docs/i18n/locales.
 import { catalog, translation } from "../../docs/i18n/catalog.mjs";
 import { manuals } from "../../docs/i18n/manuals.mjs";
 import { varacGuide } from "../../docs/i18n/varac.mjs";
+import { websiteLabels } from "../../docs/i18n/website-upgrade.mjs";
+import { audioSamples, projectMedia, supportLinks } from "../src/project-content.mjs";
 
 const sha = "b".repeat(64);
+const dist = process.argv[2] ?? "dist";
 const tag = "v0.1.0-preview";
 const prefix = `${repository}/releases/download/${tag}/`;
 const assets = packagesFor("0.1.0").flatMap(({ filename }) => [
@@ -19,22 +22,28 @@ assert.equal((await releaseManifest(mock([release]))).installers.length, 8);
 assert.equal((await releaseManifest(mock([{ ...release, assets: assets.slice(1) }]))).status, "pending");
 assert.equal((await releaseManifest(mock([{ ...release, draft: true }]))).status, "pending");
 
-const manifest = JSON.parse(await readFile("dist/releases.json", "utf8"));
+const manifest = JSON.parse(await readFile(dist + "/releases.json", "utf8"));
 assert.equal(manifest.installers.length, manifest.status === "available" ? 8 : 0);
-const xml = await readFile("dist/sitemap.xml", "utf8");
+for (const [source, output] of projectMedia) {
+  assert.ok((await stat(dist + "/" + output)).size > 0, output);
+  assert.equal((await stat(dist + "/" + output)).size, (await stat("../" + source)).size, output);
+}
+const issueTemplate = await readFile("../.github/ISSUE_TEMPLATE/bug-report.yml", "utf8");
+assert.ok(issueTemplate.includes("label: Steps to reproduce"));
+const xml = await readFile(dist + "/sitemap.xml", "utf8");
 const reference = catalog().flatMap(({ paths }) => paths);
 const origin = "https://8r4n.github.io/linkwise";
 
 async function checkHtml(path, code, dir) {
-  const html = await readFile("dist" + path + "index.html", "utf8");
+  const html = await readFile(dist + path + "index.html", "utf8");
   assert.ok(html.includes('<html lang="' + code + '" dir="' + dir + '">'), path);
   assert.ok(html.includes('rel="canonical" href="' + origin + path + '"'), path);
   assert.ok(html.includes("<h1>"), path);
   for (const { code: alternate } of locales) {
     assert.ok(html.includes('rel="alternate" hreflang="' + alternate + '"'), path + alternate);
   }
-  for (const [, target] of html.matchAll(/(?:href|src)="\/linkwise\/([^"#?]+)(?:[?#][^"]*)?"/g)) {
-    await stat("dist/" + (target.endsWith("/") ? target + "index.html" : target));
+  for (const [, target] of html.matchAll(/(?:href|src|poster)="\/linkwise\/([^"#?]+)(?:[?#][^"]*)?"/g)) {
+    await stat(dist + "/" + (target.endsWith("/") ? target + "index.html" : target));
   }
   return html;
 }
@@ -50,6 +59,7 @@ const examples = (text, source) => Array.from(
 
 for (const { code, dir = "ltr" } of locales) {
   const t = loadMessages(code);
+  const project = websiteLabels(code);
   const varac = varacGuide(code);
   for (const source of completeReferences) {
     if (code === "en") break;
@@ -72,17 +82,29 @@ for (const { code, dir = "ltr" } of locales) {
     if (page === "" || page === "guide") {
       assert.ok(html.includes('href="/linkwise' + pagePath(code, "varac") + '"'), path);
     }
-    if (page === "") assert.ok(html.includes("<title>" + varac.siteTitle + " | Linkwise</title>"), path);
+    if (page === "") {
+      assert.ok(html.includes("<title>" + varac.siteTitle + " | Linkwise</title>"), path);
+      assert.ok(html.includes(`data-release-status="${manifest.status}"`), path);
+      assert.ok(html.includes('href="/linkwise' + pagePath(code, "demos") + '"'), path);
+      if (manifest.status === "pending") {
+        assert.ok(html.includes(project.pending) && html.includes(pagePath(code, "capabilities") + "#build"), path);
+      } else assert.ok(html.includes(project.available), path);
+    }
     if (page === "varac") {
       assert.ok(html.includes("<title>" + varac.title + "</title>"), path);
       assert.ok(html.includes('name="description" content="' + varac.lede + '"'), path);
       assert.ok(html.includes("/connect PEERCALL") && html.includes("/docs/testing/varac-chat.md/"), path);
     }
     if (page === "downloads") {
+      assert.ok(html.includes(`data-release-status="${manifest.status}"`), path);
+      assert.ok(html.includes(manifest.release_url ?? supportLinks.releases), path);
       for (const asset of manifest.installers) {
         assert.ok(html.includes(asset.url) && html.includes(asset.sha256));
-        await stat(new URL(asset.install_guide).pathname.replace("/linkwise/", "dist/"));
+        await stat(new URL(asset.install_guide).pathname.replace("/linkwise/", dist + "/"));
       }
+    }
+    if (["downloads", "guide", "varac", "winlink"].includes(page)) {
+      assert.ok(html.includes(supportLinks.reportBug) && html.includes(supportLinks.knownIssues), path);
     }
     if (page === "guide") {
       assert.ok(html.includes('<pre dir="ltr">') && html.includes("linkwise qsl receive"));
@@ -92,6 +114,22 @@ for (const { code, dir = "ltr" } of locales) {
       assert.ok(html.includes("linkwise mail listen ./mailbox BB2BB AA1AA"), path);
       assert.ok(html.includes("linkwise pki verify-chat") && html.includes("2525 · STARTTLS / SSL/TLS"), path);
       assert.ok(html.includes("VARA HF → Linkwise") && html.includes("Linkwise → VARA HF"), path);
+    }
+    if (page === "capabilities") {
+      assert.ok(html.includes('id="build"') && html.includes("--features audio-device"), path);
+    }
+    if (page === "demos") {
+      for (const anchor of ["waveform", "winlink", "chat-and-mail", "rocky-live-usb", "briefing"]) {
+        assert.ok(html.includes(`id="${anchor}"`), path + "#" + anchor);
+      }
+      for (const [name] of audioSamples) assert.ok(html.includes(`/linkwise/media/${name}`), path);
+      assert.ok(html.includes("/linkwise/media/robustness-briefing-transcript.md"), path);
+    }
+    if (page === "research") {
+      for (const anchor of ["acquisition", "interference", "beacons"]) assert.ok(html.includes(`id="${anchor}"`), path);
+      for (const name of ["modem-robustness-test-plan.pdf", "lab-notes.pdf", "beacon-range-rings.png", "beacon-frame-fields.png"]) {
+        assert.ok(html.includes(`/linkwise/media/${name}`), path);
+      }
     }
   }
   for (const source of reference) {
@@ -107,7 +145,7 @@ for (const { code, dir = "ltr" } of locales) {
     }
   }
   for (const name of manuals) {
-    const data = await readFile("dist/manuals/" + code + "/" + name, "utf8");
+    const data = await readFile(dist + "/manuals/" + code + "/" + name, "utf8");
     const canonical = await readFile(new URL("../../docs/man/" + name, import.meta.url), "utf8");
     if (code === "en") assert.equal(data, canonical);
     else if (translation(code, "docs/man/" + name)) {
@@ -117,9 +155,12 @@ for (const { code, dir = "ltr" } of locales) {
       assert.ok(data.endsWith(canonical.slice(canonical.indexOf("\n.SH SYNOPSIS") + 1)));
     }
   }
-  const guide = await readFile("dist/guides/" + code + ".md", "utf8");
+  const guide = await readFile(dist + "/guides/" + code + ".md", "utf8");
   assert.ok(guide.includes(t.guide.title) && guide.includes("linkwise qsl card"));
-  const agents = await readFile("dist" + pagePath(code) + "llms.txt", "utf8");
+  const agents = await readFile(dist + pagePath(code) + "llms.txt", "utf8");
+  for (const page of ["capabilities", "demos", "research"]) {
+    assert.ok(agents.includes(origin + pagePath(code, page)), code + " " + page);
+  }
   assert.ok(agents.includes(origin + pagePath(code, "varac")), code + " VarAC");
   for (const anchor of ["chat-verification", "mail-client-tests", "performance"]) {
     assert.ok(agents.includes(origin + pagePath(code, "guide") + "#" + anchor), code + " " + anchor);
@@ -127,7 +168,7 @@ for (const { code, dir = "ltr" } of locales) {
   for (const [, href] of agents.matchAll(/\]\((https:\/\/[^)]+)\)/g)) {
     assert.ok(href.startsWith(origin + "/"), href);
     const { pathname, hash } = new URL(href);
-    const target = "dist" + pathname.slice("/linkwise".length) + (pathname.endsWith("/") ? "index.html" : "");
+    const target = dist + pathname.slice("/linkwise".length) + (pathname.endsWith("/") ? "index.html" : "");
     if (hash) assert.ok((await readFile(target, "utf8")).includes('id="' + hash.slice(1) + '"'), href);
     else await stat(target);
   }
