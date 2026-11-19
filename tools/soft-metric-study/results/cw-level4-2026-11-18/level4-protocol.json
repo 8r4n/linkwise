@@ -1,0 +1,124 @@
+{
+  "sources": [
+    {
+      "id": "linkwise-responder-wasapi-caller-05",
+      "split": "development",
+      "file": "/Users/user/Documents/Codex/Linkwise BW500 sensitivity/live/linkwise-responder-wasapi/caller-05.f32",
+      "source_sha256": "f9cc42f9fc8f34db24e0455470ba88c1e1d2086b73dbd6006dd987b7d220cd36",
+      "host_payload_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a",
+      "coarse_start": 2400,
+      "seed": 2221000
+    },
+    {
+      "id": "linkwise-responder-wasapi-caller-06",
+      "split": "development",
+      "file": "/Users/user/Documents/Codex/Linkwise BW500 sensitivity/live/linkwise-responder-wasapi/caller-06.f32",
+      "source_sha256": "e920a296ff2c9ff97c554cc3bd040a0b820c408aa5b50107141a71b00f12ca5f",
+      "host_payload_hex": "2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455",
+      "coarse_start": 2400,
+      "seed": 2221100
+    },
+    {
+      "id": "linkwise-responder-wasapi-caller-07",
+      "split": "development",
+      "file": "/Users/user/Documents/Codex/Linkwise BW500 sensitivity/live/linkwise-responder-wasapi/caller-07.f32",
+      "source_sha256": "e3f8e1a8c3474ec162e93edbedf2427b9a0e04863c195c1b4f224e06faedb0a1",
+      "host_payload_hex": "565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f80",
+      "coarse_start": 2400,
+      "seed": 2221200
+    },
+    {
+      "id": "linkwise-responder-wasapi-caller-08",
+      "split": "development",
+      "file": "/Users/user/Documents/Codex/Linkwise BW500 sensitivity/live/linkwise-responder-wasapi/caller-08.f32",
+      "source_sha256": "3890d22b9cf14b97a02468324f2b4087de3f65703b69eb992d803521041a94b6",
+      "host_payload_hex": "8182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaab",
+      "coarse_start": 2400,
+      "seed": 2221300
+    },
+    {
+      "id": "linkwise-responder-wasapi-caller-09",
+      "split": "development",
+      "file": "/Users/user/Documents/Codex/Linkwise BW500 sensitivity/live/linkwise-responder-wasapi/caller-09.f32",
+      "source_sha256": "b12ac727d9fdb69d05659b4565f4b8ae3afa37be0f440f193a0198f985005537",
+      "host_payload_hex": "acadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9ca",
+      "coarse_start": 2400,
+      "seed": 2221400
+    },
+    {
+      "id": "linkwise-responder-wasapi-caller-12",
+      "split": "development",
+      "file": "/Users/user/Documents/Codex/Linkwise BW500 sensitivity/live/linkwise-responder-wasapi/caller-12.f32",
+      "source_sha256": "a92bef1eca2746ea7fcd00046e424137a5d0970c727075cdf89ac81b1d72218f",
+      "host_payload_hex": "cac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a0",
+      "coarse_start": 2400,
+      "seed": 2221500
+    },
+    {
+      "id": "linkwise-responder-wasapi-caller-13",
+      "split": "development",
+      "file": "/Users/user/Documents/Codex/Linkwise BW500 sensitivity/live/linkwise-responder-wasapi/caller-13.f32",
+      "source_sha256": "cef7598f5c7ee2241fc38e8cce51a34804205d778ce46bcbeea9c4412ec72df3",
+      "host_payload_hex": "9f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a7978777675",
+      "coarse_start": 2400,
+      "seed": 2221600
+    },
+    {
+      "id": "linkwise-responder-wasapi-caller-14",
+      "split": "development",
+      "file": "/Users/user/Documents/Codex/Linkwise BW500 sensitivity/live/linkwise-responder-wasapi/caller-14.f32",
+      "source_sha256": "46d2ca56e3fc356b8d49de520d1c58ccd1bfece6363f3020ba71d3a58f52332c",
+      "host_payload_hex": "74737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a",
+      "coarse_start": 2400,
+      "seed": 2221700
+    },
+    {
+      "id": "linkwise-responder-wasapi-caller-15",
+      "split": "development",
+      "file": "/Users/user/Documents/Codex/Linkwise BW500 sensitivity/live/linkwise-responder-wasapi/caller-15.f32",
+      "source_sha256": "678ea5147560e332ed06e10bc4e63458a34f4ef51c8401c1aca4a582a0fa92de",
+      "host_payload_hex": "494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f",
+      "coarse_start": 2400,
+      "seed": 2221800
+    },
+    {
+      "id": "linkwise-responder-wasapi-caller-16",
+      "split": "development",
+      "file": "/Users/user/Documents/Codex/Linkwise BW500 sensitivity/live/linkwise-responder-wasapi/caller-16.f32",
+      "source_sha256": "dbda40fcd31aa7f47568892efac59ceda2c32ca5afcdbc4812f2e4c0dc58a9d8",
+      "host_payload_hex": "1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100",
+      "coarse_start": 2400,
+      "seed": 2221900
+    },
+    {
+      "id": "interop-responder-caller-05",
+      "split": "later",
+      "file": "/Users/user/Documents/Codex/Linkwise KiwiSDR collection/acceptance-retest-20261118T123629Z/interop-responder/caller-05.f32",
+      "source_sha256": "528fce4dc8de55d0f12fbcdac426a8b9c3f443e3207bdb85b47cf5be38ca614e",
+      "host_payload_hex": "000102030405060708090a0b0c",
+      "coarse_start": 2400,
+      "seed": 2222000
+    },
+    {
+      "id": "interop-responder-caller-08",
+      "split": "later",
+      "file": "/Users/user/Documents/Codex/Linkwise KiwiSDR collection/acceptance-retest-20261118T123629Z/interop-responder/caller-08.f32",
+      "source_sha256": "74597acc9a83f5d632b34d3b1375805011797c927551676523317d8605b56eb2",
+      "host_payload_hex": "0c0b0a09080706050403020100",
+      "coarse_start": 2400,
+      "seed": 2222100
+    },
+    {
+      "id": "interop-caller-responder-07",
+      "split": "later",
+      "file": "/Users/user/Documents/Codex/Linkwise KiwiSDR collection/acceptance-retest-20261118T123629Z/interop-caller/responder-07.f32",
+      "source_sha256": "179fae5477cc87b25dac6c870d97d791751374dd3140fe00385f7777fd4a6714",
+      "host_payload_hex": "463e2037390d",
+      "coarse_start": 2400,
+      "seed": 2222200
+    }
+  ],
+  "oracle": "Documented archived host payload fixture bytes, with comparison to clean CRC-valid frame body. Later corpus frozen before candidate scoring. Detection sees only coarse framed windows.",
+  "candidate": "One coherent 1200-1800 Hz tone cancellation after baseline failure. Freeze all estimator constants before scoring.",
+  "script_sha256": "42353f8b1dfd48bfae607caf688835ca65a7b8ceb4d891956f0d3275e780891f"
+}

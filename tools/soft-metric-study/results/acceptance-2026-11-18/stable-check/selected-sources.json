@@ -1,0 +1,134 @@
+[
+  {
+    "name": "warrenton-7105-frame-1",
+    "site": "warrenton",
+    "receiver": "http://kiwisdr.k1ra.us:8075",
+    "antenna": "80m EFHW, 160m Inv-L, LoG",
+    "dial_khz": 7105.0,
+    "path": "clips/warrenton-7105-frame-1.wav",
+    "wav_sha256": "60f87772f88b1abdea507e0db22f29d9f679eb7425b2e4065ead419067f2fccd",
+    "expected_wire_sha256": "e9e3a215b62532727c8adb40dcc232f36ff4aaeee1b0aa7fb80545a70d3f12f4",
+    "expected_kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+    "allowed_wire_sha256": [
+      "e9e3a215b62532727c8adb40dcc232f36ff4aaeee1b0aa7fb80545a70d3f12f4"
+    ],
+    "start_in_original": 3492352,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T12:37:43.790073+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  },
+  {
+    "name": "warrenton-7105-frame-0",
+    "site": "warrenton",
+    "receiver": "http://kiwisdr.k1ra.us:8075",
+    "antenna": "80m EFHW, 160m Inv-L, LoG",
+    "dial_khz": 7105.0,
+    "path": "clips/warrenton-7105-frame-0.wav",
+    "wav_sha256": "f37b5ee3d4ab7402ca60b895630883e6195ef41ad32ae9ad77db195c929dbdb9",
+    "expected_wire_sha256": "364cbf713bda1732af609edac66995151634d61c74f89f3dd14b79a5f00e22af",
+    "expected_kiss_sha256": "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314",
+    "allowed_wire_sha256": [
+      "364cbf713bda1732af609edac66995151634d61c74f89f3dd14b79a5f00e22af"
+    ],
+    "start_in_original": 2480640,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T12:37:22.712740+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  },
+  {
+    "name": "warrenton-7105-frame-3",
+    "site": "warrenton",
+    "receiver": "http://kiwisdr.k1ra.us:8075",
+    "antenna": "80m EFHW, 160m Inv-L, LoG",
+    "dial_khz": 7105.0,
+    "path": "clips/warrenton-7105-frame-3.wav",
+    "wav_sha256": "fd1b704ffbaf39c5431fc9c26a33cbeb69ca951034ec67136f0f3260668144ce",
+    "expected_wire_sha256": "5e780d5e8b6b0b5db4b5828f080e5d10ec84aeb04ababba40d4ba3731c985198",
+    "expected_kiss_sha256": "804c4971b5c835101b319437b6958b43b8b742896f9d3059e6d3def83aa4c51b",
+    "allowed_wire_sha256": [
+      "5e780d5e8b6b0b5db4b5828f080e5d10ec84aeb04ababba40d4ba3731c985198"
+    ],
+    "start_in_original": 5593200,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T12:38:27.557740+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  },
+  {
+    "name": "westminster-7105-frame-1",
+    "site": "westminster",
+    "receiver": "http://sdr.hfunderground.com:8073",
+    "antenna": "120 ft T2FD ",
+    "dial_khz": 7105.0,
+    "path": "clips/westminster-7105-frame-1.wav",
+    "wav_sha256": "d0293b27ddd08b9fb877d05934892582e8572aa0faa82d5584c9615b8b7d1bd7",
+    "expected_wire_sha256": "e9e3a215b62532727c8adb40dcc232f36ff4aaeee1b0aa7fb80545a70d3f12f4",
+    "expected_kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+    "allowed_wire_sha256": [
+      "e9e3a215b62532727c8adb40dcc232f36ff4aaeee1b0aa7fb80545a70d3f12f4"
+    ],
+    "start_in_original": 3483648,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T12:37:43.956450+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  },
+  {
+    "name": "westminster-7105-frame-0",
+    "site": "westminster",
+    "receiver": "http://sdr.hfunderground.com:8073",
+    "antenna": "120 ft T2FD ",
+    "dial_khz": 7105.0,
+    "path": "clips/westminster-7105-frame-0.wav",
+    "wav_sha256": "63f9a3078cca342a6d80e1004a4c9265c6e02271ed14ea44f1c5a44f3d7fa3f3",
+    "expected_wire_sha256": "364cbf713bda1732af609edac66995151634d61c74f89f3dd14b79a5f00e22af",
+    "expected_kiss_sha256": "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314",
+    "allowed_wire_sha256": [
+      "364cbf713bda1732af609edac66995151634d61c74f89f3dd14b79a5f00e22af"
+    ],
+    "start_in_original": 2471936,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T12:37:22.879117+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  },
+  {
+    "name": "westminster-7105-frame-2",
+    "site": "westminster",
+    "receiver": "http://sdr.hfunderground.com:8073",
+    "antenna": "120 ft T2FD ",
+    "dial_khz": 7105.0,
+    "path": "clips/westminster-7105-frame-2.wav",
+    "wav_sha256": "1e32ef51ee94da7c49f8318826226093b8ee6c6593940f325e5666e1aa6f2b90",
+    "expected_wire_sha256": "3cea7569e69e70ee716fcbb654cc6a5acf7e2f4fbd116e9cc0539bf55d1f5708",
+    "expected_kiss_sha256": "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1",
+    "allowed_wire_sha256": [
+      "3cea7569e69e70ee716fcbb654cc6a5acf7e2f4fbd116e9cc0539bf55d1f5708"
+    ],
+    "start_in_original": 4136576,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T12:37:57.559117+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  }
+]

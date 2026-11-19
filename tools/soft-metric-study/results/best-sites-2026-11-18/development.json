@@ -1,0 +1,20 @@
+{
+  "baseline": {
+    "exact": 115,
+    "clean": 6,
+    "unexpected": 0,
+    "gates": 0
+  },
+  "tone": {
+    "exact": 115,
+    "clean": 6,
+    "unexpected": 0,
+    "gates": 0
+  },
+  "gated": {
+    "exact": 115,
+    "clean": 6,
+    "unexpected": 0,
+    "gates": 0
+  }
+}

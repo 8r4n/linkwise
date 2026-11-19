@@ -1,0 +1,29 @@
+% Proposed bench architecture, not an implemented harness or completed experiment.
+\begin{tikzpicture}[>=Latex,font=\small,
+ box/.style={draw=accent,fill=pale,align=center,text width=35mm,minimum height=15mm},
+ smallbox/.style={box,text width=28mm}]
+\node[font=\bfseries,anchor=west] at (-2,4.4) {Proposed controlled robustness bench};
+\node[box] (source) at (0,2.5) {Stock / Linkwise sources\\known binary payloads};
+\node[box] (oracle) at (0,0) {Independent oracle\\source, split and hashes};
+\node[box] (model) at (4.6,2.5) {Frozen impairment graph\\units, seeds, calibration};
+\node[box] (tier) at (4.6,0) {A: audio\\C: complex baseband\\H: isolated hardware};
+\node[box] (pcm) at (9.2,2.5) {Identical verified PCM\\continuous acquisition};
+\node[smallbox] (stock) at (14,3.5) {Stock VARA};
+\node[smallbox] (base) at (14,1.8) {Production Linkwise};
+\node[smallbox] (cand) at (14,0.1) {Candidate Linkwise};
+\node[box,text width=70mm] (score) at (9.2,-2.5) {Exact bytes, misses, wrong outputs, activation\\resources and mixed-session delivery};
+\draw[->,thick] (source)--(model);
+\draw[->,thick] (model)--(pcm);
+\draw[->] (tier)--(model);
+\draw[->] (source)--(oracle);
+\draw[->] (pcm.east)--(stock.west);
+\draw[->] (pcm.east)--(base.west);
+\draw[->] (pcm.east)--(cand.west);
+\draw[->] (oracle.south)|-(score.west);
+\draw[->] (cand.south)|-(score.east);
+\draw[->] (base.east)--++(0.8,0)|-(score.east);
+\draw[->] (stock.east)--++(1.2,0)|-(score.east);
+\node[anchor=west,text width=16cm,align=left] at (-2,-4.1)
+ {Development, validation and later confirmation are separated by source transmission/session.\\
+ Audio simulation does not qualify RF blocking, antenna performance or a real propagation path.};
+\end{tikzpicture}

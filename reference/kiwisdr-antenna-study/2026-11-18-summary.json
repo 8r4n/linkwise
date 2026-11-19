@@ -1,0 +1,1825 @@
+{
+  "fetched_utc": "2026-11-18T01:55:58.526204+00:00",
+  "directory_header": "// KiwiSDR.com receiver list for dyatlov map maker\n// Automatically generated from http://kiwisdr.com/public/\n// KiwiSDR.com data timestamp: Wednesday, 18-Nov-2026 01:39:20 GMT\n// File generation timestamp: Wed Nov 18 01:40:02 2026\n\n",
+  "directory_sha256": "de106d7a6db5f6478a05da1577be1a3e06f144655d2e8206bf8ad780bd581a5a",
+  "directory_rows": 831,
+  "scored_rows": 820,
+  "approx_installations": 762,
+  "family_snapshot": {
+    "Active / small receiving loop": {
+      "receiver_rows": 174,
+      "approx_installations": 164,
+      "median": 13.0,
+      "maximum": 36
+    },
+    "Beverage": {
+      "receiver_rows": 18,
+      "approx_installations": 18,
+      "median": 24.5,
+      "maximum": 42
+    },
+    "Dipole / doublet / inverted-V": {
+      "receiver_rows": 100,
+      "approx_installations": 87,
+      "median": 21,
+      "maximum": 42
+    },
+    "End-fed wire": {
+      "receiver_rows": 48,
+      "approx_installations": 46,
+      "median": 18.0,
+      "maximum": 37
+    },
+    "Loop (size/type varies)": {
+      "receiver_rows": 119,
+      "approx_installations": 115,
+      "median": 15,
+      "maximum": 39
+    },
+    "Mixed / switched / ambiguous": {
+      "receiver_rows": 44,
+      "approx_installations": 32,
+      "median": 23.5,
+      "maximum": 38
+    },
+    "Other / unspecified": {
+      "receiver_rows": 157,
+      "approx_installations": 148,
+      "median": 18.0,
+      "maximum": 35
+    },
+    "Other wire": {
+      "receiver_rows": 62,
+      "approx_installations": 61,
+      "median": 18,
+      "maximum": 37
+    },
+    "Professional log-periodic": {
+      "receiver_rows": 7,
+      "approx_installations": 5,
+      "median": 16,
+      "maximum": 25
+    },
+    "Terminated folded dipole": {
+      "receiver_rows": 12,
+      "approx_installations": 11,
+      "median": 26,
+      "maximum": 37
+    },
+    "Vertical / electric-field probe": {
+      "receiver_rows": 79,
+      "approx_installations": 75,
+      "median": 14,
+      "maximum": 41
+    }
+  },
+  "top20": [
+    {
+      "id": "f82e0c015d32",
+      "url": "http://g8ure.ddns.net:8079",
+      "location": "Chichester UK",
+      "antenna": "80m Dipole",
+      "latitude": 50.846315,
+      "longitude": -0.661952,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 42,
+      "updated": "Wednesday, 18-Nov-2026 01:10:52 GMT"
+    },
+    {
+      "id": "7804738341e2",
+      "url": "http://sa4bna.hopto.org:8073",
+      "location": "Glava , Arvika",
+      "antenna": "100 mtr beverage, end terminated",
+      "latitude": 59.546,
+      "longitude": 12.526,
+      "family": "Beverage",
+      "hf_snapshot": 42,
+      "updated": "Wednesday, 18-Nov-2026 01:08:52 GMT"
+    },
+    {
+      "id": "b83df62821a0",
+      "url": "http://bern.proxy.kiwisdr.com",
+      "location": "Hamburg, Drage, \ud83c\udde9\ud83c\uddea Germany \ud83c\udde9\ud83c\uddea",
+      "antenna": "VLF broadband vertical V1.21 11/26",
+      "latitude": 53.401646,
+      "longitude": 10.28716,
+      "family": "Vertical / electric-field probe",
+      "hf_snapshot": 41,
+      "updated": "Wednesday, 18-Nov-2026 01:37:32 GMT"
+    },
+    {
+      "id": "1442fc0f7d6d",
+      "url": "http://g8ure.ddns.net:8074",
+      "location": "Chichester UK",
+      "antenna": "80m dipole",
+      "latitude": 50.846399,
+      "longitude": -0.661948,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 41,
+      "updated": "Wednesday, 18-Nov-2026 01:19:09 GMT"
+    },
+    {
+      "id": "9889248a0434",
+      "url": "http://sdr.autreradioautreculture.com:8073",
+      "location": "TREMOLAT (24), FRANCE",
+      "antenna": "Vertical pylon isolated 11 meters (ou Mini-Whip dual FET)",
+      "latitude": 44.869416,
+      "longitude": 0.835143,
+      "family": "Vertical / electric-field probe",
+      "hf_snapshot": 41,
+      "updated": "Wednesday, 18-Nov-2026 01:10:33 GMT"
+    },
+    {
+      "id": "f82e0c01696b",
+      "url": "http://g8ure.ddns.net:8078",
+      "location": "Chichester UK",
+      "antenna": "80m Dipole",
+      "latitude": 50.846315,
+      "longitude": -0.661952,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 40,
+      "updated": "Wednesday, 18-Nov-2026 01:15:59 GMT"
+    },
+    {
+      "id": "0804b48310ad",
+      "url": "http://21271.proxy.kiwisdr.com",
+      "location": "Varberg, Sweden",
+      "antenna": "Dipole FD-4",
+      "latitude": 57.141052,
+      "longitude": 12.343837,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 40,
+      "updated": "Wednesday, 18-Nov-2026 01:15:34 GMT"
+    },
+    {
+      "id": "98f07bffccc3",
+      "url": "http://g8ure.ddns.net:8075",
+      "location": "Chichester UK",
+      "antenna": "80m Dipole",
+      "latitude": 50.85,
+      "longitude": -0.66,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 40,
+      "updated": "Wednesday, 18-Nov-2026 00:55:46 GMT"
+    },
+    {
+      "id": "40bd32e4da2a",
+      "url": "http://irelandnorthwest.proxy.kiwisdr.com",
+      "location": "Ireland",
+      "antenna": "Dipole",
+      "latitude": 54.229144,
+      "longitude": -9.312494,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 39,
+      "updated": "Wednesday, 18-Nov-2026 01:34:28 GMT"
+    },
+    {
+      "id": "0804b48d2f11",
+      "url": "http://ea8bfk.ddns.net:8073",
+      "location": "Fuerteventura, Canary Islands",
+      "antenna": "Loop",
+      "latitude": 28.60994,
+      "longitude": -13.842623,
+      "family": "Loop (size/type varies)",
+      "hf_snapshot": 39,
+      "updated": "Wednesday, 18-Nov-2026 01:23:46 GMT"
+    },
+    {
+      "id": "0804b48290e2",
+      "url": "http://sdr.autreradioautreculture.com:8074",
+      "location": "TREMOLAT (24), FRANCE",
+      "antenna": "Vertical pylon isolated 11 meters (ou Mini-Whip dual FET)",
+      "latitude": 44.869416,
+      "longitude": 0.835143,
+      "family": "Vertical / electric-field probe",
+      "hf_snapshot": 39,
+      "updated": "Wednesday, 18-Nov-2026 01:20:20 GMT"
+    },
+    {
+      "id": "647060e3ae1b",
+      "url": "http://g8ure.ddns.net:8072",
+      "location": "Chichester UK",
+      "antenna": "80m dipole",
+      "latitude": 50.846198,
+      "longitude": -0.661326,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 39,
+      "updated": "Wednesday, 18-Nov-2026 01:19:19 GMT"
+    },
+    {
+      "id": "f82e0c01925d",
+      "url": "http://g8ure.ddns.net:8071",
+      "location": "Chichester UK",
+      "antenna": "80m dipole",
+      "latitude": 50.8463,
+      "longitude": -0.661731,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 39,
+      "updated": "Wednesday, 18-Nov-2026 01:01:57 GMT"
+    },
+    {
+      "id": "147f0fdf7ad6",
+      "url": "http://g8ure.ddns.net:8077",
+      "location": "Chichester UK",
+      "antenna": "80m Dipole",
+      "latitude": 50.85,
+      "longitude": -0.66,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 39,
+      "updated": "Wednesday, 18-Nov-2026 00:55:41 GMT"
+    },
+    {
+      "id": "648cbb78f7c3",
+      "url": "http://wessex.zapto.org:8074",
+      "location": "Wessex - KiwiSDR - G8JNJ - South West UK",
+      "antenna": "(same as Wessex KiWi V1)",
+      "latitude": 50.74,
+      "longitude": -2.64,
+      "family": "Mixed / switched / ambiguous",
+      "hf_snapshot": 38,
+      "updated": "Wednesday, 18-Nov-2026 01:13:25 GMT"
+    },
+    {
+      "id": "ec24b8cfd0db",
+      "url": "http://wessex.zapto.org:8073",
+      "location": "South West England, UK",
+      "antenna": "Switched",
+      "latitude": 50.74,
+      "longitude": -2.63,
+      "family": "Mixed / switched / ambiguous",
+      "hf_snapshot": 38,
+      "updated": "Wednesday, 18-Nov-2026 01:02:03 GMT"
+    },
+    {
+      "id": "58a15ffbbef9",
+      "url": "http://22424.proxy.kiwisdr.com",
+      "location": "Ireland",
+      "antenna": "Dipole",
+      "latitude": 54.229144,
+      "longitude": -9.312494,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 37,
+      "updated": "Wednesday, 18-Nov-2026 01:30:57 GMT"
+    },
+    {
+      "id": "b4ac9dfa6479",
+      "url": "http://www.f5lfe.fr:8073",
+      "location": "Marsangy (89), France",
+      "antenna": "31 meters EFRW",
+      "latitude": 48.119606,
+      "longitude": 3.24148,
+      "family": "End-fed wire",
+      "hf_snapshot": 37,
+      "updated": "Wednesday, 18-Nov-2026 01:28:27 GMT"
+    },
+    {
+      "id": "985dad4533a3",
+      "url": "http://kiwisdr.dfm.hu",
+      "location": "Szekesfehervar/Maroshegy, Hungary",
+      "antenna": "Dipole (54m/177ft long, 5m/16ft AGL) with 1:1 balun",
+      "latitude": 47.153845,
+      "longitude": 18.402267,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 37,
+      "updated": "Wednesday, 18-Nov-2026 01:25:23 GMT"
+    },
+    {
+      "id": "9006f2602c6d",
+      "url": "http://rffryslan.vosrx.nl:8073",
+      "location": "Fryslan, the Netherlands",
+      "antenna": "Inverted-v dipool, 2x45 m",
+      "latitude": 53.195481,
+      "longitude": 5.987106,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 37,
+      "updated": "Wednesday, 18-Nov-2026 01:24:53 GMT"
+    }
+  ],
+  "examples": [
+    {
+      "id": "f82e0c015d32",
+      "url": "http://g8ure.ddns.net:8079",
+      "location": "Chichester UK",
+      "antenna": "80m Dipole",
+      "latitude": 50.846315,
+      "longitude": -0.661952,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 42,
+      "updated": "Wednesday, 18-Nov-2026 01:10:52 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:17.135114+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "80m Dipole",
+        "snr": "41,40",
+        "date": "Wed Nov 18 01:50:17 2026",
+        "uptime": "164516",
+        "adc_ov": "26273"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:17.974468+00:00",
+      "history": {
+        "total_samples": 46,
+        "window_samples": 24,
+        "span_hours": 23.279722222222222,
+        "first": "2026-11-17 02:26:07",
+        "last": "2026-11-18 01:42:54",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 38.0,
+            "min": 30,
+            "max": 44,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          },
+          "40m": {
+            "n": 23,
+            "median": 18,
+            "min": 6,
+            "max": 23,
+            "ranges_khz": [
+              [
+                7000,
+                7200
+              ]
+            ]
+          },
+          "20m": {
+            "n": 20,
+            "median": 2.5,
+            "min": 1,
+            "max": 18,
+            "ranges_khz": [
+              [
+                14000,
+                14350
+              ]
+            ]
+          },
+          "80m": {
+            "n": 23,
+            "median": 13,
+            "min": 2,
+            "max": 21,
+            "ranges_khz": [
+              [
+                3500,
+                3800
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "0035ff9d049a",
+      "url": "http://g8ure.ddns.net:8073",
+      "location": "Chichester UK",
+      "antenna": "Beverage - North",
+      "latitude": 50.846274,
+      "longitude": -0.661835,
+      "family": "Beverage",
+      "hf_snapshot": 36,
+      "updated": "Wednesday, 18-Nov-2026 01:35:38 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:17.138108+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "Beverage - North",
+        "snr": "43,36",
+        "date": "Wed Nov 18 01:50:17 2026",
+        "uptime": "80049",
+        "adc_ov": "29367"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:17.934677+00:00",
+      "history": {
+        "total_samples": 22,
+        "window_samples": 22,
+        "span_hours": 21.326944444444443,
+        "first": "2026-11-17 03:36:57",
+        "last": "2026-11-18 00:56:34",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 22,
+            "median": 31.5,
+            "min": 24,
+            "max": 37,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          },
+          "40m": {
+            "n": 22,
+            "median": 13.5,
+            "min": 6,
+            "max": 22,
+            "ranges_khz": [
+              [
+                7000,
+                7200
+              ]
+            ]
+          },
+          "20m": {
+            "n": 21,
+            "median": 6,
+            "min": 2,
+            "max": 14,
+            "ranges_khz": [
+              [
+                14000,
+                14350
+              ]
+            ]
+          },
+          "80m": {
+            "n": 22,
+            "median": 10.0,
+            "min": 1,
+            "max": 17,
+            "ranges_khz": [
+              [
+                3500,
+                3800
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "7804738341e2",
+      "url": "http://sa4bna.hopto.org:8073",
+      "location": "Glava , Arvika",
+      "antenna": "100 mtr beverage, end terminated",
+      "latitude": 59.546,
+      "longitude": 12.526,
+      "family": "Beverage",
+      "hf_snapshot": 42,
+      "updated": "Wednesday, 18-Nov-2026 01:08:52 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:17.274197+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "100 mtr beverage, end terminated",
+        "snr": "45,42",
+        "date": "Wed Nov 18 01:50:17 2026",
+        "uptime": "91676",
+        "adc_ov": "20775"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:18.246851+00:00",
+      "history": {
+        "total_samples": 26,
+        "window_samples": 24,
+        "span_hours": 23.358888888888888,
+        "first": "2026-11-17 03:24:04",
+        "last": "2026-11-18 02:45:36",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 38.0,
+            "min": 30,
+            "max": 42,
+            "ranges_khz": [
+              [
+                1800,
+                32000
+              ]
+            ]
+          },
+          "40m": {
+            "n": 22,
+            "median": 15.5,
+            "min": 7,
+            "max": 26,
+            "ranges_khz": [
+              [
+                7000,
+                7200
+              ]
+            ]
+          },
+          "20m": {
+            "n": 20,
+            "median": 6.5,
+            "min": 3,
+            "max": 20,
+            "ranges_khz": [
+              [
+                14000,
+                14350
+              ]
+            ]
+          },
+          "80m": {
+            "n": 22,
+            "median": 14.5,
+            "min": 4,
+            "max": 23,
+            "ranges_khz": [
+              [
+                3500,
+                3800
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "b83df62821a0",
+      "url": "http://bern.proxy.kiwisdr.com",
+      "location": "Hamburg, Drage, \ud83c\udde9\ud83c\uddea Germany \ud83c\udde9\ud83c\uddea",
+      "antenna": "VLF broadband vertical V1.21 11/26",
+      "latitude": 53.401646,
+      "longitude": 10.28716,
+      "family": "Vertical / electric-field probe",
+      "hf_snapshot": 41,
+      "updated": "Wednesday, 18-Nov-2026 01:37:32 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:17.210582+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": " VLF broadband vertical V1.21 11/26",
+        "snr": "44,40",
+        "date": "Wed Nov 18 01:50:17 2026",
+        "uptime": "165587",
+        "adc_ov": "105"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:18.580617+00:00",
+      "history": {
+        "total_samples": 168,
+        "window_samples": 168,
+        "span_hours": 15.47888888888889,
+        "first": "2026-11-17 10:20:14",
+        "last": "2026-11-18 01:48:58",
+        "utc_flags": [
+          1
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 168,
+            "median": 38.0,
+            "min": 20,
+            "max": 42,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          },
+          "40m": {
+            "n": 147,
+            "median": 13,
+            "min": 4,
+            "max": 24,
+            "ranges_khz": [
+              [
+                7000,
+                7200
+              ]
+            ]
+          },
+          "20m": {
+            "n": 144,
+            "median": 3.0,
+            "min": 1,
+            "max": 26,
+            "ranges_khz": [
+              [
+                14000,
+                14350
+              ]
+            ]
+          },
+          "80m": {
+            "n": 149,
+            "median": 13,
+            "min": 3,
+            "max": 21,
+            "ranges_khz": [
+              [
+                3500,
+                3800
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "9889248a0434",
+      "url": "http://sdr.autreradioautreculture.com:8073",
+      "location": "TREMOLAT (24), FRANCE",
+      "antenna": "Vertical pylon isolated 11 meters (ou Mini-Whip dual FET)",
+      "latitude": 44.869416,
+      "longitude": 0.835143,
+      "family": "Vertical / electric-field probe",
+      "hf_snapshot": 41,
+      "updated": "Wednesday, 18-Nov-2026 01:10:33 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:18.454296+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "Vertical pylon isolated 11 meters (ou Mini-Whip dual FET)",
+        "snr": "45,43",
+        "date": "Wed Nov 18 01:50:18 2026",
+        "uptime": "170035",
+        "adc_ov": "20263"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:19.098914+00:00",
+      "history": {
+        "total_samples": 48,
+        "window_samples": 24,
+        "span_hours": 23.041666666666668,
+        "first": "2026-11-17 03:40:17",
+        "last": "2026-11-18 02:42:47",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 41.0,
+            "min": 25,
+            "max": 43,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "0804b48d2f11",
+      "url": "http://ea8bfk.ddns.net:8073",
+      "location": "Fuerteventura, Canary Islands",
+      "antenna": "Loop",
+      "latitude": 28.60994,
+      "longitude": -13.842623,
+      "family": "Loop (size/type varies)",
+      "hf_snapshot": 39,
+      "updated": "Wednesday, 18-Nov-2026 01:23:46 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:18.474141+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "Loop",
+        "snr": "41,41",
+        "date": "Wed Nov 18 01:50:18 2026",
+        "uptime": "20503",
+        "adc_ov": "0"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:18.923327+00:00",
+      "history": {
+        "total_samples": 24,
+        "window_samples": 24,
+        "span_hours": 3.8333333333333335,
+        "first": "2026-11-17 21:59:09",
+        "last": "2026-11-18 01:49:09",
+        "utc_flags": [
+          1
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 41.0,
+            "min": 40,
+            "max": 43,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "f82e0c01481a",
+      "url": "http://swl-lippi-2.stbach.de",
+      "location": "FREITAL, GERMANY",
+      "antenna": "LZ1AQ West/East/Loop",
+      "latitude": 51.0,
+      "longitude": 13.65,
+      "family": "Active / small receiving loop",
+      "hf_snapshot": 36,
+      "updated": "Wednesday, 18-Nov-2026 01:37:48 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:19.833836+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "LZ1AQ  West/East/Loop",
+        "snr": "38,36",
+        "date": "Wed Nov 18 01:50:19 2026",
+        "uptime": "3677",
+        "adc_ov": "0"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:21.108858+00:00",
+      "history": {
+        "total_samples": 1,
+        "window_samples": 1,
+        "span_hours": 0.0,
+        "first": "2026-11-18 01:50:41",
+        "last": "2026-11-18 01:50:41",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 1,
+            "median": 36,
+            "min": 36,
+            "max": 36,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "0804b4905c1e",
+      "url": "http://kiwisdr.rigiremote.ch",
+      "location": "JN47GA - Rigi Scheidegg",
+      "antenna": "Wellbrook Loop",
+      "latitude": 47.172508,
+      "longitude": 8.425956,
+      "family": "Active / small receiving loop",
+      "hf_snapshot": 31,
+      "updated": "Wednesday, 18-Nov-2026 01:28:36 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:20.017232+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "Wellbrook Loop",
+        "snr": "36,31",
+        "date": "Wed Nov 18 01:50:19 2026",
+        "uptime": "312164",
+        "adc_ov": "0"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:21.122773+00:00",
+      "history": {
+        "total_samples": 24,
+        "window_samples": 24,
+        "span_hours": 3.8333333333333335,
+        "first": "2026-11-17 21:58:10",
+        "last": "2026-11-18 01:48:10",
+        "utc_flags": [
+          1
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 31.0,
+            "min": 28,
+            "max": 32,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "6433db456541",
+      "url": "http://oh3aa.ddns.net:18073",
+      "location": "H\u00e4meenlinna, Finland",
+      "antenna": "Crossed Loop Antennas with LZ1AQ AAA-1C Active Antenna Amplifier",
+      "latitude": 60.950613,
+      "longitude": 24.483177,
+      "family": "Active / small receiving loop",
+      "hf_snapshot": 31,
+      "updated": "Wednesday, 18-Nov-2026 01:37:26 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:19.463152+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "Crossed Loop Antennas with LZ1AQ AAA-1C Active Antenna Amplifier",
+        "snr": "33,31",
+        "date": "Wed Nov 18 01:50:19 2026",
+        "uptime": "179317",
+        "adc_ov": "254102"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:20.294492+00:00",
+      "history": {
+        "total_samples": 50,
+        "window_samples": 24,
+        "span_hours": 23.038333333333334,
+        "first": "2026-11-17 04:05:17",
+        "last": "2026-11-18 03:07:35",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 30.0,
+            "min": 24,
+            "max": 36,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "3414b5664491",
+      "url": "http://21748.proxy.kiwisdr.com",
+      "location": "Free Union, VA, USA",
+      "antenna": "27.4M T2FD abt 20M over ground",
+      "latitude": 38.150151,
+      "longitude": -78.554212,
+      "family": "Terminated folded dipole",
+      "hf_snapshot": 34,
+      "updated": "Wednesday, 18-Nov-2026 01:32:41 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:19.702930+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "27.4M T2FD abt 20M over ground",
+        "snr": "35,34",
+        "date": "Wed Nov 18 01:50:19 2026",
+        "uptime": "152478",
+        "adc_ov": "0"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:20.339911+00:00",
+      "history": {
+        "total_samples": 37,
+        "window_samples": 21,
+        "span_hours": 23.035,
+        "first": "2026-11-16 21:31:39",
+        "last": "2026-11-17 20:33:45",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 21,
+            "median": 27,
+            "min": 20,
+            "max": 34,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "780473a35e5c",
+      "url": "http://sdr.hfunderground.com:8073",
+      "location": "Westminster, MD, USA",
+      "antenna": "120 ft T2FD",
+      "latitude": 39.704,
+      "longitude": -76.974,
+      "family": "Terminated folded dipole",
+      "hf_snapshot": 33,
+      "updated": "Wednesday, 18-Nov-2026 01:32:20 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:20.609210+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "120 ft T2FD ",
+        "snr": "41,33",
+        "date": "Wed Nov 18 01:50:20 2026",
+        "uptime": "730458",
+        "adc_ov": "529"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:21.231882+00:00",
+      "history": {
+        "total_samples": 168,
+        "window_samples": 24,
+        "span_hours": 23.032222222222224,
+        "first": "2026-11-16 21:11:25",
+        "last": "2026-11-17 20:13:21",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 25.0,
+            "min": 13,
+            "max": 33,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "20d778855917",
+      "url": "http://sdr.hfunderground.com:8076",
+      "location": "Westminster, MD, USA",
+      "antenna": "500 ft Northeast Beverage to Europe",
+      "latitude": 39.704,
+      "longitude": -76.974,
+      "family": "Beverage",
+      "hf_snapshot": 27,
+      "updated": "Wednesday, 18-Nov-2026 00:54:24 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:20.609218+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "500 ft Northeast Beverage to Europe",
+        "snr": "42,29",
+        "date": "Wed Nov 18 01:50:20 2026",
+        "uptime": "138482",
+        "adc_ov": "6"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:21.027999+00:00",
+      "history": {
+        "total_samples": 39,
+        "window_samples": 24,
+        "span_hours": 23.030555555555555,
+        "first": "2026-11-16 21:23:59",
+        "last": "2026-11-17 20:25:49",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 21.0,
+            "min": 14,
+            "max": 29,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "40bd32e308be",
+      "url": "http://sdr.hfunderground.com:8078",
+      "location": "Westminster, MD, USA",
+      "antenna": "58 ft T2FD",
+      "latitude": 39.704,
+      "longitude": -76.974,
+      "family": "Terminated folded dipole",
+      "hf_snapshot": 26,
+      "updated": "Wednesday, 18-Nov-2026 01:05:27 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:21.305831+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "58 ft T2FD",
+        "snr": "35,28",
+        "date": "Wed Nov 18 01:50:21 2026",
+        "uptime": "143242",
+        "adc_ov": "1"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:21.705319+00:00",
+      "history": {
+        "total_samples": 40,
+        "window_samples": 24,
+        "span_hours": 23.028333333333332,
+        "first": "2026-11-16 21:04:44",
+        "last": "2026-11-17 20:06:26",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 22.0,
+            "min": 15,
+            "max": 28,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "78047338ad5c",
+      "url": "http://kiwisdr.kfsdr.com:8073",
+      "location": "Half Moon Bay, California",
+      "antenna": "\"Omni\" (TCI 530)",
+      "latitude": 37.39,
+      "longitude": -122.41,
+      "family": "Professional log-periodic",
+      "hf_snapshot": 16,
+      "updated": "Wednesday, 18-Nov-2026 01:28:08 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:21.294403+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "\"Omni\" (TCI 530)",
+        "snr": "16,16",
+        "date": "Wed Nov 18 01:50:21 2026",
+        "uptime": "130999",
+        "adc_ov": "803"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:21.443060+00:00",
+      "history": {
+        "total_samples": 2,
+        "window_samples": 1,
+        "span_hours": 0.0,
+        "first": "2026-11-17 05:27:34",
+        "last": "2026-11-17 05:27:34",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 1,
+            "median": 16,
+            "min": 16,
+            "max": 16,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "883f4aabaff6",
+      "url": "http://kiwisdr.kfsdr.com:8074",
+      "location": "Half Moon Bay, California",
+      "antenna": "TCI 532 @ 278\u2070",
+      "latitude": 37.384275,
+      "longitude": -122.413133,
+      "family": "Professional log-periodic",
+      "hf_snapshot": 9,
+      "updated": "Wednesday, 18-Nov-2026 01:04:26 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:21.290403+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "TCI 532 @ 278\u2070",
+        "snr": "10,10",
+        "date": "Wed Nov 18 01:50:21 2026",
+        "uptime": "135125",
+        "adc_ov": "0"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:21.481671+00:00",
+      "history": {
+        "total_samples": 38,
+        "window_samples": 24,
+        "span_hours": 23.035,
+        "first": "2026-11-16 18:19:53",
+        "last": "2026-11-17 17:21:59",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 9.0,
+            "min": 7,
+            "max": 12,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "883f4aa8acf6",
+      "url": "http://kiwisdr.kfsdr.com:8075",
+      "location": "Half Moon Bay, California",
+      "antenna": "TCI 532 @ 222\u2070",
+      "latitude": 37.382406,
+      "longitude": -122.413786,
+      "family": "Professional log-periodic",
+      "hf_snapshot": 6,
+      "updated": "Wednesday, 18-Nov-2026 01:23:14 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:21.373856+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "TCI 532 @ 222\u2070",
+        "snr": "10,6",
+        "date": "Wed Nov 18 01:50:21 2026",
+        "uptime": "128592",
+        "adc_ov": "0"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:21.554457+00:00",
+      "history": {
+        "total_samples": 36,
+        "window_samples": 24,
+        "span_hours": 23.033333333333335,
+        "first": "2026-11-16 18:08:41",
+        "last": "2026-11-17 17:10:41",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 7.0,
+            "min": 6,
+            "max": 8,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "883f4aab0c13",
+      "url": "http://kiwisdr.kfsdr.com:8076",
+      "location": "Half Moon Bay, California",
+      "antenna": "TCI 527B @ 135\u2070",
+      "latitude": 37.383136,
+      "longitude": -122.413261,
+      "family": "Professional log-periodic",
+      "hf_snapshot": 22,
+      "updated": "Wednesday, 18-Nov-2026 01:33:26 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:21.582286+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "TCI 527B @ 135\u2070",
+        "snr": "22,22",
+        "date": "Wed Nov 18 01:50:21 2026",
+        "uptime": "117188",
+        "adc_ov": "1307"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:21.778069+00:00",
+      "history": {
+        "total_samples": 33,
+        "window_samples": 24,
+        "span_hours": 23.037777777777777,
+        "first": "2026-11-16 18:18:29",
+        "last": "2026-11-17 17:20:45",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 23.0,
+            "min": 10,
+            "max": 29,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "38d2697cd2cd",
+      "url": "http://kiwisdr1.sdrutah.org:8073",
+      "location": "near Corinne, Utah",
+      "antenna": "TCI 530 Omni Log Periodic",
+      "latitude": 41.59,
+      "longitude": -112.27,
+      "family": "Professional log-periodic",
+      "hf_snapshot": 25,
+      "updated": "Wednesday, 18-Nov-2026 01:22:59 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:21.754713+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "TCI 530 Omni Log Periodic",
+        "snr": "27,23",
+        "date": "Wed Nov 18 01:50:21 2026",
+        "uptime": "142259",
+        "adc_ov": "376"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:21.967186+00:00",
+      "history": {
+        "total_samples": 29,
+        "window_samples": 18,
+        "span_hours": 23.03,
+        "first": "2026-11-16 19:21:53",
+        "last": "2026-11-17 18:23:41",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 18,
+            "median": 24.0,
+            "min": 20,
+            "max": 29,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "9006f25fe52f",
+      "url": "http://ja5fp2.proxy.kiwisdr.com",
+      "location": "Chiba, Japan",
+      "antenna": "EndFed",
+      "latitude": 35.667916,
+      "longitude": 140.171996,
+      "family": "End-fed wire",
+      "hf_snapshot": 33,
+      "updated": "Tuesday, 17-Nov-2026 23:42:10 GMT",
+      "status_error": "HTTP Error 404: Not Found",
+      "snr_error": "HTTP Error 404: Not Found"
+    },
+    {
+      "id": "1862e4d0c3f3",
+      "url": "http://190.123.83.42:8073",
+      "location": "ALPA CORRAL ARGENTINA",
+      "antenna": "DIPOLO-20 40",
+      "latitude": -32.66,
+      "longitude": -64.76,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 26,
+      "updated": "Wednesday, 18-Nov-2026 01:10:56 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:22.435697+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "DIPOLO-20  40 ",
+        "snr": "32,27",
+        "date": "Wed Nov 18 01:50:22 2026",
+        "uptime": "48525",
+        "adc_ov": "403"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:23.230714+00:00",
+      "history": {
+        "total_samples": 14,
+        "window_samples": 14,
+        "span_hours": 13.02,
+        "first": "2026-11-17 09:22:35",
+        "last": "2026-11-17 22:23:47",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 14,
+            "median": 19.0,
+            "min": 16,
+            "max": 28,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "38d2697cbb55",
+      "url": "http://sdr-amradioantennas.com:8071",
+      "location": "Victoria, Australia",
+      "antenna": "T2FD 25m long for 5-30MHz & Inv-L 40m long & 10m high for 0-5MHz",
+      "latitude": -37.762542,
+      "longitude": 145.318152,
+      "family": "Mixed / switched / ambiguous",
+      "hf_snapshot": 23,
+      "updated": "Wednesday, 18-Nov-2026 01:21:57 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:22.232031+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "T2FD 25m long for 5-30MHz & Inv-L 40m long & 10m high for 0-5MHz",
+        "snr": "33,23",
+        "date": "Wed Nov 18 01:50:22 2026",
+        "uptime": "39658",
+        "adc_ov": "1"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:22.696619+00:00",
+      "history": {
+        "total_samples": 1,
+        "window_samples": 1,
+        "span_hours": 0.0,
+        "first": "2026-11-18 01:50:32",
+        "last": "2026-11-18 01:50:32",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 1,
+            "median": 23,
+            "min": 23,
+            "max": 23,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          },
+          "20m": {
+            "n": 1,
+            "median": 7,
+            "min": 7,
+            "max": 7,
+            "ranges_khz": [
+              [
+                14000,
+                14350
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "c4f312a678c9",
+      "url": "http://rx2.wa2zkd.net:8073",
+      "location": "Rockport, Maine",
+      "antenna": "Pixel Loop",
+      "latitude": 44.17,
+      "longitude": -69.08,
+      "family": "Active / small receiving loop",
+      "hf_snapshot": 14,
+      "updated": "Wednesday, 18-Nov-2026 01:30:57 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:22.232031+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "Pixel Loop",
+        "snr": "15,15",
+        "date": "Wed Nov 18 01:50:22 2026",
+        "uptime": "476693",
+        "adc_ov": "51"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:22.798018+00:00",
+      "history": {
+        "total_samples": 133,
+        "window_samples": 24,
+        "span_hours": 23.033333333333335,
+        "first": "2026-11-16 21:35:38",
+        "last": "2026-11-17 20:37:38",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 13.0,
+            "min": 12,
+            "max": 15,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "b83df630c79e",
+      "url": "http://ve3nsv.ddns.net:8074",
+      "location": "Kitchener, Ontario",
+      "antenna": "80m Doublet at 50'",
+      "latitude": 43.403945,
+      "longitude": -80.44038,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 17,
+      "updated": "Wednesday, 18-Nov-2026 01:33:12 GMT",
+      "status_retrieved_utc": "2026-11-18T01:50:23.015493+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "80m Doublet at 50' ",
+        "snr": "28,17",
+        "date": "Wed Nov 18 01:50:22 2026",
+        "uptime": "149642",
+        "adc_ov": "19310"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:50:23.534996+00:00",
+      "history": {
+        "total_samples": 42,
+        "window_samples": 24,
+        "span_hours": 23.031666666666666,
+        "first": "2026-11-16 21:18:59",
+        "last": "2026-11-17 20:20:53",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 12.5,
+            "min": 10,
+            "max": 18,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "402e71d15462",
+      "url": "http://kiwi.web-sdr.net",
+      "location": "Oita,Japan",
+      "antenna": "self-made YouLoop + LAMB-1B",
+      "latitude": 33.5549,
+      "longitude": 131.3159,
+      "family": "Loop (size/type varies)",
+      "hf_snapshot": 25,
+      "updated": "Wednesday, 18-Nov-2026 01:17:25 GMT",
+      "status_error": "HTTP Error 403: Forbidden",
+      "snr_error": "HTTP Error 403: Forbidden"
+    },
+    {
+      "id": "985dad48ecbe",
+      "url": "http://hl5ntr.ddns.net:8074",
+      "location": "Dae_Gu City, South Korea",
+      "antenna": "HF 85M Loop Antenna and 6M Band 6 Ele Yagi & 5/8 GP Antenna",
+      "latitude": 35.888778,
+      "longitude": 128.574964,
+      "family": "Mixed / switched / ambiguous",
+      "hf_snapshot": 29,
+      "updated": "Wednesday, 18-Nov-2026 01:10:52 GMT",
+      "status_retrieved_utc": "2026-11-18T01:55:56.184209+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "HF 85M Loop Antenna and 6M Band  6 Ele Yagi & 5/8 GP Antenna",
+        "snr": "28,28",
+        "date": "Wed Nov 18 01:55:56 2026",
+        "uptime": "29731",
+        "adc_ov": "61730"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:55:57.062321+00:00",
+      "history": {
+        "total_samples": 46,
+        "window_samples": 46,
+        "span_hours": 8.198888888888888,
+        "first": "2026-11-18 02:40:52",
+        "last": "2026-11-18 10:52:48",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 46,
+            "median": 31.0,
+            "min": 27,
+            "max": 35,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          },
+          "20m": {
+            "n": 39,
+            "median": 3,
+            "min": 0,
+            "max": 11,
+            "ranges_khz": [
+              [
+                14000,
+                14350
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "9006f21a85df",
+      "url": "http://zl2ba.proxy.kiwisdr.com",
+      "location": "Masterton, New Zealand",
+      "antenna": "Broadband Flat Top",
+      "latitude": -40.95,
+      "longitude": 175.68,
+      "family": "Other / unspecified",
+      "hf_snapshot": 19,
+      "updated": "Wednesday, 18-Nov-2026 01:20:23 GMT",
+      "status_retrieved_utc": "2026-11-18T01:55:56.133476+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "Broadband Flat Top",
+        "snr": "18,19",
+        "date": "Wed Nov 18 01:55:56 2026",
+        "uptime": "129203",
+        "adc_ov": "0"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:55:56.640308+00:00",
+      "history": {
+        "total_samples": 36,
+        "window_samples": 24,
+        "span_hours": 23.031388888888888,
+        "first": "2026-11-17 15:04:36",
+        "last": "2026-11-18 14:06:29",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 19.0,
+            "min": 17,
+            "max": 22,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "d4e95e8045f3",
+      "url": "http://22337.proxy.kiwisdr.com",
+      "location": "New Zealand, Auckland",
+      "antenna": "80/40 Fan Dipole",
+      "latitude": -36.776771,
+      "longitude": 174.604368,
+      "family": "Dipole / doublet / inverted-V",
+      "hf_snapshot": 18,
+      "updated": "Wednesday, 18-Nov-2026 01:34:11 GMT",
+      "status_retrieved_utc": "2026-11-18T01:55:56.444512+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "80/40 Fan Dipole",
+        "snr": "18,17",
+        "date": "Wed Nov 18 01:55:56 2026",
+        "uptime": "128310",
+        "adc_ov": "9327"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:55:58.518485+00:00",
+      "history": {
+        "total_samples": 168,
+        "window_samples": 168,
+        "span_hours": 14.133055555555556,
+        "first": "2026-11-18 00:43:47",
+        "last": "2026-11-18 14:51:46",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 168,
+            "median": 19.0,
+            "min": 14,
+            "max": 32,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "0804b498628d",
+      "url": "http://191.37.241.167:8073",
+      "location": "Palho\u00e7a, Santa Catarina, Brasil",
+      "antenna": "FIO ESTENDIDO QUASE AO SOLO",
+      "latitude": -27.651058,
+      "longitude": -48.708819,
+      "family": "Other / unspecified",
+      "hf_snapshot": 22,
+      "updated": "Wednesday, 18-Nov-2026 01:31:29 GMT",
+      "status_retrieved_utc": "2026-11-18T01:55:57.112039+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "FIO ESTENDIDO QUASE AO SOLO",
+        "snr": "26,24",
+        "date": "Wed Nov 18 01:55:57 2026",
+        "uptime": "287803",
+        "adc_ov": "0"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:55:57.569711+00:00",
+      "history": {
+        "total_samples": 24,
+        "window_samples": 24,
+        "span_hours": 3.8333333333333335,
+        "first": "2026-11-17 21:59:50",
+        "last": "2026-11-18 01:49:50",
+        "utc_flags": [
+          1
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 24,
+            "median": 24.5,
+            "min": 22,
+            "max": 35,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "98f07b9205c5",
+      "url": "http://alg.twrmon.net:8073",
+      "location": "Gqeberha, South Africa",
+      "antenna": "Wellbrook Magnetic Loop",
+      "latitude": -33.98,
+      "longitude": 25.64,
+      "family": "Active / small receiving loop",
+      "hf_snapshot": 10,
+      "updated": "Wednesday, 18-Nov-2026 01:17:29 GMT",
+      "status_retrieved_utc": "2026-11-18T01:55:57.609189+00:00",
+      "live_status": {
+        "status": "active",
+        "offline": "no",
+        "antenna": "Wellbrook Magnetic Loop",
+        "snr": "11,10",
+        "date": "Wed Nov 18 01:55:57 2026",
+        "uptime": "191622",
+        "adc_ov": "8092"
+      },
+      "snr_retrieved_utc": "2026-11-18T01:55:58.290690+00:00",
+      "history": {
+        "total_samples": 13,
+        "window_samples": 6,
+        "span_hours": 20.019444444444446,
+        "first": "2026-11-17 06:44:30",
+        "last": "2026-11-18 02:45:40",
+        "utc_flags": [
+          0
+        ],
+        "antenna_selectors": [
+          0
+        ],
+        "bands": {
+          "hf": {
+            "n": 6,
+            "median": 10.0,
+            "min": 6,
+            "max": 14,
+            "ranges_khz": [
+              [
+                1800,
+                30000
+              ]
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Snapshot and histories are receiver-system observations, not antenna gain measurements.",
+    "Antenna labels are operator descriptions; switched/mixed installations cannot identify the active antenna.",
+    "Histories use each receiver latest24h; utc=0 is local unspecified time, not simultaneous UTC alignment.",
+    "Sparse activity, propagation, latitude, local noise, filtering, calibration and overload confound ranking.",
+    "Approximate installation grouping uses rounded coordinates and normalized antenna label; it is not proven independence.",
+    "No audio streams, modem trials or controlled A/B antenna swaps were performed."
+  ]
+}

@@ -1,0 +1,14 @@
+Frozen after the original soft-metric screen, before challenge scoring.
+Two Nov17 clean off-air clips; 10 seeds per condition and source = 20 trials.
+All use 0 dB recording/added 300-3300Hz noise over seconds2-6.864.
+Conditions: noise alone; narrowband tone at1453Hz, RMS equal to burst;
+colored noise with Gaussian amplitude peak5x at1460Hz, sigma70Hz;
+impulses (0.5% samples, random polarity, amplitude10x burst RMS);
+linear carrier drift -10 to+10Hz across clip via analytic-signal mixer;
+clock mismatch +100ppm by linear interpolation;
+fading envelope .55+.45*cos(2pi*t), random phase;
+two-path echo .6 amplitude,2ms delay.
+Seed993000+replicate shared across conditions; no per-condition metric tuning.
+Baseline/tone/symbol/combined unchanged. Retrospective exploratory conditions,
+not independent RF validation or an ITU-R F.1487 implementation.
+Common gain prevents clipping; no new WAV corpus retained; record input hashes.

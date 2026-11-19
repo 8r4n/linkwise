@@ -1,0 +1,6 @@
+{
+  "selected": "stable",
+  "time_utc": "2026-11-18T12:59:19.580937+00:00",
+  "reason": "Predeclared stricter candidate rejected2 structured-erasure false frames retained by one-iteration rule; retained49/60 old interfered recoveries and6/6 clean",
+  "stage": "Selected on old RF and synthetic erasure controls; later independent captures reserved"
+}

@@ -1,9 +1,11 @@
-# Draft: Linkwise modem testing with the KiwiSDR network
+# Linkwise Modem Robustness Test Plan
+
+KiwiSDR field measurements, synthetic channel tests, and stock VARA interoperability
 
 Plan ID: LW-MODEM-KIWI-001  
-Revision: 0.9, 17 November 2026
+Revision: 0.11, 18 November 2026
 
-Status: live receive evidence recorded. The controlled campaign with known transmitted payloads and the VOACAP comparison remain unscheduled.
+Status: live receive and limited bench evidence recorded in the lab notes. The first CW bench procedure is specified. Confirmatory bench testing, the controlled known-payload RF campaign, and VOACAP evaluation remain unscheduled.
 
 Presentation rule: all figures, tables, and diagrams in the LaTeX/PDF edition
 use dedicated landscape pages, scaled within both page dimensions with room for
@@ -14,7 +16,9 @@ on extreme downscaling. This rule also applies to future additions.
 
 Use geographically separated KiwiSDR receivers to capture known Linkwise
 transmissions, measure one-way frame recovery under actual HF conditions, and
-build a reproducible decoder regression corpus. Test the native modem first;
+build a reproducible decoder regression corpus. Add controlled synthetic benches
+to isolate the 38 effects in the impairment register, compare stock VARA and Linkwise on
+identical inputs, and qualify receiver countermeasures. Test the native modem first;
 agent chat, global routing, and message-service behavior are outside this plan.
 
 Test whether point-to-point VOACAP predictions improve the choice of band and
@@ -42,12 +46,14 @@ Use three distinct evidence labels:
 
 ## 2. Current implementation and prerequisites
 
-The [modem guide](modem.md) is the implementation baseline. The current decoder
-accepts 48 kHz mono PCM16 or float32 WAVs. Levels 1–3 use a rolling pilot
-search with 0 and ±12 Hz frequency hypotheses. Level 4 uses the fixed 1% RMS
-energy gate and requires an external measurement profile. It handles one frame
-per burst. The audio history is capped at 30 seconds, and the receiver does
-not track sample-clock drift. Preserve these limits in every report.
+The reference checkout is `57f705fefaeacd74b341bc63ad7f3551698b210b`. Record the actual binary hashes and runtime profile for every campaign. The values below come from the pinned [acquisition implementation](https://github.com/8r4n/linkwise/blob/57f705fefaeacd74b341bc63ad7f3551698b210b/rust/src/modem/bw500/scan.rs). The [modem guide](modem.md) describes the surrounding implementation.
+
+| Baseline item | Frozen setting or scope |
+| --- | --- |
+| BW500 levels 1 and 3 | Rolling pilot acquisition at 0 and +/-12 Hz. Threshold 0.65. |
+| BW500 level 2 | Rolling pilot acquisition at 0, +/-12 Hz, and +/-46.875 Hz at 48 kHz. Threshold 0.20. |
+| Input and operating path | WAV replay uses 48 kHz mono PCM16 or float32 with `linkwise decode-wav`. Session tests use the audio-enabled daemon and archived BW500 profile. |
+| Level 4 and other bandwidths | Separate implementation and profile coverage. CW-01 qualification covers stock BW500 level-2 DATA ingress. |
 
 Available now:
 
@@ -631,6 +637,8 @@ A = analysis, I = inspection. Gate IDs retain the definitions in section 9.
 | KW-OBJ-04: decoder regression comparison | T/A, K4 | Enter with a frozen holdout corpus and fixed machine/profile; apply K4 release criteria | Paired gained/lost frames, mismatches, failures, resource costs, and disposition |
 | KW-OBJ-05: diagnostic characterization | T/A, K5 | Enter after K0–K2 with a predeclared single-variable matrix; complete it or record why it stopped | Raw/corrected separation, estimator validity, all variable settings and unresolved limits |
 | KW-OBJ-06: VOACAP prediction skill | T/A, K2–K3 extension | Freeze predictions for the pilot. Qualify the estimator and size the expansion before collecting held-out data | SNR error, exact recovery, availability, and paired held-out scores with clustered intervals |
+| KW-OBJ-07: CW qualification | T/A, CW-01 rev. 1.0 | Calibrate routing and verify level 2 in both roles. Apply all role, condition, negative exposure and activation gates. | Paired binary session outcomes, fallback traces, stock replay and incorrect-output records |
+| KW-OBJ-08: calibrated sensitivity | I/T/A, F.1487 reference profile | Measure profile against declared tolerances. Freeze a recovery curve design before comparing modems. | Per-path traces, calibration record, in-band SNR and exact recovery intervals |
 
 A test result references the objective, phase/gate, plan revision, procedure
 revision, configuration manifest, and raw/reduced evidence. Deviations receive
@@ -840,3 +848,210 @@ Wrong-payload and wrong-hash oracles returned failure, and a nonempty destinatio
 was rejected. The capture launcher passed shell syntax checks; missing profile
 and wrong-checkout guards were tested without opening a receiver. No live
 capture, radio transmission, or FFmpeg conversion was performed in these checks.
+
+## 15. Synthetic bench testing and impairment mitigation
+
+### 15.1 Scope, evidence boundary, and bench tiers
+
+Extend the KiwiSDR study with controlled experiments that explain failures and test countermeasures. The impairment register traces all 38 enumerated effects to IDs IMP01-IMP38, distinct from the capture procedure's step IDs. This is a proposed qualification program. Inclusion does not mean a test has run or a mitigation is implemented. Default to isolated testing without RF transmission; hardware execution requires a separately qualified setup.
+
+Trace failure through propagation, antenna/RF receiver, audio transport, acquisition, demodulation/FEC, exact payload, and session delivery. Record the first observable failed stage. Multiple mechanisms can coexist; do not attribute every miss to low SNR. No receiver algorithm can reconstruct arbitrary information that never arrived or was completely removed.
+
+**Tier A, audio:** deterministic PCM replay for demodulated-audio impairments and software faults. **Tier C, complex baseband:** model propagation before a documented USB/audio conversion; do not treat mono audio as IQ. **Tier H, hardware:** isolated RF/audio hardware-in-the-loop for actual overload, ALC, AGC and device behavior. Synthetic gain envelopes cannot qualify a real front end. KiwiSDR remains field validation, not the source of clean absolute RF sensitivity measurements.
+
+### 15.2 Sources, oracle, and comparison protocol
+
+Use stock VARA-generated signals with known submitted binary payloads and verified stock-reference recovery, plus separately labelled Linkwise-generated PHY fixtures. Include zeros, all-one bytes, ascending/alternating bytes, seeded random bytes, and application examples. Cover supported modes, lengths and control values; publish untested coverage. Use independently known host bytes as the KISS oracle. Compare wire fields only where independently known; baseline Linkwise output alone cannot establish correctness.
+
+Retain untouched sources with pre-roll, guards and post-roll. Record source transmission ID, payload hash, generating modem/version, waveform profile, sample rate/count and WAV hash. Check clipping, missing beginnings and routing defects before admitting sources. Invalid sources are infrastructure failures, not decoder misses.
+
+Split by original transmission and collection session before generating variants. All crops, receiver copies and noise realizations of one transmission stay in the same split. Tune on development data, select on frozen validation data, then confirm on later untouched data. Validation used to revise an algorithm becomes development data for that revision. Seeds do not create independent RF paths.
+
+Freeze binary hashes, commits, flags, dependencies, settings, source split, impairment graph, seeds, primary endpoints, resource budget and stopping rules. Feed stock, production Linkwise and candidate Linkwise identical quantized inputs. Randomize playback, bracket blocks with transport controls, verify endpoint hashes and completion, and retain loopback evidence where feasible. A file hash alone does not prove sample-exact playback. Serialize tests sharing a virtual cable.
+
+### 15.3 Calibration and initial sweep design
+
+For clean generated input define SNR as wanted power / added-noise power over a frozen active interval and stated bandwidth. For off-air input label recorded-burst / added-noise ratio: original noise is already present. Report wanted/interferer ratio separately. Store linear powers, filter response, normalization, actual achieved ratios and uncertainty. Apply a recorded common gain to avoid accidental clipping; never normalize away a deliberate fade.
+
+Proposed screening grid: -20 to +12 dB in 4 dB steps, then 1 dB confirmation steps near the transition. Start with 20 independent source transmissions covering at least 10 payloads per selected mode and 10 realizations per cell. This is a planning minimum, not sufficient statistical power or an instruction to run every factorial combination. Record unavailable modes as untested. Final sample size follows development variability and a frozen power analysis.
+
+Apply impairments in physical order: TX distortion; propagation; received noise/interference; RX filtering, AGC and nonlinearity; sample-clock conversion; transport faults. Injection point matters. Pin GNU Radio/custom model versions and physical-to-normalized unit conversions, including frequency/sample rate, clock epsilon and Doppler times sample period. Independently measure achieved shift, delay, noise power/spectrum, clock ratio and clipping fraction before decoding.
+
+Use ITU-R F.1487 profiles only after reviewing their exact path powers, delays, fading spectra and Doppler definitions against the implementation. The ranges in the impairment register are exploratory project stress tests, not ITU profile definitions. Generic static echoes or fading blocks alone do not qualify a Watterson simulator.
+
+### 15.4 Interactions, ablation, and priorities
+
+First screen single factors with clean controls. Freeze a bounded interaction matrix before validation: IMP11+IMP03 (CW/fading), IMP02+IMP21 (impulse/AGC), IMP05+IMP08 (echo/spread), IMP24+IMP27 (drift/clock), IMP15+IMP20 (adjacent/clipping), IMP29+IMP33 (loss/reacquisition), and IMP36+IMP37 (acceptance/retries). Include benign, transition and severe settings. Single-factor success does not establish interaction robustness.
+
+Separate gate, weighting and acceptance contributions: production baseline; original gated weighting; stricter acceptance alone where applicable; combined candidate. Log accepted path and every fallback attempt. Diversity compares each branch, deployable selection and combining; clean-oracle alignment stays diagnostic. Do not hide wrong outputs behind a larger recovery count.
+
+Priority 1 is IMP11/IMP36/IMP37: prove weighted fallback activation in impaired mixed-stock exchanges. Priority 2 is tuning, drift, clock/resampling and impulse/AGC. Priority 3 is qualified fading/multipath followed by channel-memory/MLSE work if supported by evidence. Diversity is a separate synchronization study. Hardware-only effects await assigned equipment; useful audio tests need not wait.
+
+### 15.5 Endpoints, promotion, and stopping rules
+
+For complete-source trials report expected identities, candidate detections, exact KISS, misses, duplicates, conflicting CRC-valid bodies, wrong host payloads, activation path and CPU/wall time. For sessions add connect time, ordered delivery, retries, duplicate suppression, disconnect/reconnect. Report infrastructure failures, invalid sources, unknown modes and deliberate outages separately. Failed stock transport controls invalidate that comparator block, not preserved independent Linkwise observations.
+
+Report raw counts and paired gains/losses by mode, source, payload, session, receiver and effect. Cluster uncertainty by transmission/session; seeded realizations are not independent field paths. Define a 95% recovery threshold as the lowest tested SNR meeting the frozen criterion and retaining it at higher tested points; report uncertainty and finite-grid limits. Off-air added-noise ratios cannot establish absolute RF sensitivity.
+
+CW-01 defines the first confirmatory margins and analysis. For later experiments, choose practical margins, sample size and endpoint-specific acceptance rules in a revisioned procedure before confirmation. Document inconclusive results and use secondary cells for exploration.
+
+Any unexplained wrong host payload or new unmatched CRC-valid body stops promotion and triggers retained-evidence adjudication. Never discard an output merely because it is not beacon-shaped. Consecutive-iteration CRC checks are correlated, not independent checksums. Begin with 100 independently seeded structured negative windows plus 10 hours of other negative material spanning quiet noise and interference; report category, duration, windows and attempts. Zero events is not a guarantee. An approximate 3/T upper 95% Poisson rate bound requires a justified event model; otherwise report stratified counts/exposure without that inference.
+
+Promotion also requires both mixed-stock roles on clean and frozen impaired sessions, independently known binary bytes, retries, disconnect/reconnect and telemetry proving the changed path was exercised. Freeze resource budgets and measure device deadlines separately from offline throughput. Preserve stock waveform, FEC, interleaver, framing, controls and payload semantics. Beacon replay alone cannot qualify general interoperability.
+
+### 15.6 Reproduction, readiness, and reporting
+
+Run manifests include tier/effect IDs; source/split IDs; independent oracle; file/binary hashes; domains/rates; ordered transforms with units; implementation versions and seeds; ratio definitions and achieved measurements; modem settings; stock/playback/loopback checks; all outputs and exclusions; negative exposure; resources; statistical plan and stopping decisions. Preserve interrupted and failed runs. Large audio may reside in a verified retained archive with location and hash; source originals must not be deleted before verified cloud transfer. Cloud availability and local download eviction are separate steps.
+
+Readiness gates: independently calibrate models; pass zero-impairment identity and transport controls; screen development data; freeze validation; confirm later; qualify impaired mixed-stock sessions; then consider promotion. Decoder failure is not proof of a correct impairment model. Existing `tools/soft-metric-study/` scripts are research prototypes, not a completed 38-effect harness. Assign an owner and record readiness for each effect before execution.
+
+Record test outcomes against the frozen procedure and link the original denominators and limitations. Earlier acquisition and interference experiments are documented in the [lab notes](../../lab-notes/lab-notes.pdf) and [acceptance archive](../../tools/soft-metric-study/results/acceptance-2026-11-18/environment.json).
+
+### 15.7 Authoritative technical references
+
+References checked on 18 November 2026; freeze the actual model/software editions used:
+
+- [ITU-R F.1487-0](https://www.itu.int/rec/R-REC-F.1487-0-200005-I/en): HF modem channel-simulator test framework; exact profile parameters require reviewed implementation.
+- [ITU-R P.372](https://www.itu.int/rec/R-REC-P.372/en): radio-noise framework; freeze the edition used for quantitative noise modeling.
+- [GNU Radio channel models](https://www.gnuradio.org/doc/doxygen/page_channels.html): available blocks and parameter semantics; pin installed version and verify unit conversion.
+- [ITU-R P.533](https://www.itu.int/dms_pubrec/itu-r/rec/p/R-REC-P.533-14-201908-I%21%21PDF-E.pdf): HF circuit prediction context, distinct from synthetic attenuation testing.
+
+## 16. Research decisions and readiness
+
+| Research decision | Primary endpoint | Evidence needed for the decision | Readiness and procedure |
+| --- | --- | --- | --- |
+| CW robustness and release eligibility | Paired exact mixed-session completion under CW, separately in both Linkwise roles | Stock-generated level-2 replay, fallback telemetry, binary delivery, independent negative exposure and clean/AWGN noninferiority | First priority. Ordinary mixed transfers demonstrated. Live CW routing and level-2 activation preflight pending. See CW-01. |
+| Calibrated HF sensitivity | Exact frame recovery versus in-band SNR for a named channel profile | Qualified simulator, independent frames, paired modem inputs and uncertainty at the 95% recovery point | Simulator calibration and run pending. See the simulator calibration section. |
+| KiwiSDR field recovery | Exact known-payload recovery per confirmed transmission and usable capture | Frozen oracle, transmit monitor, continuity checks and distinct session blocks | Exploratory reception recorded. Controlled RF campaign unscheduled. See K0–K5 and the field procedure. |
+| VOACAP selection skill | Held-out paired Brier score difference versus band-and-hour baseline | Frozen path/hour predictions, availability, censored SNR and date/path-aware uncertainty | Evaluation design specified. Schedule and estimator qualification pending. |
+| Other mitigations | Effect-specific exact recovery, wrong outputs and processing cost | Single-factor screen, paired interaction tests and an independent validation set | Research backlog. See the impairment register. |
+
+## 17. CW-01 persistent interference procedure, revision 1.0
+
+### 17.1 Research question and test article
+
+Test whether gated tone weighting with two consecutive identical CRC-valid turbo outputs improves exact BW500 exchanges under persistent CW in both mixed VARA roles. Compare the pinned Linkwise baseline against the combined candidate with stock VARA HF 4.9.1 as the peer. Stock is also an independent replay comparator. Results apply to the frozen configuration and channel conditions. The bench lead owns the manifest and verdict, the operator owns routing and calibration, and a reviewer verifies eligibility, byte matches and analysis. Assign names in the run manifest.
+
+Capture fresh stock-generated level-2 bursts from known host bytes. Use independent payload seeds for development and confirmation. Alternate fixed acquisition checks with diverse binary traffic containing zero and 255 bytes, and retain the full stock waveform and oracle. Verify rate and frame identity from the captured stock signal and independent host records. A BW500 selection alone does not establish that level 2 was used. If the stock session cannot exercise level 2, report that configuration as blocked and retain the relevant replay evidence.
+
+### 17.2 Stimuli, calibration, and allocation
+
+Use 48 kHz mono PCM16 as the exchange format for offline replay. Preserve two seconds of lead and at least three seconds of trailing guard around the complete stock burst. Measure wanted RMS over the active DATA frame including its in-frame pilots, using boundaries fixed from the clean source. Inject a continuous 1453 Hz tone and Gaussian noise filtered to 300–3300 Hz. The primary condition is 0 dB wanted-to-tone power and 0 dB wanted-to-added-noise power over that same interval. Draw the starting tone phase uniformly per pair. Apply one common scale for 0.9 full-scale peak headroom and check the PCM for clipping. Verify tone frequency within 0.5 Hz and each achieved power ratio within 0.25 dB. Use the same calibration check for the live injected components. Save the separate component powers and endpoint loopback. The clean stratum uses zero injected impairment. The AWGN stratum uses 0 dB wanted-to-added-noise power in the same band without a tone. An exploratory pilot may additionally test -6 and +6 dB wanted-to-tone ratios. These are project test settings.
+
+On the live wired or virtual bench inject the condition at Linkwise audio ingress during the forward stock DATA leg, including its retries. Keep setup, return audio, and disconnect on clean routing. The intended DATA interval and continuous tone phase across that interval are bench controls. Timing and level information used by the impairment injector must remain unavailable to the decoder. Qualify the injection point using loopback and baseline/candidate telemetry before confirmation. Validate stock DATA level, realized power ratios, active interval coverage, and exact payload oracle in both roles. Hash actual inbound PCM because live sessions diverge after retransmission. Identical input applies to replay, while live sessions share a matched impairment allocation and a common procedure.
+
+A confirmatory pair consists of one baseline and one candidate session with the same payload, condition, role, and generator seed, started from reset state. Balance and randomize order within run blocks. Each session sends 13 bytes, returns 6 bytes, sends a second 13 bytes, and confirms both disconnects and a fresh exact transfer after reconnect. Arrange for stock to send the two 13-byte payloads in either role, using an explicit role-aware script rather than assuming the current caller-first harness does so. Score a run as success only if all expected bytes arrive once in order and the transaction and reconnect finish within 180 seconds. Keep recorder and bridge faults separate from valid timeout or missed decode. Include replay startup controls before and after each order block.
+
+### 17.3 Run sequence and tooling checks
+
+1. Pin the baseline and isolated candidate builds, stock executable, solver/runner and profile hashes, audio devices and stock gains. Verify the checked-out baseline with `git rev-parse HEAD` and archive the clean tree status with `git status --porcelain=v1`. Keep candidate and stock identity in every result.
+2. Start the isolated audio bridge and confirm clean exact delivery in both roles. The existing driver can exercise the clean smoke path using the commands below. Use an unused run directory and an already configured isolated stock bridge. The current driver sends the first payload from the caller, so these commands validate the bench transport in both roles.
+3. Run development with at least 20 paired CW sessions per role and clean and AWGN routing checks. Record mode and weighting activation, collect stock WAVs, and estimate paired gains, losses and infrastructure failure rates. Validate the separately implemented role-aware CW injector and frame/host scorer against known pass, intentional missed-frame, duplicate, and wrong-payload examples. Existing replay and negative prototype scripts provide reference implementations. Confirmation requires these adapters and successful smoke results.
+4. Freeze the confirmation run manifest with payload hashes, all allocations, numerical margins, planned pair counts and the scheduled retry diagnostic. Record the required one-time retry in a separate diagnostic subset with stock DATA deliberately erased once and exact delivery subsequently verified. Keep that subset out of the CW effectiveness estimate.
+5. Replay each quantized stock fixture through all three receivers in randomized blocks and score exact decoded KISS payloads with the independent oracle. Keep unmatched CRC-valid bodies and wrong host payloads as separate rows. Run the paired mixed sessions separately and score from the expected host streams and disconnect/reconnect logs. Report valid sessions without fallback activation in the assigned denominator. Retain all orphans, invalid blocks and reasons. Accept only prespecified replacements for verified transport faults, independent of success.
+6. Run the negative panel in the next section. Apply the decision rules to the paired session results, safety panel and replay diagnostics. Archive one row per allocation with role, stratum, pair and block IDs, timings, diagnostics and disposition. Publish the raw gain/loss counts, confidence bounds and ineligible allocation counts alongside the decision.
+
+```sh
+python3 tools/test-vara-interop.py linkwise-caller "$RUN/clean-caller" \
+  --modem "$MODEM" --profile "$PROFILE" --stock-bridge-base "$BRIDGE_PORT" \
+  --bandwidth 500 --payload-length 13 --reply-length 6 \
+  --verify-disconnect --verify-reconnect
+python3 tools/test-vara-interop.py linkwise-responder "$RUN/clean-responder" \
+  --modem "$MODEM" --profile "$PROFILE" --stock-bridge-base "$BRIDGE_PORT" \
+  --bandwidth 500 --payload-length 13 --reply-length 6 \
+  --verify-disconnect --verify-reconnect
+```
+
+### 17.4 Sample size, acceptance and stopping
+
+The primary unit is one fresh paired session per role and condition from each independent reset block. Use a distinct payload draw and impairment seed per block. Frames, retries, and rereplays are diagnostic measurements within a block. If operations share state across nominal blocks, revise the design before confirmation so the analysis unit reflects the actual independent allocation. Use the development counts to size each CW role for 90% probability of clearing the rule below under the planned effect and paired discordance rates. Power the four clean/AWGN role strata separately. Calculate and publish sample sizes and assumptions before starting. Report an unaffordable or underpowered campaign as exploratory.
+
+For each role and stratum, divide candidate-only successes (gains) and baseline-only successes (losses) by the number of valid pairs. The paired improvement is the gain proportion minus the loss proportion. Compute a conservative one-sided 95% lower bound by subtracting the exact one-sided 97.5% upper binomial bound for losses from the exact one-sided 97.5% lower bound for gains. Set the lower gain bound to zero when there are no gains and the upper loss bound to one when every pair is a loss. This bound uses independent pairs and remains valid when gain and loss counts within a pair are mutually exclusive. With zero gains and zero losses, this neutral result needs at least 183 independent pairs per stratum to clear a -2 point lower bound. Freeze sample size from pilot discordance and planned power rather than using 183 as a universal sample size.
+
+- **Effectiveness:** the lower bound must exceed +5 percentage points for each CW role. This is a minimum supported gain. Both role tests must pass.
+- **Regression:** each separate clean and AWGN stratum for each role must clear a -2 percentage point lower bound. The joint verdict requires every stratum to pass. Pooled summaries are descriptive.
+- **Path coverage:** require at least 10 exact completed CW candidate sessions per role with an accepted level-2 weighted fallback. Replay must exercise the same candidate path on independently known stock DATA. Report activation across all valid candidate sessions.
+- **False acceptance:** at least 100 new structured windows with genuine pilots and erased DATA, plus 10 hours spanning quiet noise, CW and overlapping traffic. Freeze scenario quotas and retain exposure by category. A new unexplained CRC-valid body or wrong host payload stops promotion. Report outcomes per window, hour and fallback attempt with denominators. Zero events only bounds risk under the stated exposure and event model.
+- **Operational gates:** exact binary delivery in both roles, observed retry and reconnect coverage, and real-time processing on the declared target host. Freeze host resource ceilings and audio logging overhead before confirmation. An ingress underrun or an audio deadline miss attributable to the candidate fails the runtime gate.
+
+Stop on the planned pair counts or for a recorded routing, correctness or safety failure. Publish unresolved infrastructure and underpowered results as inconclusive. A valid loss, timeout, failure to activate or wrong output belongs in the assigned denominator. The qualification applies only to the tested scenario, versions, modes and hardware. Study designs and blocking guidance are available in the [NIST engineering statistics handbook](https://www.itl.nist.gov/div898/handbook/pri/section3/pri3.htm).
+
+## 18. Impairment register
+
+The 38 entries describe the broader research program. CW-01 is the first focused qualification procedure.
+
+### 18.1 Natural propagation and noise
+
+| Bench effect | Proposed sweep and countermeasure | Tier / required evidence |
+| --- | --- | --- |
+| IMP01 Weak signal | Calibrated AWGN and separately labelled colored noise; compare acquisition and soft-metric calibration. | A/C; candidate recall and exact recovery versus declared noise ratio. |
+| IMP02 Lightning/static | Measured static and seeded 0.1-20 ms impulses at 3-30 times signal RMS; compare blanking, clipping, confidence reduction. | A; impulse location, erased fraction and clean regressions. |
+| IMP03 Slow fading | Apply 0-40 dB fades lasting 0.1-10 s at different frame positions; test local reliability and receiver selection. | C; preserve depth, duration and average path power. |
+| IMP04 Rapid fading/scintillation | Start with 0.1-10 Hz fading rates; compare channel-estimation windows and tracking. | C; saved amplitude/phase process and seeds. |
+| IMP05 Multipath | Sweep 0-10 ms delay, -20 to 0 dB echo/direct ratios and phase; test equalization, then MLSE if memory warrants it. | C; channel estimate, noise enhancement and exact output; MLSE remains proposed. |
+
+| Bench effect | Proposed sweep and countermeasure | Tier / required evidence |
+| --- | --- | --- |
+| IMP06 Selective fading | Move notches over tones/groups; compare bounded channel-aware soft metrics. | C; notch width, depth, variation and per-tone confidence. |
+| IMP07 Doppler shift | Sweep constant offsets over +/-100 Hz, refine near failure; test coarse/fine frequency acquisition. | C; realized CFO, recall and search cost. |
+| IMP08 Doppler spread | Independently vary path phase/frequency; test tracking and time-varying equalization. | C; separate common CFO from spread; reviewed F.1487 profiles. |
+| IMP09 Polarization/nulls | Model correlated branch fades; collect simultaneous antennas; test selection before combining. | C/H/field; no clean-oracle timing/CFO in primary diversity test. |
+| IMP10 Absorption/no path | Attenuate through outage; test honest no-decode behavior and separate VOACAP band/hour/site selection. | C/field; attenuation cannot validate a propagation forecast or recover an absent signal. |
+
+### 18.2 Manmade interference
+
+| Bench effect | Proposed sweep and countermeasure | Tier / required evidence |
+| --- | --- | --- |
+| IMP11 Persistent carriers | Sweep single/multiple CW frequencies and wanted/interferer ratios -20 to +20 dB; compare gated tone weighting. | A/C; activation, exact gains/losses and unmatched bodies. |
+| IMP12 Intermittent/drifting CW | Vary duty, onset and drift; test time-local interference estimates. | A/C; frozen activation criteria and ordinary-frame regression. |
+| IMP13 Broadband electrical noise | Mix measured switching-supply/computer noise; test robust estimates and site selection. | A/field; spectrum, nonstationarity and achieved ratio. |
+| IMP14 Periodic impulses | Sweep 50/60 Hz-related and unrelated pulse rates, widths and symbol phase; test suppression/reliability weighting. | A; separate periodic effects from random IMP02 impulses. |
+
+| Bench effect | Proposed sweep and countermeasure | Tier / required evidence |
+| --- | --- | --- |
+| IMP15 Adjacent traffic | Sweep spacing, bandwidth and power; compare filtering and edge-tone confidence. | C/H; actual filter response and lost wanted energy. |
+| IMP16 Co-channel traffic | Mix speech/independent digital traffic across power and overlap; test rejection and receiver selection. | A/C; no assumed separation of arbitrary equal-power signals. |
+| IMP17 Overlapping VARA | Mix independent stock frames over start-time, CFO and power grids; test competing acquisition hypotheses. | C; both identities, duplicates, hybrid and incorrect outputs. |
+| IMP18 Out-of-band blockers | Controlled RF blockers; compare preselection, attenuation and gain. | H required; audio injection does not qualify blocking/intermodulation. |
+
+### 18.3 Hardware and receiver distortion
+
+| Bench effect | Proposed sweep and countermeasure | Tier / required evidence |
+| --- | --- | --- |
+| IMP19 TX compression/ALC | Simulate nonlinearities, then vary actual drive/ALC; prefer correct setup over compensating distortion. | C then H; compression, occupied spectrum and exact payload. |
+| IMP20 RX/ADC clipping | Sweep headroom and clipped fraction; compare diagnostics and bounded reconstruction. | A/H; retain unclipped oracle and irreversible-loss limits. |
+| IMP21 AGC pumping | Apply gain envelopes and interferers before AGC; compare fixed gain, AGC settings and normalized metrics. | A proxy/H qualification; attack/release and gain recovery. |
+| IMP22 Passband/ripple | Sweep edges, ripple, notches and group delay; test validation and channel estimation. | A/C; distinguish compensation from completely removed tones. |
+
+| Bench effect | Proposed sweep and countermeasure | Tier / required evidence |
+| --- | --- | --- |
+| IMP23 Tuning/sideband/routing | Offset, invert, select wrong channel or silence; test bounded hypotheses and explicit diagnostics. | A/C; route failures remain separate from RF sensitivity. |
+| IMP24 Drift/phase noise | Sweep ramps and seeded phase processes; test pilot-loop bandwidths. | C; separate oscillator effects from IMP07/IMP08. |
+| IMP25 Antenna/feed faults | Attenuation/intermittency proxies, then inspect feeds and compare simultaneous measurements. | H/field; audio proxies cannot qualify antennas or feedlines. |
+| IMP26 Receiver processing | Replay through noise reduction, auto-notch and speech processing; establish modem-safe settings. | A proxy/H actual configuration; verify feature states. |
+
+### 18.4 Transport, decoder, and session faults
+
+| Bench effect | Proposed sweep and countermeasure | Tier / required evidence |
+| --- | --- | --- |
+| IMP27 Clock mismatch | +/-10, 50, 100, 200 ppm and drift; test timing tracking/adaptive resampling. | A/C; long sequences and achieved duration/clock ratio. |
+| IMP28 Resampling/aliasing | Vary sample rates and filters including poor conversions; use qualified reference. | A; sample mapping and spectral integrity. |
+| IMP29 Packet/sample faults | Delete, duplicate or replace 1-100 ms blocks; test timestamp-aware erasures and reacquisition. | A/transport; preserve gaps, never silently concatenate. |
+| IMP30 Underruns/stalls | Stress CPU/buffers during actual playback; test buffering/deadlines. | A with device loopback; underrun and timing telemetry. |
+| IMP31 Codec/quantization/hum | Vary bit depth, chosen codecs, hum and crosstalk; prefer verified PCM. | A; codec versions, levels and transform order. |
+| IMP32 Truncation/startup | Crop start/end and vary pre-roll/listener startup; test buffering and partial-frame limits. | A; deliberate partial frames distinct from complete-source trials. |
+
+| Bench effect | Proposed sweep and countermeasure | Tier / required evidence |
+| --- | --- | --- |
+| IMP33 Acquisition/search defects | Sweep timing, CFO and chunk boundaries; test continuous search and separate supplied-alignment diagnostic. | A/C; candidate traces, misses and CPU cost. |
+| IMP34 Wrong soft evidence | Perturb channel/noise estimates and metric scale; test bounded likelihoods and calibration. | A/C; confidently wrong evidence and exact outcomes. |
+| IMP35 FEC/framing/unpacking | Stock binary fixtures across supported modes/lengths/controls; compare independent oracle. | A; exact KISS, known wire fields; no ASCII acceptance filter. |
+| IMP36 False acceptance | Noise, genuine pilots with erased DATA, interferers and competing signals; test stricter FEC acceptance. | A/C; CRC-valid bodies and wrong host payloads separately. |
+| IMP37 Session/ARQ | Lose ACKs, corrupt DATA, collide turns, retry and reconnect; test mixed stock roles. | Isolated A bench; exact ordered delivery, duplicates and recovery. |
+| IMP38 Unsupported signal | Mix supported/unsupported modes and non-VARA signals; test explicit unknown classification. | A/field; unknown traffic is not automatically a VARA miss. |
+
+## 19. Reference HF simulator calibration
+
+Start with the F.1487 Annex 3 section 3.2 mid-latitude moderate profile. Use two independent complex Gaussian fading paths with equal mean power, zero mean frequency shift, delays of 0 and 1.0 ms, and Gaussian Doppler spread of 0.5 Hz (2 sigma) per path. Normalize each path's ensemble mean power to one half of the combined reference power. Inject band-limited Gaussian noise after the summed paths. Before comparing modems, verify individual path delay with a known pulse and fading frozen, then export per-path process traces from two 1,200-second independent runs. Fit each trace's Doppler spectrum and compare the measured spread and mean shift to the reference. Check cross-correlation at zero lag and across lags of plus or minus 10 seconds. Inspect the Gaussian spectral fit and archive the fit method, raw traces and uncertainty.
+
+Project calibration tolerances are differential delay 1.00 ms within one 48 kHz sample, mean path-power imbalance within 0.25 dB, per-path Doppler spread 0.50 Hz within 0.05 Hz, centre shift within 0.02 Hz, and absolute normalized cross-correlation below 0.15 over the stated lag range. Verify achieved SNR within 0.25 dB at the decoder input using a common 300–3300 Hz measurement filter and saved signal-only/noise-only branches. Declare the filter and its effective noise bandwidth. Evaluate SNR using the ensemble wanted power and fixed noise scale. Preserve individual fades and report calibration uncertainty. Commissioning checks are prospective. F.1487 supplies the channel parameters. The tolerances, commissioning exposure and exact-payload endpoint are Linkwise test choices. [ITU-R F.1487, Annexes 1 and 3](https://www.itu.int/dms_pubrec/itu-r/rec/f/R-REC-F.1487-0-200005-I!!PDF-E.pdf)

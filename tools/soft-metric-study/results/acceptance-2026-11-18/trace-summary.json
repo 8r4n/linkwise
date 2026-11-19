@@ -1,0 +1,60 @@
+[
+  {
+    "case": "counterexample",
+    "frames": [
+      {
+        "level": 2,
+        "start": 96048,
+        "wire_sha256": "196289e814c3588bc38dd1c44cce1c0a97e16cc28e663a52150a522b7b46798d",
+        "generic_kiss": false
+      }
+    ],
+    "valid_iterations": [
+      "FEC,3,0,true,2a51f174086fe64b,0.370893661,0"
+    ]
+  },
+  {
+    "case": "interfered-nonrecovery-control",
+    "frames": [],
+    "valid_iterations": []
+  },
+  {
+    "case": "clean-control",
+    "frames": [
+      {
+        "level": 2,
+        "start": 96000,
+        "wire_sha256": "da839fea1c18c24ecb898fc5b0e24611f91b389f4208bd28e50b49df40196c7a",
+        "generic_kiss": true
+      }
+    ],
+    "valid_iterations": [
+      "FEC,11,2,true,7bab101f1f7ab9dd,0.858117853,12",
+      "FEC,11,3,true,7bab101f1f7ab9dd,0.858117853,0",
+      "FEC,11,4,true,7bab101f1f7ab9dd,0.858117853,0",
+      "FEC,11,5,true,7bab101f1f7ab9dd,0.858117853,0",
+      "FEC,11,6,true,7bab101f1f7ab9dd,0.858117853,0",
+      "FEC,11,7,true,7bab101f1f7ab9dd,0.858117853,0",
+      "FEC,11,8,true,7bab101f1f7ab9dd,0.858117853,0"
+    ]
+  },
+  {
+    "case": "interfered-positive-control",
+    "source": "warrenton-7105-overlap-frame-2",
+    "seed": 996160,
+    "frames": [
+      {
+        "wire_sha256": "a8e327a42cfebbdea86d5b53b76437a14c7a754ed322b1847bf414082dbe3356"
+      }
+    ],
+    "valid_iterations": [
+      "FEC,1,2,true,7e7786b9a0962a0f,0.856517476,6",
+      "FEC,1,3,true,7e7786b9a0962a0f,0.856517476,0",
+      "FEC,1,4,true,7e7786b9a0962a0f,0.856517476,0",
+      "FEC,1,5,true,7e7786b9a0962a0f,0.856517476,0",
+      "FEC,1,6,true,7e7786b9a0962a0f,0.856517476,0",
+      "FEC,1,7,true,7e7786b9a0962a0f,0.856517476,0",
+      "FEC,1,8,true,7e7786b9a0962a0f,0.856517476,0"
+    ]
+  }
+]

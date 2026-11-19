@@ -1,0 +1,636 @@
+{
+  "version": "VARA HF v4.9.1",
+  "transport_controls_pass": 6,
+  "transport_controls": 6,
+  "comparator_qualified": true,
+  "new_clean_pass": 6,
+  "new_clean": 6,
+  "rows": [
+    {
+      "name": "clean-0",
+      "kind": "transport_control",
+      "source": null,
+      "site": null,
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "clean-1",
+      "kind": "transport_control",
+      "source": null,
+      "site": null,
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "mid-0",
+      "kind": "transport_control",
+      "source": null,
+      "site": null,
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "mid-1",
+      "kind": "transport_control",
+      "source": null,
+      "site": null,
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "end-0",
+      "kind": "transport_control",
+      "source": null,
+      "site": null,
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "end-1",
+      "kind": "transport_control",
+      "source": null,
+      "site": null,
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "source-0",
+      "kind": "source_clean",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "source-1",
+      "kind": "source_clean",
+      "source": "warrenton-7105-overlap-frame-1",
+      "site": "warrenton",
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "608f471f8da65288bc9d844060f1cd7581bc30d15bdc36000df306df09a652b5"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "source-2",
+      "kind": "source_clean",
+      "source": "warrenton-7105-overlap-frame-5",
+      "site": "warrenton",
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "804c4971b5c835101b319437b6958b43b8b742896f9d3059e6d3def83aa4c51b"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "source-3",
+      "kind": "source_clean",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "23c9ca33a2fec62a16bd044023ee316b30fddfe3950990bf5cd3e3c27c6e338e"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "source-4",
+      "kind": "source_clean",
+      "source": "westminster-7105-overlap-frame-3",
+      "site": "westminster",
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "source-5",
+      "kind": "source_clean",
+      "source": "westminster-7105-overlap-frame-0",
+      "site": "westminster",
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "40132889ce351c4303a47e3ed533155d45baf1c7cc734abf72d659f42b436df5"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "best-0-noise--08-0",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "noise",
+      "snr": -8,
+      "seed": 996000,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-0-noise--08-1",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "noise",
+      "snr": -8,
+      "seed": 996001,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-0-noise--04-0",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "noise",
+      "snr": -4,
+      "seed": 996080,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-0-noise--04-1",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "noise",
+      "snr": -4,
+      "seed": 996081,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-0-noise-+00-0",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "noise",
+      "snr": 0,
+      "seed": 996160,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "best-0-noise-+00-1",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "noise",
+      "snr": 0,
+      "seed": 996161,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "best-0-noise-+04-0",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "noise",
+      "snr": 4,
+      "seed": 996240,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "best-0-noise-+04-1",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "noise",
+      "snr": 4,
+      "seed": 996241,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "best-0-tone-+00-0",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "tone",
+      "snr": 0,
+      "seed": 996160,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "best-0-tone-+00-1",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "tone",
+      "snr": 0,
+      "seed": 996161,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "best-0-echo-+00-0",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "echo",
+      "snr": 0,
+      "seed": 996160,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "best-0-echo-+00-1",
+      "kind": "impaired",
+      "source": "warrenton-7105-overlap-frame-2",
+      "site": "warrenton",
+      "condition": "echo",
+      "snr": 0,
+      "seed": 996161,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "best-3-noise--08-0",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "noise",
+      "snr": -8,
+      "seed": 999000,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-3-noise--08-1",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "noise",
+      "snr": -8,
+      "seed": 999001,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-3-noise--04-0",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "noise",
+      "snr": -4,
+      "seed": 999080,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-3-noise--04-1",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "noise",
+      "snr": -4,
+      "seed": 999081,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-3-noise-+00-0",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "noise",
+      "snr": 0,
+      "seed": 999160,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-3-noise-+00-1",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "noise",
+      "snr": 0,
+      "seed": 999161,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-3-noise-+04-0",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "noise",
+      "snr": 4,
+      "seed": 999240,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "23c9ca33a2fec62a16bd044023ee316b30fddfe3950990bf5cd3e3c27c6e338e"
+      ],
+      "baseline": 0,
+      "tone": 1,
+      "gated": 0
+    },
+    {
+      "name": "best-3-noise-+04-1",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "noise",
+      "snr": 4,
+      "seed": 999241,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "best-3-tone-+00-0",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "tone",
+      "snr": 0,
+      "seed": 999160,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-3-tone-+00-1",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "tone",
+      "snr": 0,
+      "seed": 999161,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-3-echo-+00-0",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "echo",
+      "snr": 0,
+      "seed": 999160,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    },
+    {
+      "name": "best-3-echo-+00-1",
+      "kind": "impaired",
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "echo",
+      "snr": 0,
+      "seed": 999161,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0
+    }
+  ],
+  "cells": {
+    "noise:-8": {
+      "trials": 4,
+      "stock_exact": 0,
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0,
+      "stock_additional": 0
+    },
+    "noise:-4": {
+      "trials": 4,
+      "stock_exact": 0,
+      "baseline": 0,
+      "tone": 0,
+      "gated": 0,
+      "stock_additional": 0
+    },
+    "noise:0": {
+      "trials": 4,
+      "stock_exact": 2,
+      "baseline": 2,
+      "tone": 2,
+      "gated": 2,
+      "stock_additional": 0
+    },
+    "noise:4": {
+      "trials": 4,
+      "stock_exact": 3,
+      "baseline": 3,
+      "tone": 4,
+      "gated": 3,
+      "stock_additional": 0
+    },
+    "tone:0": {
+      "trials": 4,
+      "stock_exact": 0,
+      "baseline": 0,
+      "tone": 2,
+      "gated": 2,
+      "stock_additional": 0
+    },
+    "echo:0": {
+      "trials": 4,
+      "stock_exact": 1,
+      "baseline": 2,
+      "tone": 2,
+      "gated": 2,
+      "stock_additional": 0
+    }
+  }
+}

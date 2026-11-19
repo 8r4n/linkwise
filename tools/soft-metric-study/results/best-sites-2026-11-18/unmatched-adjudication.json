@@ -1,0 +1,36 @@
+[
+  {
+    "trial": {
+      "source": "westminster-7105-frame-1",
+      "site": "westminster",
+      "condition": "tone",
+      "snr": 0,
+      "seed": 999166,
+      "method": "gated",
+      "exact": 0,
+      "kiss_exact": 0,
+      "unmatched": 1,
+      "seconds": 0.06996158300000133,
+      "gate_attempts": 2,
+      "gate_active": 2,
+      "input_sha256": "3cab9b83b1b010c1bb94b6f9893c392b05f24d039d2d69b51ebef2765941b7c3",
+      "recording_added_noise_ratio_db": 0.0,
+      "common_gain": 1.0
+    },
+    "outputs": [
+      {
+        "level": 2,
+        "start": 96048,
+        "wire_sha256": "196289e814c3588bc38dd1c44cce1c0a97e16cc28e663a52150a522b7b46798d",
+        "generic_kiss": false,
+        "body_bit_distance": 39,
+        "body_length": 23,
+        "expected_body_length": 23,
+        "matches_expected": false
+      }
+    ],
+    "wav": "counter-0.wav",
+    "wav_sha256": "94ae4b712151412a6979d3542f0c5fa341fb5821620c262ee416273cb0317ae7",
+    "expected_sha256": "23c9ca33a2fec62a16bd044023ee316b30fddfe3950990bf5cd3e3c27c6e338e"
+  }
+]

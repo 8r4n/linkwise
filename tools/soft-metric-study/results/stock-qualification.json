@@ -1,0 +1,158 @@
+{
+  "version": "VARA HF v4.9.1",
+  "startup_seconds": 15,
+  "controls_pass": 6,
+  "controls": 6,
+  "qualified": true,
+  "rows": [
+    {
+      "name": "clean-0",
+      "known_truth": true,
+      "expected": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "linkwise": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "stock": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "stock_matches": 1,
+      "stock_missing": [],
+      "stock_additional": [],
+      "clean_pass": true
+    },
+    {
+      "name": "clean-1",
+      "known_truth": true,
+      "expected": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "linkwise": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "stock": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "stock_matches": 1,
+      "stock_missing": [],
+      "stock_additional": [],
+      "clean_pass": true
+    },
+    {
+      "name": "mid-0",
+      "known_truth": true,
+      "expected": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "linkwise": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "stock": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "stock_matches": 1,
+      "stock_missing": [],
+      "stock_additional": [],
+      "clean_pass": true
+    },
+    {
+      "name": "mid-1",
+      "known_truth": true,
+      "expected": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "linkwise": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "stock": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "stock_matches": 1,
+      "stock_missing": [],
+      "stock_additional": [],
+      "clean_pass": true
+    },
+    {
+      "name": "end-0",
+      "known_truth": true,
+      "expected": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "linkwise": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "stock": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "stock_matches": 1,
+      "stock_missing": [],
+      "stock_additional": [],
+      "clean_pass": true
+    },
+    {
+      "name": "end-1",
+      "known_truth": true,
+      "expected": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "linkwise": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "stock": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "stock_matches": 1,
+      "stock_missing": [],
+      "stock_additional": [],
+      "clean_pass": true
+    },
+    {
+      "name": "capture-0",
+      "known_truth": false,
+      "expected": [
+        "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+        "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+        "efb89892d39f51bd04bfb7a8fe28060ab7388d7beee7e7bfb4f72a6afeae5735"
+      ],
+      "linkwise": [
+        "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+        "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+        "efb89892d39f51bd04bfb7a8fe28060ab7388d7beee7e7bfb4f72a6afeae5735"
+      ],
+      "stock": [
+        "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+        "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+        "efb89892d39f51bd04bfb7a8fe28060ab7388d7beee7e7bfb4f72a6afeae5735"
+      ],
+      "stock_matches": 3,
+      "stock_missing": [],
+      "stock_additional": [],
+      "clean_pass": false
+    },
+    {
+      "name": "capture-1",
+      "known_truth": false,
+      "expected": [
+        "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+        "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+        "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1"
+      ],
+      "linkwise": [
+        "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+        "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+        "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1"
+      ],
+      "stock": [
+        "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+        "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+        "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1"
+      ],
+      "stock_matches": 3,
+      "stock_missing": [],
+      "stock_additional": [],
+      "clean_pass": false
+    }
+  ],
+  "limitation": "Fresh references are Linkwise decoded observations, not an independently known transmitted-frame denominator. Qualification applies to this replay run only; no claim that startup timing caused prior misses."
+}

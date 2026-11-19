@@ -459,6 +459,19 @@ class Trial:
                 for worker in workers:
                     worker.join(timeout=2)
 
+    def exchange_payloads(self):
+        if self.args.stock_binary_seed is None:
+            first = bytes(range(self.args.payload_length))
+            reply = RETURN_PAYLOAD if self.args.reply_length is None else bytes(range(self.args.reply_length))[::-1]
+            return 0, first, reply, first[::-1]
+        sender = int(self.args.case == "linkwise-caller")
+        rng = random.Random(self.args.stock_binary_seed)
+
+        def binary(length):
+            return b"\x00\xff" + rng.randbytes(length - 2)
+
+        return sender, binary(self.args.payload_length), binary(self.args.reply_length), binary(self.args.payload_length)
+
     def exchange(self, channels):
         self.phase = "setup"
         for (command, _, _), callsign in zip(channels, CALLSIGNS):
@@ -470,7 +483,7 @@ class Trial:
             ):
                 self.command(command, text)
         caller_command, caller_data, _ = channels[0]
-        peer_command, peer_data, _ = channels[1]
+        peer_command, _, _ = channels[1]
         self.command(peer_command, "LISTEN ON")
         time.sleep(2)
         self.phase = "connect"
@@ -479,15 +492,18 @@ class Trial:
         connected = f"CONNECTED KN6MQS W1A {self.args.bandwidth}\r".encode("ascii")
         self.wait_for(lambda: all(connected in messages for messages in self.commands), 35)
         self.measurements["connect_seconds"] = time.monotonic() - connect_started
-        first = bytes(range(self.args.payload_length))
-        second = first[::-1]
-        reply = RETURN_PAYLOAD if self.args.reply_length is None else bytes(range(self.args.reply_length))[::-1]
+        sender, first, reply, second = self.exchange_payloads()
+        recipient = 1 - sender
+        _, send_data, _ = channels[sender]
+        _, reply_data, _ = channels[recipient]
         deliveries = (
-            ("first delivery", caller_data, first, 1, first),
-            ("reverse delivery", peer_data, reply, 0, reply),
-            ("second delivery", caller_data, second, 1, first + second),
+            ("first delivery", send_data, first, recipient, first),
+            ("reverse delivery", reply_data, reply, sender, reply),
+            ("second delivery", send_data, second, recipient, first + second),
         )
-        expected_streams = [reply, first + second]
+        expected_streams = [b"", b""]
+        expected_streams[sender] = reply
+        expected_streams[recipient] = first + second
         late_delay = self.args.late_caller_write_delay
         if late_delay is not None:
             deliveries = (
@@ -496,11 +512,20 @@ class Trial:
             )
             expected_streams = [b"", first + b"\x01\x00"]
         self.expected_streams = expected_streams
+        if self.args.stock_binary_seed is not None:
+            (self.args.output / "host-oracle.json").write_text(json.dumps({
+                "sender_role": sender,
+                "writes": [{"recipient": role, "bytes_hex": payload.hex()}
+                           for _, _, payload, role, _ in deliveries],
+                "reconnect_recipient": recipient,
+                "reconnect_bytes_hex": b"fresh link\x00\xff".hex(),
+            }, indent=2) + "\n")
         transfer_started = time.monotonic()
         for phase, stream, payload, role, expected in deliveries:
             self.phase = phase
             self.log(phase, "queue", len(payload))
             caller_offset = len(self.commands[0])
+            responder_offset = len(self.commands[1])
             delivery_started = time.monotonic()
             stream.sendall(payload)
             self.wait_for(lambda: len(self.received[role]) >= len(expected), 85)
@@ -517,7 +542,8 @@ class Trial:
                 elif b"BUFFER 0\r" in self.commands[0][caller_offset:]:
                     raise BenchFault("the caller queue drained before the late write")
             if phase == deliveries[-1][0] and self.args.verify_disconnect:
-                self.wait_for(lambda: b"BUFFER 0\r" in self.commands[0][caller_offset:], 15)
+                sender_offset = caller_offset if sender == 0 else responder_offset
+                self.wait_for(lambda: b"BUFFER 0\r" in self.commands[sender][sender_offset:], 15)
         if (self.args.replacement or self.args.drop_stock_ack or self.args.drop_linkwise_ack) and not self.fault_injected:
             raise BenchFault("guarded fault stimulus was never sent")
         if self.args.raise_stock_rate and not self.rate_reply_injected:
@@ -555,11 +581,13 @@ class Trial:
                 35,
             )
             probe = b"fresh link\x00\xff"
-            caller_data.sendall(probe)
-            self.wait_for(lambda: len(self.received[1]) >= len(expected_streams[1] + probe), 30)
-            if self.received != [expected_streams[0], expected_streams[1] + probe]:
+            self.expected_streams = expected_streams.copy()
+            self.expected_streams[recipient] += probe
+            send_data.sendall(probe)
+            self.wait_for(lambda: len(self.received[recipient]) >= len(self.expected_streams[recipient]), 30)
+            if self.received != self.expected_streams:
                 raise FixtureFailure("reconnect: duplicate or unexpected host DATA")
-            self.wait_for(lambda: b"BUFFER 0\r" in self.commands[0][command_offsets[0]:], 15)
+            self.wait_for(lambda: b"BUFFER 0\r" in self.commands[sender][command_offsets[sender]:], 15)
             command_offsets = [len(messages) for messages in self.commands]
             self.command(closing_command, "DISCONNECT")
             self.wait_for(observed_disconnect, 15)
@@ -577,6 +605,8 @@ def main():
     parser.add_argument("--bandwidth", type=int, default=500, choices=(500, 2300, 2750))
     parser.add_argument("--payload-length", type=int)
     parser.add_argument("--reply-length", type=int, help="send a binary reply of this length")
+    parser.add_argument("--stock-binary-seed", type=int,
+                        help="send seeded binary DATA from stock in either mixed BW500 role")
     parser.add_argument("--stock-bridge-base", type=int, help="override the bridge base port for a mixed run")
     parser.add_argument("--verify-disconnect", action="store_true", help="require both endpoints to report disconnect after DATA drains")
     parser.add_argument("--disconnect-from", choices=("caller", "responder"), default="caller")
@@ -625,6 +655,14 @@ def main():
         parser.error("payload length must be between 1 and 256 bytes")
     if args.reply_length is not None and not 1 <= args.reply_length <= 256:
         parser.error("reply length must be between 1 and 256 bytes")
+    if args.stock_binary_seed is not None and (
+        args.case not in ("linkwise-caller", "linkwise-responder") or args.bandwidth != 500
+        or args.payload_length < 2 or args.reply_length is None or args.reply_length < 2
+        or not args.verify_reconnect or args.late_caller_write_delay is not None
+        or args.replace_burst or args.corrupt_stock_first or args.corrupt_stock_after_prefix
+        or args.drop_stock_ack or args.drop_linkwise_ack or args.raise_stock_rate
+    ):
+        parser.error("stock binary fixtures require mixed BW500, explicit reply length, both payload lengths at least two, reconnect, and no caller-specific faults")
     if args.stock_bridge_base is not None and (
         args.case in ("stock", "linkwise") or not 1024 <= args.stock_bridge_base <= 65533
     ):
@@ -685,6 +723,7 @@ def main():
         "pace_virtual": args.pace_virtual,
         "bandwidth": args.bandwidth,
         "payload_length": args.payload_length,
+        "stock_binary_seed": args.stock_binary_seed,
         "reply_length": args.reply_length if args.reply_length is not None else len(RETURN_PAYLOAD),
         "stock_bridge_base": args.stock_bridge_base,
         "verify_disconnect": args.verify_disconnect,

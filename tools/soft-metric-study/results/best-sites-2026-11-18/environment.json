@@ -1,0 +1,13 @@
+{
+  "base_revision": "57f705fefaeacd74b341bc63ad7f3551698b210b",
+  "platform": "macOS-27.2.1-arm64-arm-64bit",
+  "python": "3.9.6 (default, Oct 19 2026, 19:18:13) \n[Clang 21.0.0 (clang-2100.4.1.1)]",
+  "numpy": "2.0.2",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "evidence_directory": "/Users/user/Documents/Codex/Linkwise KiwiSDR collection/best-sites-retest-20261118T030740Z",
+  "production_changed": false,
+  "stock_version": "VARA HF v4.9.1",
+  "waveform": "BW500 level2 unchanged",
+  "receiver_scope": "Framed offline diversity acquisition; continuous singles; no clean timing/CFO in primary diversity",
+  "oracle_scope": "Separately labelled adaptive diagnostic on already-inspected frames"
+}

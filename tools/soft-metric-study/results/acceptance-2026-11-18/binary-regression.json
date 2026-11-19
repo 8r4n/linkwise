@@ -1,0 +1,41 @@
+{
+  "trials_per_cell": 20,
+  "tone_rms_factor": 2.0,
+  "summary": {
+    "noise": {
+      "baseline": {
+        "exact": 20,
+        "unmatched": 0,
+        "gates": 0
+      },
+      "gated": {
+        "exact": 20,
+        "unmatched": 0,
+        "gates": 0
+      },
+      "iterated": {
+        "exact": 20,
+        "unmatched": 0,
+        "gates": 0
+      }
+    },
+    "tone": {
+      "baseline": {
+        "exact": 0,
+        "unmatched": 0,
+        "gates": 0
+      },
+      "gated": {
+        "exact": 20,
+        "unmatched": 0,
+        "gates": 20
+      },
+      "iterated": {
+        "exact": 20,
+        "unmatched": 0,
+        "gates": 20
+      }
+    }
+  },
+  "scope": "Arbitrary binary PHY payloads synthesized by Linkwise; not a stock-generated fixture or an ARQ session qualification"
+}

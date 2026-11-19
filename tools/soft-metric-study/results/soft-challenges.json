@@ -1,0 +1,54 @@
+{
+  "trials_per_cell": 20,
+  "exact": {
+    "noise": {
+      "baseline": 20,
+      "tone": 19,
+      "symbol": 20,
+      "combined": 18
+    },
+    "tone": {
+      "baseline": 0,
+      "tone": 10,
+      "symbol": 0,
+      "combined": 10
+    },
+    "colored": {
+      "baseline": 10,
+      "tone": 10,
+      "symbol": 10,
+      "combined": 10
+    },
+    "impulse": {
+      "baseline": 20,
+      "tone": 20,
+      "symbol": 18,
+      "combined": 18
+    },
+    "drift": {
+      "baseline": 20,
+      "tone": 20,
+      "symbol": 19,
+      "combined": 19
+    },
+    "clock": {
+      "baseline": 20,
+      "tone": 20,
+      "symbol": 20,
+      "combined": 20
+    },
+    "fading": {
+      "baseline": 10,
+      "tone": 10,
+      "symbol": 10,
+      "combined": 10
+    },
+    "echo": {
+      "baseline": 12,
+      "tone": 19,
+      "symbol": 11,
+      "combined": 17
+    }
+  },
+  "unexpected": 0
+}

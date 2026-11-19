@@ -1,0 +1,128 @@
+[
+  {
+    "receiver": "rx2.wa2zkd.net",
+    "original": "20261118T011831Z_7105000_usb.wav",
+    "sha256": "2eb039de48642e940c03cf1dbb214905b64a5559c43d237bd3ce40206eb01632",
+    "original_rate": 11999,
+    "seconds": 180.06833902825235,
+    "packets": 4220,
+    "sequence_discontinuities": 0,
+    "adc_overload_packets": 0,
+    "first_packet_utc": "2026-11-18T01:18:31.182905+00:00",
+    "last_packet_utc": "2026-11-18T01:21:31.228232+00:00",
+    "note": "CRC-valid reception only; no independent payload truth or RF error-rate denominator",
+    "methods": {
+      "baseline": {
+        "frames": 3,
+        "payload_hashes": [
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+          "efb89892d39f51bd04bfb7a8fe28060ab7388d7beee7e7bfb4f72a6afeae5735"
+        ]
+      },
+      "tone": {
+        "frames": 3,
+        "payload_hashes": [
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+          "efb89892d39f51bd04bfb7a8fe28060ab7388d7beee7e7bfb4f72a6afeae5735"
+        ]
+      },
+      "symbol": {
+        "frames": 3,
+        "payload_hashes": [
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+          "efb89892d39f51bd04bfb7a8fe28060ab7388d7beee7e7bfb4f72a6afeae5735"
+        ]
+      },
+      "combined": {
+        "frames": 3,
+        "payload_hashes": [
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+          "efb89892d39f51bd04bfb7a8fe28060ab7388d7beee7e7bfb4f72a6afeae5735"
+        ]
+      },
+      "track": {
+        "frames": 3,
+        "payload_hashes": [
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+          "efb89892d39f51bd04bfb7a8fe28060ab7388d7beee7e7bfb4f72a6afeae5735"
+        ]
+      },
+      "clip": {
+        "frames": 3,
+        "payload_hashes": [
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489",
+          "efb89892d39f51bd04bfb7a8fe28060ab7388d7beee7e7bfb4f72a6afeae5735"
+        ]
+      }
+    }
+  },
+  {
+    "receiver": "ve3nsv.ddns.net",
+    "original": "20261118T011831Z_7105000_usb.wav",
+    "sha256": "769083d80087b9b915409733e97294b13f18740bd230c049f6d58038cf739a57",
+    "original_rate": 11999,
+    "seconds": 180.0256688057338,
+    "packets": 4219,
+    "sequence_discontinuities": 0,
+    "adc_overload_packets": 0,
+    "first_packet_utc": "2026-11-18T01:18:31.356105+00:00",
+    "last_packet_utc": "2026-11-18T01:21:31.543894+00:00",
+    "note": "CRC-valid reception only; no independent payload truth or RF error-rate denominator",
+    "methods": {
+      "baseline": {
+        "frames": 3,
+        "payload_hashes": [
+          "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1",
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489"
+        ]
+      },
+      "tone": {
+        "frames": 3,
+        "payload_hashes": [
+          "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1",
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489"
+        ]
+      },
+      "symbol": {
+        "frames": 3,
+        "payload_hashes": [
+          "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1",
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489"
+        ]
+      },
+      "combined": {
+        "frames": 3,
+        "payload_hashes": [
+          "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1",
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489"
+        ]
+      },
+      "track": {
+        "frames": 3,
+        "payload_hashes": [
+          "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1",
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489"
+        ]
+      },
+      "clip": {
+        "frames": 3,
+        "payload_hashes": [
+          "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1",
+          "98f11f63bca7359a5be177e38b5e143b196ae308b6f96b9f7effcad6223fc596",
+          "08fc6943bc5553bff1d20fc47df28f5f8fa7ebf72c4fa26ecd5b49b3eb685489"
+        ]
+      }
+    }
+  }
+]

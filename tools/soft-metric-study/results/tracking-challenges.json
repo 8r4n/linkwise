@@ -1,0 +1,46 @@
+{
+  "trials_per_cell": 20,
+  "exact": {
+    "noise": {
+      "baseline": 20,
+      "track": 19,
+      "clip": 20
+    },
+    "tone": {
+      "baseline": 0,
+      "track": 0,
+      "clip": 0
+    },
+    "colored": {
+      "baseline": 10,
+      "track": 10,
+      "clip": 10
+    },
+    "impulse": {
+      "baseline": 20,
+      "track": 20,
+      "clip": 20
+    },
+    "drift": {
+      "baseline": 20,
+      "track": 20,
+      "clip": 20
+    },
+    "clock": {
+      "baseline": 20,
+      "track": 20,
+      "clip": 20
+    },
+    "fading": {
+      "baseline": 10,
+      "track": 10,
+      "clip": 10
+    },
+    "echo": {
+      "baseline": 12,
+      "track": 12,
+      "clip": 12
+    }
+  },
+  "unexpected": 2
+}

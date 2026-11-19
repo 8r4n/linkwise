@@ -3466,6 +3466,1000 @@ Sources, compiler logs, decoder variants, per-trial results and the
 selected configuration are retained under
 \pathtext{2026-11-15-main-retest.sajUbP/snr-sweep/diagnostic-2026-11-17/likelihood}.
 
+\clearpage
+\section{2026-11-17 -- CFAR and standardized pilot thresholds}
+
+\subsection{Research question and detector definitions}
+
+The question was whether local-noise estimation or standardized detection
+scores improve BW500 level-2 acquisition beyond the current threshold
+of 0.20. The current statistic already divides pilot-bin energy by
+nearby spectral energy and averages the expected 24 pilot positions.
+It is gain-normalized before thresholding.
+
+CFAR estimates background power from reference cells surrounding a
+cell under test, with guard cells to reduce signal leakage. In the
+classical cell-averaging model the threshold is proportional to that
+background estimate. The usual single-pulse square-law threshold
+formula assumes a particular noise distribution. Linkwise integrates
+24 pilots, searches five frequency offsets, and advances overlapping
+FFTs every 128 samples. Its false-alarm behavior requires empirical
+calibration on the resulting statistic. Standardizing a statistic by
+its mean and standard deviation alone does not make its distribution
+Gaussian. Technical references are the
+\href{https://www.mathworks.com/help/radar/ug/constant-false-alarm-rate-cfar-detection.html}{MathWorks CFAR detection example}
+and \href{https://www.mathworks.com/help/phased/ug/constant-false-alarm-rate-cfar-detectors.html}{CFAR detector assumptions}.
+
+Five isolated receiver variants used the same FFTs, frequency hypotheses,
+timing refinement, demodulation, turbo decoder, wire CRC, and accepted-frame
+duplicate suppression. Changes applied only to the level-2 acquisition
+statistic and its threshold. The reference cells were other bins in the
+11-bin DATA band, excluding the expected pilot bin and its immediate
+neighbors.
+
+\begin{itemize}
+\item Fixed normalized score at 0.20, reproducing the current receiver.
+\item The same normalized score with an empirically calibrated cutoff.
+\item Cell-averaging CFAR, using pooled pilot power divided by pooled
+      mean reference power from the existing normalized spectra.
+\item A median-reference ordered-statistic variant, using pooled pilot
+      power divided by pooled median reference power.
+\item A Z score, subtracting pooled reference means from pilot power
+      and dividing by the square root of summed reference variances,
+      with the reference-mean estimation term included.
+\end{itemize}
+
+\subsection{Calibration and validation procedure}
+
+The protocol was written before scoring. Five 60-second controls
+contained band-limited Gaussian noise, colored Gaussian noise, a
+continuous in-band tone, noise with gain steps, and intermittent
+narrowband interference. New seeds supplied separate validation
+controls. The nominal calibration budget was 0.1 threshold crossings
+per second, summed across all five frequency hypotheses. For each
+adaptive method the cutoff was the largest of the five per-condition
+empirical quantiles. Approximately 55.14 seconds per control were
+eligible after initial full-frame acquisition warm-up.
+
+All thresholds were set using noise controls. The November 15 corpus
+provided retrospective development characterization with 160 impaired
+trials and six clean checks. The November 17 corpus supplied cross-date
+validation with 80 impaired trials and six clean checks. Both corpora
+had already been examined during earlier studies. Each trial was scored
+against the frozen exact payload hash. Eight additional 13-second
+off-air windows and clean recordings scaled by 0.01, 0.1, and 1.0
+checked interference response and gain invariance.
+
+A threshold crossing on a noise control is an acquisition false
+candidate. A CRC-valid output on a synthetic noise control would be a
+false decoded frame. These are separate endpoints. The target crossing
+rate is a calibration operating point, not a proven constant false-alarm
+guarantee across arbitrary HF conditions.
+
+\begin{center}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Method & Cutoff & Older $-8$ dB & Later exact \\
+\midrule
+Current normalized & 0.2000 & 15/20 & 60/80 \\
+Calibrated normalized & 0.1758 & 18/20 & 60/80 \\
+Cell averaging & 2.3529 & 18/20 & 59/80 \\
+Median reference & 294.1996 & 0/20 & 0/80 \\
+Z score & 5.4315 & 18/20 & 60/80 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Relative to the current detector, calibrated normalization, cell
+averaging and Z scoring each gained three development trials and lost
+none. In the later corpus, calibrated normalization and Z scoring had
+identical successful trial sets to the current detector. Cell averaging
+lost one trial at $0$ dB. The median-reference implementation failed
+all clean checks and was rejected. Its continuous-tone calibration
+required a very large cutoff because a tone at a pilot cell can dominate
+the pooled numerator while median reference estimates exclude the
+interfering energy. This result concerns the tested pooled-median
+implementation and calibration procedure.
+
+\subsection{False candidates and processing cost}
+
+\begin{center}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Method & Noise attempts & Off-air attempts & Later attempts & Later time (s) \\
+\midrule
+Current normalized & 0 & 0 & 389 & 5.89 \\
+Calibrated normalized & 3 & 0 & 973 & 6.85 \\
+Cell averaging & 10 & 180 & 2132 & 9.55 \\
+Median reference & 1 & 0 & 0 & 7.90 \\
+Z score & 8 & 37 & 712 & 7.21 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The noise column covers 300 seconds of synthetic validation controls,
+with 275.69 eligible seconds after warm-up. All variants emitted zero
+CRC-valid frames on those controls and on the 104 seconds of preselected
+off-air windows. The later timing column covers 903 seconds of audio,
+including the six clean checks. It is one pass of these isolated
+prototypes, including process startup, and is not an optimized deployment
+benchmark. The Z-score prototype took about 23\% longer than the current
+detector in this pass without improving later-frame recovery.
+All variants except the rejected median-reference method passed all
+six gain checks, including a 40 dB absolute gain change.
+
+A separate Z-score cutoff derived from a standard-normal tail for the
+same nominal crossing budget was 3.8749. It produced 229 acquisition
+false candidates in the validation controls, compared with eight for the
+empirically calibrated cutoff. The aggregate rate was 0.831 per eligible
+second, about 8.3 times the nominal budget. White Gaussian audio alone
+produced 98 candidates in 55.14 eligible seconds. The tested statistic
+operates on normalized spectral powers with estimated variance; the
+Gaussian cutoff was therefore a poor tail model. Neither Z-score
+configuration produced a false CRC-valid frame.
+
+\subsection{Disposition and evidence}
+
+Retain the current normalized 0.20 threshold. The calibrated-normalized
+and Z-score alternatives showed an improvement on older recordings that
+did not transfer to the later corpus. Among methods passing clean checks, the current detector matched or
+exceeded later recovery and required the fewest decoding attempts.
+Further CFAR work would require a larger independently collected corpus,
+multiple calibration seeds per interference condition, and explicit
+channel- and time-stratified false-candidate limits.
+
+No CFAR variant was integrated into the production modem. The isolated
+experiments retained the existing wire format and CRC. Stock VARA session
+tests were not repeated for these research variants. Scripts, prototype
+sources, base revision, environment versions, checksums, calibrated
+thresholds, per-trial CSVs and control results are retained under
+\pathtext{2026-11-15-main-retest.sajUbP/cfar-2026-11-18}.
+
+\section{2026-11-18 UTC: receiver DSP experiment screening}
+\label{sec:dsp-screening-nov18}
+
+\subsection{Hypotheses, controls and completion criteria}
+The requested experiment plan was executed as a receiver research screen.
+The hypotheses were that per-tone noise whitening, per-symbol reliability,
+pilot carrier tracking, impulse limiting, channel equalization or receiver
+diversity could improve exact payload recovery. A production change requires
+reproducible gains on independent transmissions, acceptable processing cost,
+no unexplained outputs, and mixed stock VARA interoperability qualification.
+No candidate met those promotion criteria in this screen.
+
+The production baseline is main revision
+\texttt{57f705fefaeacd74b341bc63ad7f3551698b210b} on the existing
+\texttt{codex/cfar-analysis} research branch. Only copied research modules were
+modified; production acquisition remains at 0.20. Timing refinement, the five
+acquisition frequency hypotheses, channel permutation, eight-iteration
+max-log turbo FEC and mandatory wire CRC were retained. The pilot frequency
+prototype changes demodulation after acquisition, not the acquisition gate.
+No transmit waveform, frame format or KISS encoding was changed.
+
+Protocols were saved before each stage was scored. The original 160 impaired
+trials from two November 15 source frames were development data. The later
+80 impaired trials from two November 17 source frames were the cross-date
+validation screen. Each set also had six clean replays. Both corpora had
+previously been inspected: this is retrospective validation, not a blind
+independent sensitivity qualification. The development selection rule was
+highest impaired exact count, with a tie favoring the baseline. It selected
+the baseline in both the soft-metric and tracking/clipping passes.
+
+Exactness requires the expected 20-byte KISS payload SHA-256, not merely a
+CRC pass or callsign-shaped text. The scripts verify input WAV hashes and
+score unexpected outputs as well as successes. SNR here remains recorded
+burst power divided by added 300--3300 Hz noise power; original RF noise is
+already present. These values are not absolute RF SNR thresholds.
+
+\subsection{Implemented receiver prototypes}
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Per-tone noise weighting:} estimate each tone's normalized
+        noise floor by its median power across DATA columns in the candidate
+        frame. Divide tone powers by this floor, retaining a common median
+        scale. A floor of one tenth of the common median, and an absolute
+        numerical floor, limit unstable division. This uses a complete
+        candidate frame; it is not a causal background-noise tracker.
+  \item \textbf{Per-symbol reliability:} estimate each symbol's noise from
+        the median of its eight candidate powers. Weight its bit metrics by
+        frame median noise divided by symbol noise, clamped to 0.1--10.
+  \item \textbf{Combined:} apply both weighting operations before the
+        unchanged max-log bit metric and turbo decoder.
+  \item \textbf{Pilot carrier tracking:} independently maximize pilot power
+        in each frame half over residual offsets of $-12,-6,0,6,12$ Hz.
+        Interpolate the two estimates across DATA symbols. This is a simple
+        frame-based carrier estimate; sample-clock tracking is not implemented.
+  \item \textbf{Impulse clipping:} limit aligned samples to six times the
+        median absolute frame amplitude. This is an amplitude limiter, not
+        a new erasure-aware FEC implementation.
+\end{enumerate}
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Receiver metric & Development /160 & Later /80 & Clean /12 \\
+\midrule
+Current baseline & 115 & 60 & 12 \\
+Per-tone noise & 115 & 60 & 12 \\
+Per-symbol reliability & 112 & 59 & 12 \\
+Combined weighting & 112 & 58 & 12 \\
+Pilot carrier tracking & 114 & 60 & 12 \\
+Impulse clipping & 115 & 60 & 12 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Per-tone weighting exchanged one gained and one lost development trial; its
+later success set was identical to baseline. Reliability weighting lost one
+later trial and combined weighting lost two. Tracking and clipping had the
+same later success set as baseline. None emitted unexpected payloads on
+these original sweeps. Later-corpus wall times including six clean replays
+were approximately 5.65 s baseline, 6.10 s tone weighting, 6.16 s symbol
+weighting, 6.20 s combined, 10.21 s tracking and 6.55 s clipping. These are
+single serial passes including process startup, not deployment benchmarks.
+Each method also emitted zero frames on 60 seconds of separately seeded
+band-limited noise and noise plus a continuous tone; this short negative
+exposure does not establish a general false-frame rate.
+
+\subsection{Controlled impairment challenges}
+After the original screen, a separate fixed challenge protocol applied eight
+conditions to the two November 17 recordings, ten noise seeds each. Every
+condition included 0 dB recording/added-noise ratio measured over seconds
+2.000--6.864, with common gain preventing clipping. The extra impairments
+were a 1453 Hz tone with RMS equal to burst RMS; colored noise peaked around
+1460 Hz; independent signed impulses on 0.5\% of samples at ten times burst
+RMS; linear carrier drift from $-10$ to $+10$ Hz across the clip; $+100$ ppm
+sample-clock mismatch; a 1 Hz amplitude-fading envelope ranging 0.1--1; and a
+0.6-amplitude echo delayed 2 ms. These deterministic exploratory models are
+not an ITU-R F.1487 or Watterson channel implementation.
+
+The following A4 chart records every exact count. Tone weighting improved
+narrowband-interference recovery from 0/20 to 10/20 and echo recovery from
+12/20 to 19/20. However, noise-only recovery fell from 20/20 to 19/20. This
+supports further investigation of interference-aware weighting, not unconditional
+replacement of the current demodulator. The mild drift and clock conditions
+were already recovered 20/20 by baseline; they cannot demonstrate a tracking gain.
+
+Two unexpected outputs were reproduced byte-for-byte from hashed inputs:
+tracking on source 0, noise seed 993002, accepted a level-2 frame at sample
+66560; clipping on source 1, echo seed 993002, accepted one at sample 96256.
+Both passed the wire CRC with a 22-byte payload but failed generic VarAC KISS
+recognition. Neither emitted a chat/beacon payload. The independently known
+expected beacon was not recovered on those trials. These unexplained
+CRC-valid non-beacon outputs are regressions; a CRC alone is not sufficient
+proof that a decoded frame is the intended transmission. Their hashes and
+metadata are retained in \pathtext{unexpected-adjudication.json}.
+
+\subsection{Fresh reception and diversity feasibility}
+Two passive KiwiSDR captures ran concurrently from approximately
+01:18:31--01:21:31 UTC on November 18, on 7105 kHz USB, 250--3150 Hz
+passband. Rockport, Maine, supplied 180.068 s and 4220 packets; Kitchener,
+Ontario, supplied 180.026 s and 4219 packets, both originally at 11999 Hz.
+Neither showed packet-sequence discontinuities or ADC-overload flags.
+Original WAVs, SHA-256 hashes, UTC packet logs and pinned-client wrapper
+were retained. macOS \texttt{afconvert} generated 48 kHz mono PCM for decoding.
+
+Each of the six receiver methods recovered exactly the same three frames
+per receiver. There were four distinct payloads in total, with two
+transmissions received by both KiwiSDRs. There is no independent transmitted
+frame denominator, so this is reception/agreement evidence, not a measured
+natural RF frame-error rate.
+
+For those two common transmissions, a separate soft-diversity prototype
+summed the two receivers' normalized bit metrics before the unchanged turbo
+decoder. Each branch's clean timing was supplied by its continuous decode;
+its frequency offset was estimated from clean pilots over $-50$ to $+50$ Hz
+in 2 Hz steps. All three clean decodes (each branch and the sum) were required
+to match the same full wire body before adding noise. This isolates soft
+combining from weak-signal acquisition and cross-receiver synchronization.
+
+With ten new independent noise seeds per transmission at each of $-8,-4,0$
+dB recording/added-noise ratio, both individual branches and the sum were
+0/20 at $-8$ and $-4$ dB. At 0 dB, Rockport was 0/20, Kitchener 17/20, and
+soft combining 20/20: three additional exact recoveries beyond even the
+union of the individual branches, with no losses or unexpected outputs.
+This is a useful combining result under supplied synchronization. It does
+not establish the sensitivity of an independently acquiring diversity receiver.
+
+A separate synthetic oracle experiment used the known two-path response
+$H(f)=1+0.6\exp(-j2\pi f\,0.002)$ and inverse filter
+$H^*/(|H|^2+0.1)$. With separately seeded 0 dB noise it recovered 15/20 echo
+trials versus 10/20 before equalization. This channel was supplied by the
+generator, not estimated from pilots. Perfectly aligned copies of one recording
+with independent added noise at $-4$ dB recovered 19/20 when averaged versus
+10/20 on either individual branch. This ideal audio result is separate from
+the actual two-Kiwi soft-combining experiment above. Pilot-estimated MMSE or
+soft-output sequence equalization remains unimplemented.
+
+\subsection{Stock VARA replay qualification and fresh byte agreement}
+Stock VARA HF v4.9.1 replayed the same two full fresh captures through the
+isolated Windows virtual-audio bench. Six known clean controls bracketed
+and separated the captures. Both monitor and listen instances were connected;
+KISS streams were parsed with delimiter unescaping. Guest WAV SHA-256 values,
+full playback positions, version response and complete transcript were checked.
+The 48 kHz stock WAVs were dual mono, and their channels were verified identical
+to the mono PCM supplied to Linkwise.
+
+A fixed startup wait of 15 s replaced the previous 5 s before playback.
+Stock and Linkwise both recovered all six clean controls, including the
+opening pair. Stock also recovered exactly the same three payloads per fresh
+capture as Linkwise, with no missing or additional generic KISS payloads.
+This qualifies the comparator for this replay run and independently checks
+fresh receive-byte agreement. It does not demonstrate that startup timing
+caused the earlier miss, retroactively qualify the earlier 80-trial stock
+sweep, or establish general RF sensitivity. No new stock impaired SNR sweep
+or mixed-ARQ transfer was run for the unpromoted research variants.
+
+The complete transcript and dual-mono WAVs remain under
+\pathtext{snr-sweep/qualification-20261118}. Hash-only qualification results,
+protocol and evidence checksums are archived with the research scripts.
+
+\subsection{Decision and outstanding qualification}
+The production receiver is retained. The five single-receiver prototypes do
+not improve the later AWGN corpus, and two introduce unexplained outputs
+under challenge. Conditional per-tone interference rejection and real
+receiver diversity merit further experiments. Their benefit must survive
+new transmissions and stronger, prespecified channel tests before promotion.
+Twenty successful trials out of twenty still have a roughly 84\% lower
+Wilson 95\% bound under a binomial interpretation, and repeated noise seeds
+on two transmissions do not establish broad RF reliability.
+
+The remaining engineering gates are an independent larger corpus, a new qualified
+impaired stock SNR comparison, calibrated signal/noise accounting, sample-clock tracking,
+pilot-based channel estimation, independently acquired multi-receiver
+alignment, and ITU HF-channel qualification. A new production candidate would
+also require bidirectional mixed Linkwise/stock exact-byte transfers,
+retransmission checks and disconnect checks. No new receiver variant was
+promoted or claimed interoperable on the strength of this screen.
+
+Reproducible scripts and compact per-trial evidence are in
+\pathtext{tools/soft-metric-study/}. Full audio and frozen executable/source
+snapshots are in the local study directories
+\pathtext{soft-metrics-2026-11-18-run3} and
+\pathtext{tracking-clipping-2026-11-18} under
+\pathtext{2026-11-15-main-retest.sajUbP}. No original audio was removed.
+
+\includepdf[pages=1,fitpaper=true]{figures/soft-metric-study/dsp-screening.pdf}
+
+\section{2026-11-18 UTC: antennas in the public KiwiSDR network}
+\label{sec:kiwi-antenna-study-nov18}
+
+\subsection{Question, sources and scope}
+This study uses a public-network census and selected receiver histories to
+shortlist antenna installations for Linkwise. It evaluates complete receiver
+systems and does not establish a causal antenna-gain ranking.
+
+The directory snapshot was generated from the KiwiSDR public list at
+01:39:20 UTC on November 18, 2026 and published by the map service at
+01:40:02 UTC. It contains 831 receiver rows. Of these, 820 were marked active,
+not offline, and reported a positive native HF score. Grouping nearby identical
+antenna labels using coordinates rounded to three decimal places reduced
+these to 762 approximate installations. This is an alias/site heuristic,
+not proof of independent antennas: several receivers share feeds or switches.
+No receiver audio channels were occupied by this study.
+
+The native Kiwi score is the 95th-percentile waterfall level minus the median
+waterfall level, normally over 1.8--30 MHz for the HF field. Some newer
+receivers report 1.8--32 MHz instead. It measures spectral contrast in the
+observed activity, not the SNR of a particular modem transmission, receiver
+noise figure, antenna efficiency, or probability of recovering a VarAC payload.
+Strong broadcast signals, propagation, sparse amateur activity and filtering
+all affect the statistic. The score-definition source is the official Kiwi
+change log: \url{https://github.com/jks-prv/KiwiSDR/blob/master/CHANGE_LOG}.
+
+The public ranking page also exposes an older external score table. Its
+embedded update date is 29 December 2021; it was explicitly excluded.
+Native directory metadata can also be newer than the underlying SNR
+measurement, so a recently updated listing alone does not prove a fresh score.
+The raw source pages were retained from
+\url{http://rx.linkfanel.net/kiwisdr_com.js} and
+\url{http://rx.linkfanel.net/snr.html}.
+
+\subsection{What the network and histories show}
+The highest reported HF snapshot scores were 42 for an 80 m dipole at
+Chichester, UK, and a terminated 100 m Beverage at Glava, Sweden. Other high
+examples included a broadband vertical at Hamburg/Drage (41), a pylon or
+mini-whip installation at Tremolat (41), an unspecified loop in Fuerteventura
+(39), and an LZ1AQ installation at Freital (36). These are operator antenna
+labels, not verified measurements of antenna dimensions, orientation or
+which switched antenna was active. The Tremolat description explicitly
+contains two alternatives, so its performance cannot be attributed to either.
+
+Twenty-nine deliberately varied receivers were queried through public
+\texttt{/status} and \texttt{/snr} endpoints; 27 supplied readable histories.
+Examples covered Europe, North and South America, Africa, Asia and Oceania, but
+this small selected history sample is not geographically balanced. Chiba and Oita,
+Japan, could not be checked directly. Latest-available windows were formed
+from each receiver's timestamps over 24 hours. Ring-buffer entries were
+sorted by timestamp rather than assuming file order. Sample counts and
+intervals differed; local timestamps with \texttt{utc=0} were not silently
+treated as UTC. No missing band measurements were imputed.
+
+The accompanying chart requires at least 12 observations spanning 20 hours.
+It therefore excludes one-sample and short-history examples, even where their
+latest score is high. Glava's wider 32 MHz endpoint is marked. The 40 m and
+20 m columns use the exact 7000--7200 and 14000--14350 kHz fields when present.
+These are band percentile contrasts, not single-signal SNR measurements.
+
+A useful same-site comparison is Chichester. Its dipole median HF score was
+38 over about 23.28 hours, versus 31.5 for the north-facing Beverage over
+about 21.33 hours. On 40 m the medians were 18 versus 13.5. On 20 m their
+order reversed: 2.5 versus 6. This does not prove that either antenna decoded
+the same transmission better, but it demonstrates why a broad HF ranking
+cannot be substituted for a band- and path-specific test.
+
+Other sufficiently long histories included crossed LZ1AQ loops in Finland
+(HF median 30), Free Union's 27.4 m T2FD (27), Westminster's 120 ft T2FD
+(25), Northern Utah's TCI 530 (24), and the KFS TCI 527B pointed at
+$135^\circ$ (23). Low broad scores on the other KFS sectors do not establish
+poor antennas: directional coverage, available signals and time of day are
+confounded. KFS documents its distinct TCI omni and sector arrays at
+\url{https://www.kfsdr.org/about}; Northern Utah documents its TCI and
+low-frequency combining system at
+\url{https://www.sdrutah.org/info/techinfo.html}.
+
+Archived family counts and medians are descriptive. Site noise, latitude,
+local time, sample sizes and installation quality differ across classes;
+no causal antenna-design advantage is inferred from these comparisons.
+
+\subsection{Practical shortlist for the Linkwise study}
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Regional 40/80 m reception:} well-sited dipoles, doublets
+        and terminated folded dipoles are strong starting candidates.
+        Chichester, Free Union and Westminster are useful examples to test
+        against actual target transmissions. Operator documentation confirms
+        Westminster's multiple distinct antenna feeds at
+        \url{https://www.blackcatsystems.com/kiwi.html}.
+  \item \textbf{A known low-HF arrival direction:} a terminated Beverage
+        is a strong candidate when its bearing and receive pattern match
+        the intended path. It requires space and is not automatically best
+        for all azimuths or high-angle regional signals. W8JI's receiving
+        antenna discussion explains the role of directivity and site noise:
+        \url{https://new.w8ji.com/receiving_basics/}.
+  \item \textbf{Limited antenna space:} a well-installed active receiving
+        loop, including crossed-loop arrangements, merits testing. Its
+        usefulness depends on placement, amplifier dynamic range, feed-line
+        isolation and the ability to reject a noise direction. A magnetic
+        label alone does not make it immune to local noise. Original LZ1AQ
+        design material is at
+        \url{https://www.lz1aq.signacor.com/docs/wsml/Wideband\%20Active\%20SM\%20\%20Loop\%20Antenna.htm}.
+  \item \textbf{Directional wideband HF infrastructure:} TCI arrays at
+        KFS and Northern Utah are valuable reference installations when
+        their coverage matches the target. Their physical size and receive
+        pattern make them a different installation class from a garden loop
+        or dipole. Published antenna gain is not the same quantity as the
+        Kiwi percentile score.
+\end{enumerate}
+
+For our VarAC collection, shortlist receivers using propagation, the target
+band and path, actual interference/overload observations, open slots and
+operator restrictions. Then rank them using simultaneous recordings of the
+same transmissions and exact stock VARA/Linkwise payload recovery. Include a
+quiet wire site, a directional Beverage or array site, and an active-loop
+site where paths permit. Keep Rockport and Kitchener as continuity references:
+their lower broad scores did not prevent both from supplying the fresh
+byte-matched VarAC receptions in the preceding experiment.
+
+Controlled antenna swaps and matched modem decoding by antenna remain
+necessary for a band-specific sensitivity ranking. No new audio was collected.
+
+The script is \pathtext{tools/analyze-kiwisdr-antennas.py}; sanitized network
+rows and the complete summary are in
+\pathtext{reference/kiwisdr-antenna-study/}. Raw directory and receiver histories
+remain under the local collection folder
+\pathtext{antenna-study-20261118T0140Z-v3}. The chart is regenerated by
+\pathtext{tools/plot-kiwisdr-antenna-study.py}.
+
+\includepdf[pages=1,fitpaper=true]{figures/kiwisdr-antennas/antenna-installations.pdf}
+
+\section{2026-11-18 UTC: fresh-site DSP retest}
+\label{sec:best-sites-retest-nov18}
+
+\subsection{Capture evidence and frozen evaluation}
+Fresh audio came from Westminster's 120 ft T2FD and Warrenton's reported
+80 m EFHW / 160 m inverted-L / loop-on-ground installation; Warrenton's
+active feed is not independently established. Chichester, Glava,
+H\"ameenlinna, Newton and Westminster's Beverage feed closed both permitted
+attempts before audio; Free Union's status request was refused. Failures were
+logged without bypassing the API or treating them as antenna sensitivity results.
+
+Four approximately 180 s recordings were collected at 7105 kHz USB with
+250--3150 Hz passband, between roughly 03:09 and 03:20 UTC. Westminster's
+original rate was 11999 Hz; Warrenton's was 12000 Hz. All four had zero
+observed packet-sequence gaps and zero ADC-overload flags. Baseline decoding
+found 18 receptions representing 16 distinct generic payloads. Overlapping
+follow-up captures supplied two common transmissions for diversity. The
+pinned KiwiClient revision, actual sequence-observation wrapper, original
+WAVs, hashes, UTC logs and all failure records were preserved. The calling
+frequency was checked against \url{https://www.varac-hamradio.com/}.
+
+The gate and primary diversity protocol were saved before fresh scoring.
+An older 160-trial development replay reproduced 115 exact recoveries and
+six clean-control successes for baseline, unconditional whitening and the
+new gate. No parameters were tuned on fresh validation outcomes. Fresh
+validation selected up to three distinct payloads per site by sorted hash:
+six source clips representing five payloads. Two copies of one payload at
+different receivers are not independent payload diversity.
+
+Each source received ten deterministic noise seeds at $-8,-4,0,+4$ dB,
+plus ten seeds each for a narrowband interferer and a two-path echo at
+0 dB. This produced 360 impaired trials per method, with six separate clean
+controls. The interferer was a 1453 Hz sinusoid with RMS equal to the
+recorded burst RMS; the echo had amplitude 0.6 and delay 2 ms. Noise was
+FFT-band-limited Gaussian over 300--3300 Hz. Common gain prevented clipping,
+and int16 PCM was supplied identically to Linkwise and the stock subset.
+Every ratio is recorded burst power divided by injected noise power,
+including the recording's original noise; none is calibrated absolute RF SNR.
+
+\subsection{Interference gate and exact recovery}
+The research gate attempts the unmodified baseline FEC first. On baseline
+failure, it estimates each tone's median normalized DATA power separately
+in the two frame halves. Every tone must have at least 16 observations.
+Both halves must have a maximum-to-median floor ratio of at least 4, and
+the peak bins must agree within one bin. Only then are metrics reweighted,
+using $\mathrm{clamp}(\mathrm{median\ floor}/\mathrm{tone\ floor},0.1,1)$.
+Unlike the earlier unconditional whitening, this only attenuates contaminated
+tones; it does not amplify the other tone powers. The acquisition threshold
+stays 0.20, with unchanged interleaving, max-log turbo decoding and wire CRC.
+All changes are in copied research modules, not production modem code.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Condition & Baseline /60 & Always whiten /60 & Gated fallback /60 \\
+\midrule
+Noise, $-8$ dB & 20 & 20 & 20 \\
+Noise, $-4$ dB & 41 & 36 & 41 \\
+Noise, 0 dB & 50 & 50 & 50 \\
+Noise, $+4$ dB & 56 & 58 & 56 \\
+Tone plus noise, 0 dB & 0 & 49 & 49 \\
+Echo plus noise, 0 dB & 50 & 50 & 50 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+All methods recovered 6/6 clean source controls. The gate retained exactly
+the baseline's 167/240 noise-only successes, with no gains or losses in
+those trials. It gained 49/60 interfered trials without a baseline loss,
+and did not change echo recovery. There were 96 gated candidate attempts
+across the 60 tone trials, but zero gate activations in the noise-only,
+echo, clean and full natural-capture passes. These are correlated candidate
+counts, not a calibrated false-alarm probability. Separately seeded
+Gaussian and Gaussian-plus-tone negatives, 60 s each per method, emitted
+zero CRC-valid frames.
+
+Full continuous replay of all four natural captures retained all 18 baseline
+frames with the gate and added none. Unconditional whitening found one
+additional generic payload in Warrenton's second capture. In a separate
+cropped diagnostic, unconditional Linkwise recovered it, while baseline,
+gated Linkwise and stock did not. Stock transport controls passed 2/2.
+This remains an uncorroborated natural candidate, not proof of a modem
+sensitivity gain. It was not added retrospectively to the frozen validation set.
+
+\textbf{Acceptance blocker:} one gated tone trial accepted an unmatched CRC-valid
+level-2 body at sample 96048. Its 23-byte control/payload body differed from
+the known body by 39 bits and matched none of the original captured bodies.
+It failed generic VarAC KISS recognition, so no false beacon/chat payload
+was emitted by that interface. The exact counterexample was reproduced from
+its PCM hash; stock and baseline recovered no payload on the separate replay,
+with stock transport controls passing 2/2. Generic beacon recognition is not
+a suitable global filter for arbitrary valid ARQ data. The unexplained raw
+acceptance must be resolved before promoting the gate to a general modem.
+
+\subsection{Diversity without supplied clean timing or frequency}
+The primary research receiver obtains pilot candidates from each noisy
+10.5 s event window using the five production frequency hypotheses and
+0.20 threshold. It keeps four timing peaks separated by at least 512 samples,
+refines epochs at 16-sample spacing, and tests residual frequency offsets
+$-6,-3,0,3,6$ Hz. Candidate pairs are ranked by pilot evidence, and up to
+16 equal-weight soft sums are tried through the unchanged FEC and CRC.
+Expected payloads are used only for scoring, not candidate selection.
+
+The benchmark supplies matched event windows, constructed from common clean
+wire bodies within 2 s of estimated capture UTC. Each noisy branch receives
+an independent seeded time shift of up to 0.75 s. Clean sample epochs and
+frequency estimates are not passed to the primary decoder. This removes the
+previous supplied-calibration assumption within a framed test; it does not
+implement autonomous continuous-stream event association across sites.
+Diagnostic epoch-proximity fields compare with a baseline accepted window,
+which is not independent ground-truth symbol timing.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Added-noise ratio & Warrenton /20 & Westminster /20 & Noisy-acquired sum /20 \\
+\midrule
+$-8$ dB & 0 & 20 & 4 \\
+$-4$ dB & 13 & 20 & 19 \\
+0 dB & 20 & 20 & 20 \\
+$+4$ dB & 20 & 20 & 20 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Both clean pairs decoded correctly on each individual branch and the sum.
+No unmatched outputs appeared in the primary diversity trials. The equal sum
+lost 16 recoveries against the independent-decoder union at $-8$ dB and one
+at $-4$ dB; it gained none. The strongest branch was already 20/20 throughout
+this primary range. Retaining independent CRC-valid decodes is therefore
+essential; blindly replacing them with the combined result is rejected.
+
+An explicitly adaptive diagnostic extended the range using new noise seeds
+on the same two already-inspected events. A separate oracle obtains a
+CRC-valid pilot calibration from the clean audio and supplies that epoch,
+injected time shift and frequency offset to the noisy metric extractor.
+It is a diagnostic, not a deployable receiver or independent validation set.
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Ratio & Strongest stream & Noisy-search single & Noisy sum & Oracle sum \\
+\midrule
+$-16$ dB & 0/20 & 0/20 & 0/20 & 0/20 \\
+$-12$ dB & 8/20 & 9/20 & 0/20 & 10/20 \\
+$-8$ dB & 20/20 & 20/20 & 3/20 & 20/20 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The oracle's strongest single branch also recovered 10/20 and 20/20 at
+$-12$ and $-8$ dB respectively: the sum added no recoveries beyond that
+clean-calibrated branch. Much of the noisy-sum degradation disappears when
+clean calibration is supplied. This implicates weak-branch acquisition and
+alignment, alongside branch reliability, rather than establishing a useful
+field diversity gain. The next receiver design should retain independent
+decodes and qualify weak-branch timing/frequency hypotheses before combining.
+
+\subsection{Stock reference and decision}
+The isolated Windows bench used stock VARA HF v4.9.1, 15 s startup wait and
+3 s interclip gaps. The frozen subset used the first selected source per
+site and the first two seeds per condition: 24 impaired clips, all six new
+clean clips, and six historical transport controls. Version, completed byte
+positions, guest WAV hashes, identical stereo channels and exact input PCM
+identity against the Linkwise trials were checked. Stock passed 6/6 transport
+and 6/6 new clean controls with exact generic KISS payloads.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Matched subset & Baseline /4 & Gated /4 & Stock /4 \\
+\midrule
+Noise, $-8$ dB & 0 & 0 & 0 \\
+Noise, $-4$ dB & 0 & 0 & 0 \\
+Noise, 0 dB & 2 & 2 & 2 \\
+Noise, $+4$ dB & 3 & 3 & 3 \\
+Tone plus noise, 0 dB & 0 & 2 & 0 \\
+Echo plus noise, 0 dB & 2 & 2 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Stock emitted no additional generic payloads on this subset. Four trials
+per cell from two source clips cannot establish a general sensitivity ranking
+or a 95\% decoding threshold. These receive comparisons also do not qualify
+a changed transmitter, general ARQ behavior, or bidirectional mixed transfers.
+
+\textbf{Keep production unchanged.} The gate preserves ordinary recoveries
+and rescues interfered frames, but the unmatched CRC-valid acceptance blocks
+adoption. Noisy-acquired equal combining did not reproduce the earlier
+diversity gain. Next tests need acceptance confidence, branch-quality gating
+and joint weak-pilot acquisition. No waveform or interoperability format changed.
+
+Hash-only protocols, per-trial CSVs, source references, summaries and frozen
+source checksums are archived under
+\pathtext{tools/soft-metric-study/results/best-sites-2026-11-18/}.
+Original audio, wire references, stock transcripts and frozen binaries remain
+in the local collection's \pathtext{best-sites-retest-20261118T030740Z} folder.
+
+\includepdf[pages=1,fitpaper=true]{figures/best-sites-retest/best-sites-retest.pdf}
+
+\clearpage
+\section{18 November: fresh-data acceptance and interoperability retest}
+\label{sec:acceptance-retest}
+\textbf{Question and completion criteria.} Can persistent-interference weighting
+retain its exact-payload recovery benefit while rejecting the previously observed
+unmatched CRC-valid body? Require independent later RF data, preservation of clean
+and noise-only recovery, structured negative controls, arbitrary binary payload
+coverage, and ordinary mixed stock-VARA transfers in both roles. These are bounded
+research gates, not comprehensive interoperability certification. Production Rust
+sources and the original modem binary remain unchanged.
+
+\subsection{Diagnosis and prespecified candidates}
+The original decoder tests CRC on systematic hard bits before running any turbo
+iteration. Instrumentation traced the previous unmatched body (39 differing bits)
+to this early check alone: no full turbo iteration passed CRC. Its soft codeword
+agreement was 0.371, compared with approximately 0.856 for a genuine interfered
+recovery. A first candidate skipped that shortcut in the weighted fallback only.
+On the old development recordings it retained 49/60 interfered recoveries and all
+six clean recoveries, removing the known unmatched result.
+
+A harder negative control retained the genuine 24 pilot columns but replaced all
+204 DATA symbols with band-limited noise, adding a persistent 1453 Hz tone. Across
+100 development windows, both the old gate and the one-iteration candidate still
+accepted two CRC-valid bodies; none passed generic KISS recognition. Therefore
+one iteration was insufficient. The stricter, previously implemented candidate
+requires the identical CRC-valid bit vector on two consecutive full turbo
+iterations. It accepted none of those development negatives while retaining the
+same old-data recoveries. Selection was frozen at 12:59:19 UTC, before decoding
+the later capture. Consecutive iterations are correlated; this rule is not an
+independent second checksum and cannot guarantee absence of false acceptance.
+
+The interference gate is unchanged: normalized per-tone DATA floors must have a
+peak/median ratio of at least four in both frame halves, with agreeing peak bins
+and at least 16 observations per tone. Only after baseline failure are persistent
+tones downweighted (weights bounded to 0.1--1). The acquisition threshold, CFO
+search, waveform, FEC, interleaver, and on-air CRC are unchanged. No callsign,
+ASCII, or beacon-format filter was introduced.
+
+\subsection{New RF evidence and separation of datasets}
+Two simultaneous 180-second receiver recordings at 7.105 MHz USB were made in
+each of two windows: approximately 12:36 and 12:59 UTC. Westminster used the
+reported 120-foot T2FD installation; Warrenton reported an 80 m EFHW, 160 m
+inverted-L, and loop-on-ground installation, whose active feed was not established.
+Pinned KiwiClient revision and original WAV hashes are archived. Both windows
+completed without sequence gaps. These observations measure traffic opportunity
+and decoding, not an antenna-quality ranking.
+
+The first window yielded seven receptions and four distinct payloads. Six selected
+clips underwent ten seeded trials per condition. The one-iteration candidate
+improved CW-plus-noise recovery from 20/60 to 41/60, retaining 216/300 AWGN
+recoveries, all six clean clips, and all seven continuous-recording receptions.
+After stricter-rule selection, replaying this first corpus produced the same
+counts; this is a post-selection regression, not independent confirmation.
+
+\textbf{Reproduction.} Protocols, hashes, tables, Rust sources, and Python snapshots:
+\pathtext{tools/soft-metric-study/results/acceptance-2026-11-18/}.
+Original audio location is recorded in \pathtext{environment.json}.
+Seeded repetitions are not independent RF paths.
+
+\clearpage
+\subsection{Prospective later holdout}
+The later window contained 14 receptions (seven per receiver), representing six
+distinct payloads. Six prespecified selected clips represent only three distinct
+payloads, with repeated reception across sites. New impairment seeds began at
+2200000; no clean timing or CFO calibration was supplied to trial acquisition.
+The six framed windows do supply event locality.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Condition & Baseline & Old gate & Stricter gate \\
+\midrule
+Clean & 6/6 & 6/6 & 6/6 \\
+Added noise, $-12$ dB & 36/60 & 36/60 & 36/60 \\
+Added noise, $-8,-4,0,+4$ dB (each) & 60/60 & 60/60 & 60/60 \\
+CW plus noise, 0 dB & 8/60 & 60/60 & 60/60 \\
+Echo plus noise, 0 dB & 60/60 & 60/60 & 60/60 \\
+\bottomrule
+\end{tabular}
+\end{center}
+No unmatched body occurred in those impaired trials. All 14 natural continuous
+receptions were preserved, with no additional natural frame recovered. Thus the
+large gain was demonstrated under injected CW interference, rather than as a
+new naturally occurring reception. All 276/300 baseline AWGN successes were
+preserved. The dB axis is recorded-burst power relative to added 300--3300 Hz
+noise, including original recording noise; it is not absolute RF SNR.
+
+A separate 100-window structured-negative holdout, with new seeds beginning at
+2130000, accepted one CRC-valid body with the old gate, zero with baseline, and
+zero with the stricter gate (1,191 stricter-gate attempts). None produced generic
+KISS output. These synthetic erased-DATA controls are not a measured natural RF
+false-frame rate; their common construction also limits generalization.
+
+\subsection{Binary coverage and stock interoperability}
+Linkwise-generated 22-byte binary payloads covered constant, ascending,
+alternating, and random bytes with three control values. The stricter candidate
+recovered 20/20 noise-only and 20/20 twice-RMS CW cases; every CW case activated
+the fallback, with no unmatched body. These were not stock-generated signals.
+
+The isolated candidate daemon passed ordinary BW500 mixed stock-VARA transfers
+in both roles: exact 13-byte, 6-byte reverse, and repeated 13-byte deliveries,
+with both disconnects confirmed. These checks do not establish activation of the
+weighted level-2 path during impaired ARQ; that qualification remains open.
+
+The first fresh stock replay passed six of six transport controls but recovered
+only five of six new clean clips. The missing Warrenton frame remains unresolved;
+its Linkwise FEC trace was stable through iterations 2--8, unlike the raw-hard
+counterexample. Do not retroactively qualify this as six of six. On the identical
+28-trial impaired subset, stock and Linkwise each recovered 17/20 AWGN trials;
+stock recovered 0/4 CW and 3/4 echo trials versus stricter Linkwise 4/4 and 4/4.
+This small selected subset does not establish an overall modem ranking.
+
+
+The later clean-only stock replay recovered 6/6 selected clips and passed 6/6 transport controls. Playback completion, guest file hashes, 48 kHz dual-mono input identity, and VARA HF 4.9.1 version were verified. This later success does not resolve the first-window miss.
+
+\textbf{Decision.} Retain a research candidate, with production unchanged.
+Next require non-beacon traffic, broader interference negatives, and impaired
+mixed-stock sessions that activate the new path. Equal-weight receiver diversity
+remains unresolved.
+
+\clearpage
+\includepdf[pages=1,fitpaper=true]{figures/acceptance-retest/acceptance-retest.pdf}
+\clearpage
+
+\section{18 November: expanded test plan and storage maintenance}
+\textbf{Document revision.} KiwiSDR test plan revision 0.10 adds prospective
+synthetic bench coverage for all 38 enumerated failure mechanisms. Audio,
+complex-baseband, hardware and field evidence are distinguished. The revision
+specifies independent binary oracles, paired stock inputs, source/session splits,
+physical-unit calibration, interaction tests, acceptance margins, negative
+exposure and impaired mixed-stock gates. Inclusion is not execution or promotion.
+The Markdown source, generated TeX and architecture figure are maintained together;
+the rebuilt 66-page PDF was checked for A4 sizing and readable new tables.
+
+\textbf{Storage.} Removed the unused Git-ignored Rust debug build cache
+(approximately 790 MiB allocated before removal). Four stopped disposable VMs
+were deleted through UTM: shred/normal teardown and shred/normal udev tests.
+Their names disappeared from the inventory; the immediate measured free-space
+increase from those VM removals was only approximately 2.3 MiB. Working Windows,
+Rocky and reusable USB environments were retained. Do not equate nominal virtual
+disk size with reclaimed host storage. The dated inventory and deletion outcomes
+are in the local \pathtext{storage-cleanup-2026-11-18.json} record.
+
+\textbf{Cloud archive remains blocked.} macOS denied direct iCloud Drive access,
+and desktop access reported a locked Mac with automatic unlock unsuccessful.
+No signal recording was moved or deleted. A future transfer must verify source
+hashes, cloud availability and local download eviction separately before claiming
+space reclaimed. The user requested iCloud archival; it has not been completed.
+
+\clearpage
+\section{18 November: CW qualification preflight and level-4 replay}
+\label{sec:cw-level4-preflight}
+\textbf{What was tested.} The first CW-01 preflight requirement is actual
+stock level-2 DATA in both mixed roles. Reclassification of retained stock
+bursts found level-4 DATA, consistent with stock reporting 88 bps and level 4.
+The bench driver now has an option to make stock originate two seeded binary
+messages in either role, with a recorded byte oracle and an exact reconnect
+check. Synthetic socket checks passed for both roles and rejected wrong and
+duplicated bytes. The Windows VM was listed as started, but its UTM guest agent
+reported a disconnected port before a fresh mixed session could start. No
+fresh stock run or live weighted-path activation was established.
+
+\textbf{Follow-up hypothesis.} A coherent tone can be removed before retrying
+the existing level-4 decoder. Test this on retained stock-generated DATA
+independently of CW-01's level-2 hypothesis. On the first decode failure, estimate
+one line in 1200--1800 Hz by a Hann-windowed FFT with sub-bin interpolation.
+Require prominence in both halves, agreement within 0.8 Hz, at least 8\% of
+measured window power, and phase agreement within 0.6 radians. Fit and subtract
+a sinusoid, then rerun the existing timing and CRC decoder. Both replay paths
+receive the same coarse burst range. The candidate uses no known tone frequency
+or exact frame timing. Clean reference timing sets injected component powers.
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+Exact-wire and host-byte outcome & Baseline & Cancellation \\
+\midrule
+Development CW replay, ten frames & 79/270 & 270/270 \\
+Later CW replay, three frames & 79/270 & 270/270 \\
+Later 1453 Hz, 0 dB SIR & 30/30 & 30/30 \\
+Later clean and noise-only & 63/63 & 63/63 \\
+CRC-valid bodies in negative controls & 0/300 & 0/300 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The later set represents three payloads from two archived sessions. CW cells
+use 1309, 1453, or 1661 Hz, at $-12$, $-6$, or 0 dB wanted-to-tone power, with
+0 dB recorded-burst/added-noise ratio and 300--3300 Hz noise. There were no
+wrong outputs on this grid. Gains were concentrated in stronger tones and
+frequencies closer to the two DATA bands. Repeated realizations share the
+same recordings. They do not establish session benefit or RF sensitivity.
+
+The negative panel used 100 noise-plus-tone windows and 100 waveforms with
+valid pilot transitions and random unencoded DATA cells, each replayed clean
+and impaired. A separately encoded positive control reproduced exact wire and
+host bytes. Exposure remains below CW-01's extended test requirement. The
+level-4 path still uses the stock-compatible existing CRC decoder, so the
+level-2 candidate's iteration agreement result does not carry over.
+
+\textbf{Disposition.} Continue this as an experimental receiver path. Restore
+the stock audio bench, confirm the role-aware fixture with real transport, and
+identify a reproducible level-2 stock DATA session. For the level-4 hypothesis,
+collect independent binary traffic and test real-time cost and mixed delivery
+with cancellation enabled. No production decoder change was made.
+Evidence and reproduction steps are archived in
+\pathtext{tools/soft-metric-study/results/cw-level4-2026-11-18/}.
+
+\clearpage
+\section{18 November: passive KiwiSDR decoder comparison}
+\label{sec:kiwisdr-passive-comparison}
+The test scope was narrowed to receive-only KiwiSDR observations. Between
+15:46 and 15:55 PST, ten bounded attempts covered the VarAC calling frequencies
+7.105 and 14.105 MHz USB using a 250--3150 Hz audio passband. Warrenton and
+Kitchener each completed two 180-second windows on 7.105 MHz. Rockport
+provided 9.5 seconds and was classified as a short observation. Westminster
+preflight timed out. Free Union, Newton, San Diego and KFS Omni returned no
+20 m audio. Connection failures say nothing about traffic on that band.
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Observation & Audio (s) & Baseline & Stable fallback \\
+\midrule
+Warrenton, two windows & 360.12 & 6 & 6 \\
+Kitchener, two windows & 360.14 & 6 & 6 \\
+Rockport, short window & 9.52 & 0 & 0 \\
+\midrule
+Total & 729.77 & 12 & 12 \\
+\bottomrule
+\end{tabular}
+\end{center}
+All available recordings had continuous logged packet sequences and no ADC
+overload flags. Captured WAV hashes were checked before resampling to 48 kHz
+mono PCM. Both paths consumed identical continuous audio with no added impairments. The streaming input loader avoided storing another float32 copy and
+reproduced the earlier 14/14 exact paired receptions on archived audio. The
+DSP source remained byte-identical to the frozen acceptance prototype.
+
+The candidate produced the same wire and KISS bytes for every baseline
+reception, covering eight distinct KISS payload hashes. Four provisional
+cross-receiver associations had equal wire and payload hashes at similar
+packet-derived times. Those are receive-side associations and do not provide
+GPS arrival timing or the count of transmissions missed by all sites. The
+fallback tested 113 failed hypotheses with no activation. This result supports
+preservation of observed traffic and provides no natural interference recovery
+estimate. Offline wall time over the 729.77 seconds was 6.44 seconds for the
+baseline and 6.56 seconds for the candidate, including process startup and PCM
+transfer. These timings do not measure real-time host deadlines.
+
+\textbf{Disposition.} Passive field observations are recorded with continuity,
+byte-hash, and receiver-availability evidence. The known-transmission denominator,
+stock VARA comparison, controlled K1--K4 gates, and held-out VOACAP skill check
+remain open under receive-only scope. Original recordings were retained locally.
+Per-capture results and reproduction details are in
+\pathtext{tools/soft-metric-study/results/kiwisdr-passive-2026-11-18/}.
+
+\clearpage
+\section{Research chronology and test disposition, 18 November 2026}
+\label{sec:research-chronology-nov18}
+Times use Pacific Standard Time. This chronology connects the decisions to the
+underlying run records and distinguishes separate receiver hypotheses.
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Early morning.} Reproduced an incorrect CRC-valid body that
+      passed on the raw systematic bits. One full turbo iteration removed that
+      known case but still accepted bodies in structured negative tests. The
+      candidate requiring two identical consecutive CRC-valid turbo outputs
+      was selected on development data and retained all baseline recoveries
+      on the later field clips. With injected CW, it recovered 60/60 exact
+      payloads versus 8/60 for baseline. That later test reused six clips
+      representing three payloads. Ordinary mixed stock VARA exchanges passed
+      in both roles. See Section~\ref{sec:acceptance-retest}.
+\item \textbf{Morning.} Revised the \emph{Linkwise Modem Robustness Test
+      Plan} to 0.11. Put the research decisions up front and moved the 38-effect
+      register and field commands into appendices. CW-01 revision 1.0 defines
+      the live qualification of the level-2 candidate. The plan also specifies
+      a mid-latitude HF simulator profile and its calibration tolerances. The
+      narrated engineering briefing summarizes the evidence and the next
+      qualification decision. Its LaTeX slides, transcript, and video are
+      retained in the local \texttt{Linkwise Robustness Briefing} folder.
+\item \textbf{Afternoon bench preflight.} Verified that archived stock
+      sessions carried level-4 DATA and added a seeded binary fixture that
+      makes stock the sender in either role. The host scorer passed synthetic
+      exact-delivery checks and rejected altered and duplicate bytes. A
+      disconnected Windows guest agent prevented a fresh mixed session. A
+      separate level-4 tone-cancellation prototype improved archived CW replay
+      from 79/270 to 270/270. Both paths recovered 30/30 at the original
+      1453 Hz, 0 dB SIR cell. See Section~\ref{sec:cw-level4-preflight}.
+\item \textbf{15:46--15:55.} Continued with passive KiwiSDR only. Warrenton
+      and Kitchener completed four 40 m windows between them. Rockport supplied
+      a short recording. Both decoder paths returned identical bytes on 12
+      CRC-valid receptions across eight payload hashes. Four pairs of receptions
+      matched in wire and KISS hashes and were provisionally associated by
+      packet-derived timing.
+      The candidate examined 113 failed hypotheses and never activated. Four
+      20 m receiver attempts yielded no audio. See
+      Section~\ref{sec:kiwisdr-passive-comparison}.
+\end{enumerate}
+
+\textbf{Disposition.} The results support further testing of two research
+candidates. The level-2 fallback improved replay under injected CW. A build
+containing it passed ordinary mixed transfers. The level-4 cancellation prototype has
+framed replay evidence against archived stock transmissions. Live impaired
+mixed-role qualification and natural-interference gains remain open. Passive
+reception does not provide a known transmit count for controlled field recovery
+or VOACAP scoring. Retain the original recordings and use the linked result
+archives to reproduce each comparison.
+
+\clearpage
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]

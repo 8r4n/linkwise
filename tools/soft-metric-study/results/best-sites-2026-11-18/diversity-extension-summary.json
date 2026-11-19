@@ -1,0 +1,41 @@
+{
+  "-16": {
+    "trials": 20,
+    "stream1": 0,
+    "stream2": 0,
+    "blind1": 0,
+    "blind2": 0,
+    "blind_combined": 0,
+    "oracle1": 0,
+    "oracle2": 0,
+    "oracle_combined": 0,
+    "blind_unmatched": 0,
+    "oracle_unmatched": 0
+  },
+  "-12": {
+    "trials": 20,
+    "stream1": 0,
+    "stream2": 8,
+    "blind1": 0,
+    "blind2": 9,
+    "blind_combined": 0,
+    "oracle1": 0,
+    "oracle2": 10,
+    "oracle_combined": 10,
+    "blind_unmatched": 0,
+    "oracle_unmatched": 0
+  },
+  "-8": {
+    "trials": 20,
+    "stream1": 0,
+    "stream2": 20,
+    "blind1": 0,
+    "blind2": 20,
+    "blind_combined": 3,
+    "oracle1": 0,
+    "oracle2": 20,
+    "oracle_combined": 20,
+    "blind_unmatched": 0,
+    "oracle_unmatched": 0
+  }
+}

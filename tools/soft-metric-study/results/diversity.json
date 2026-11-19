@@ -1,0 +1,33 @@
+{
+  "shared_transmissions": 2,
+  "per_snr": {
+    "-8": {
+      "trials": 20,
+      "branch1": 0,
+      "branch2": 0,
+      "combined": 0,
+      "union": 0,
+      "new_beyond_union": 0,
+      "losses_vs_union": 0
+    },
+    "-4": {
+      "trials": 20,
+      "branch1": 0,
+      "branch2": 0,
+      "combined": 0,
+      "union": 0,
+      "new_beyond_union": 0,
+      "losses_vs_union": 0
+    },
+    "0": {
+      "trials": 20,
+      "branch1": 0,
+      "branch2": 17,
+      "combined": 20,
+      "union": 17,
+      "new_beyond_union": 3,
+      "losses_vs_union": 0
+    }
+  },
+  "unexpected": 0
+}
