@@ -24,6 +24,12 @@ integration.
 - [RF and AI link-management simulation](rf-agent-simulation-design.md) — the
   proposed fidelity ladder, agent/truth isolation, scenarios, baselines,
   metrics, and validation gates for evaluating link-selection decisions.
+- [Adaptive network implementation plan](adaptive-network-implementation-plan.md)
+  — proposed durable multi-hop overlay, contact scheduling, simulator, dependency
+  decisions, implementation milestones, and measurable release gates.
+- [Adaptive network research and evidence](adaptive-network-research-and-evidence.md)
+  — standards, deployments, implementation options, and an audit of existing
+  Linkwise test data and its limits for global-network calibration.
 - [MCP interface design](mcp-interface-design.md) — proposed resources, tools,
   schemas, errors, and control contracts, including policy-gated PTT key-up
   and always-available key-down.

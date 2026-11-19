@@ -4,6 +4,12 @@
 **Version:** 0.1, proposed  
 **Status:** Research-based design proposal; simulator not implemented
 
+The [adaptive network implementation plan](adaptive-network-implementation-plan.md)
+extends this station/gateway design to durable multi-hop forwarding, shared-channel
+contact scheduling, and global-network evaluation. Its companion
+[research and evidence review](adaptive-network-research-and-evidence.md) records
+the current implementation boundary and calibration-data limitations.
+
 ## 1. Objective and evaluation question
 
 Build a repeatable environment in which the actual Linkwise agent/tool loop

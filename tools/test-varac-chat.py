@@ -2,6 +2,7 @@
 """Exercise both chat terminals over the Linkwise BW500 waveform bench (Unix PTY)."""
 import argparse
 from contextlib import ExitStack
+import errno
 import fcntl
 import importlib.util
 from pathlib import Path
@@ -83,7 +84,15 @@ class Chat:
     def quit(self):
         self.enter("/quit")
         assert self.process.wait(timeout=10) == 0
-        assert termios.tcgetattr(self.slave) == self.baseline
+        try:
+            restored = termios.tcgetattr(self.slave)
+        except termios.error as error:
+            # Darwin can revoke the slave on session exit. The master still
+            # exposes the terminal settings shared by both descriptors.
+            if error.args[0] != errno.ENOTTY:
+                raise
+            restored = termios.tcgetattr(self.pty)
+        assert restored == self.baseline
 
 
 def relay(source, destination):
