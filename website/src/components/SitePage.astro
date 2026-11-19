@@ -2,22 +2,28 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Button from "./Button.astro";
 import VisualGuide from "./VisualGuide.astro";
+import ProjectPages from "./ProjectPages.astro";
 import { publishedRelease, repository, targets } from "../releases.mjs";
+import { supportLinks } from "../project-content.mjs";
 import { loadMessages, pagePath } from "../../../docs/i18n/locales.mjs";
+import { websiteLabels } from "../../../docs/i18n/website-upgrade.mjs";
 import { catalog, translation } from "../../../docs/i18n/catalog.mjs";
 import { operatorRuns, operatorSections } from "../../../docs/i18n/operator.mjs";
 import { varacGuide } from "../../../docs/i18n/varac.mjs";
 import { visualGuide } from "../../../docs/i18n/visual-guide.mjs";
 const { locale, page } = Astro.props;
 const t = loadMessages(locale.code);
+const project = websiteLabels(locale.code);
 const varac = varacGuide(locale.code);
 const visual = page === "varac" ? visualGuide(locale.code) : null;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const link = (page) => base + pagePath(locale.code, page);
-const release = page === "downloads" ? await publishedRelease() : null;
+const release = ["", "downloads", "mail"].includes(page) ? await publishedRelease() : null;
+const downloadable = release?.status === "available";
+const isProjectPage = ["capabilities", "demos", "research"].includes(page);
 const meta = page === "varac" ? varac : page ? t[page] : t.home;
-const title = page === "" ? varac.siteTitle : meta.title;
-const description = meta.lede || t.downloads.verify;
+const title = page === "" ? varac.siteTitle : isProjectPage ? project[page] : meta.title;
+const description = page === "" || isProjectPage ? project.overview : meta.lede || t.downloads.verify;
 const chatBench = base + "/reference/" + locale.code + "/docs/testing/varac-chat.md/";
 const manuals = ["linkwise.1", "linkwise-station.5", "linkwise-modemd.8"];
 const translations = page === "docs" ? catalog() : [];
@@ -47,8 +53,12 @@ const software = page === "" ? {
 <BaseLayout {title} {description} {locale} {page} {t} {software}>
   {page === "" && <>
     <section class="hero wrap">
-      <div><h1>{t.home.title}</h1><p class="lede">{t.home.lede}</p>
-        <div class="actions"><Button href={link("downloads")}>{t.home.downloads}</Button><Button href={link("winlink")} variant="outline">{t.home.setup}</Button></div>
+      <div><h1>{t.home.title}</h1><p class="lede">{project.overview}</p>
+        <p class="release-status" data-release-status={release.status}>{downloadable ? project.available : project.pending}</p>
+        <div class="actions">
+          {downloadable ? <Button href={link("downloads")}>{t.nav.downloads}</Button> : <Button href={link("demos")}>{project.watch}</Button>}
+          {downloadable ? <Button href={link("demos")} variant="outline">{project.watch}</Button> : <Button href={link("capabilities") + "#build"} variant="outline">{project.build}</Button>}
+        </div>
         <p class="platforms" dir="ltr">Windows · macOS · Ubuntu · Fedora</p></div>
       <figure class="console">
         <div class="console-bar"><span>Linkwise</span><span>BW500</span></div>
@@ -68,8 +78,12 @@ const software = page === "" ? {
   </>}
   {page === "downloads" && release && <div class="wrap section">
     <h1>{t.downloads.title}</h1>
-    {release.status === "available" ? <p class="lede"><a href={release.release_url}>{release.preview ? t.downloads.preview : t.downloads.release} <bdi>{release.tag}</bdi></a>. {t.downloads.verify}</p>
-      : <p class="lede">{t.downloads.pending} <a href={repository + "/releases"}>GitHub Releases</a></p>}
+    <p class="lede" data-release-status={release.status}>{downloadable ? <><bdi>{release.tag}</bdi> · {release.preview ? t.downloads.preview : t.downloads.release}. {t.downloads.verify}</> : project.pending}</p>
+    <div class="media-links">
+      <a href={release.release_url ?? supportLinks.releases}>{project.releaseNotes}</a>
+      <a href={supportLinks.reportBug}>{project.reportBug}</a><a href={supportLinks.knownIssues}>{project.knownIssues}</a>
+    </div>
+    {!downloadable && <div class="actions"><Button href={link("capabilities") + "#build"}>{project.build}</Button><Button href={link("demos")} variant="outline">{project.watch}</Button></div>}
     <nav class="jump" aria-label={t.downloads.choose}>{targets.map(({ id, label }) => <a href={"#" + id}>{label}</a>)}</nav>
     <p id="platform-suggestion" data-label={t.downloads.choose} hidden></p>
     <div class="cards">
@@ -86,7 +100,7 @@ const software = page === "" ? {
   </div>}
   {page === "mail" && <article class="wrap section guide">
     <h1>{t.mail.title}</h1><p class="lede">{t.mail.lede}</p>
-    <h2>{t.mail.bench}</h2><p>{t.mail.tested}</p><h2>{t.mail.status}</h2><p>{t.mail.scope}</p>
+    <h2>{t.mail.bench}</h2><p>{t.mail.tested}</p><h2>{t.mail.status}</h2><p>{downloadable ? t.mail.scope : project.pending}</p>
     <p><a href={repository + "/blob/main/docs/architecture/software-design.md"} hreflang="en">{t.mail.architecture} ({t.ui.english})</a></p>
     <p><a href={link("guide") + "#mail-example"}>{t.guide.title}</a> · <a href={link("guide") + "#mail"}>{t.guide.mail}</a> · <a href={link("winlink")}>{t.nav.winlink}</a></p>
   </article>}
@@ -97,7 +111,8 @@ const software = page === "" ? {
     <h2>{t.winlink.verify}</h2><p>{t.winlink.test}</p><p>{t.winlink.scope}</p>
     <div class="actions"><Button href={link("downloads") + "#windows"}>Windows · {t.nav.downloads}</Button>
       <Button variant="outline" href={install("winlink-quick-start").href}>{t.winlink.full}{install("winlink-quick-start").language !== locale.code && " (" + t.ui.english + ")"}</Button></div>
-    <h2 id="bench-video">{t.winlink.video}</h2><video controls preload="none" width="960" src={base + "/winlink-prbs9.mp4"}><a href={base + "/winlink-prbs9.mp4"}>{t.winlink.getVideo}</a></video>
+    <h2 id="bench-video">{t.winlink.video}</h2><video controls playsinline preload="none" width="960" aria-label={t.winlink.video} poster={base + "/media/winlink-prbs9.webp"} src={base + "/winlink-prbs9.mp4"}><a href={base + "/winlink-prbs9.mp4"}>{t.winlink.getVideo}</a></video>
+    <p class="media-links"><a href={link("demos") + "#winlink"}>{project.demos}</a><a href={supportLinks.reportBug}>{project.reportBug}</a><a href={supportLinks.knownIssues}>{project.knownIssues}</a></p>
   </article>}
   {page === "varac" && visual && <article class="wrap section guide">
     <h1>{varac.title}</h1><p class="lede">{varac.lede}</p>
@@ -109,9 +124,10 @@ const software = page === "" ? {
     <pre dir="ltr"><code>{"linkwise-modemd --serve-station station.json\nlinkwise chat YOURCALL\n/connect PEERCALL"}</code></pre>
     <p><a href={link("guide") + "#start"}>{t.guide.start}</a></p>
     <h2>{visual.bench}</h2><p>{varac.bench}</p>
-    <p><a href={chatBench}>{t.ui.source}</a> · <a href={link("guide") + "#performance"}>{visual.performance}</a></p>
+    <p class="media-links"><a href={chatBench}>{t.ui.source}</a><a href={link("guide") + "#performance"}>{visual.performance}</a><a href={link("research") + "#acquisition"}>{project.research}</a></p>
     <h2>{t.guide.pki}</h2><p>{varac.scope}</p>
     <p><a href={link("guide") + "#chat-verification"}>{t.guide.chat}</a> · <a href={link("guide") + "#files"}>{t.guide.files}</a></p>
+    <p class="media-links"><a href={supportLinks.reportBug}>{project.reportBug}</a><a href={supportLinks.knownIssues}>{project.knownIssues}</a></p>
   </article>}
   {page === "guide" && <article class="wrap section">
     <h1>{t.guide.title}</h1><p class="lede">{t.guide.lede}</p>
@@ -123,6 +139,7 @@ const software = page === "" ? {
         <p><a href={base + "/reference/" + locale.code + "/" + more[id] + "/"}>{t.ui.source}</a></p>
       </section>)}
       <p><a href={base + "/guides/" + locale.code + ".md"} download>{t.nav.guide} · Markdown</a> · <a href={link("docs")}>{t.nav.docs}</a></p>
+      <p class="media-links"><a href={supportLinks.reportBug}>{project.reportBug}</a><a href={supportLinks.knownIssues}>{project.knownIssues}</a></p>
     </div>
   </article>}
   {page === "docs" && <article class="wrap section guide">
@@ -139,6 +156,7 @@ const software = page === "" ? {
       })}</ul>
     </section>)}
   </article>}
+  {isProjectPage && <ProjectPages {page} {locale} {t} {project} {base} {link} />}
 </BaseLayout>
 <script>
   const hint = document.querySelector<HTMLElement>("#platform-suggestion");

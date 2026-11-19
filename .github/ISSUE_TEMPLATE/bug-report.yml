@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a reproducible problem in Linkwise, an installer, or the website.
+title: "[Bug]: "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Linkwise version or commit
+      description: Give the release tag or Git commit. For a website issue, give the page URL.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform and setup
+      description: Include the OS, architecture, modem bandwidth, and whether you used replay, virtual audio, or physical radio if applicable.
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the relevant commands and the smallest input that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and observed results
+      description: Include relevant log excerpts with personal information and credentials removed.
+    validations:
+      required: true

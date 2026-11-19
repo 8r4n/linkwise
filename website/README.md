@@ -27,6 +27,21 @@ publishing a GitHub prerelease. The website build uses only complete public
 release sets and obtains the SHA-256 from GitHub asset metadata. The same
 release snapshot feeds the static download table and releases.json.
 
+The homepage uses the same release status to show either downloads or source
+build and demo links. The downloads and setup pages link directly to GitHub's
+release notes, bug report form, and open issue list. Support requests stay with
+the repository.
+
+The capabilities, demos, and research pages use the shared locale navigation.
+Detailed technical content is provided in English. Update the evidence and
+media inventory in `src/project-content.mjs` and the linked research sources
+when refreshing the site. Render the two beacon thumbnails from the current
+A4 map and frame diagram PDF. Run this from the repository root.
+
+```sh
+pdftoppm -r 106 -png lab-notes/figures/kiwisdr-beacon-map-dsp.pdf docs/testing/figures/kiwisdr-beacon-preview
+```
+
 After deployment, submit `https://8r4n.github.io/linkwise/sitemap.xml` in a
 verified Search Console URL-prefix property for `https://8r4n.github.io/linkwise/`.
 Inspect the home, VarAC, and operator guide URLs there to check discovery and

@@ -5,6 +5,8 @@ import { catalog, translation } from "../../docs/i18n/catalog.mjs";
 import { guideTrustMail } from "../../docs/i18n/guide-trust-mail.mjs";
 import { visualGuide } from "../../docs/i18n/visual-guide.mjs";
 import { varacGuide } from "../../docs/i18n/varac.mjs";
+import { websiteLabels } from "../../docs/i18n/website-upgrade.mjs";
+import { projectMedia } from "../src/project-content.mjs";
 
 const root = new URL("../../", import.meta.url);
 const publicDir = new URL("website/public/", root);
@@ -18,11 +20,14 @@ for (const guide of ["windows", "macos", "ubuntu", "fedora", "winlink-quick-star
   );
   await writeFile(new URL(`install/${guide}.md`, publicDir), markdown);
 }
-for (const [source, name] of [["modem-demo.png", "modem-demo.png"], ["winlink-prbs9/winlink-prbs9.mp4", "winlink-prbs9.mp4"]]) {
-  await copyFile(new URL("docs/media/modem/" + source, root), new URL(name, publicDir));
+for (const [source, name] of projectMedia) {
+  const destination = new URL(name, publicDir);
+  await mkdir(new URL(".", destination), { recursive: true });
+  await copyFile(new URL(source, root), destination);
 }
 for (const { code } of locales) {
   const t = loadMessages(code);
+  const project = websiteLabels(code);
   const trust = guideTrustMail(code);
   const visual = visualGuide(code);
   const varac = varacGuide(code);
@@ -32,7 +37,7 @@ for (const { code } of locales) {
   const reference = source => base + "reference/" + code + "/" + source + "/";
   await mkdir(target, { recursive: true });
   const overview = [
-    "# Linkwise", "", "> " + t.home.lede, "", t.guide.lede, "",
+    "# Linkwise", "", "> " + project.overview, "", t.guide.lede, "",
     "## " + t.nav.downloads, "", t.downloads.verify, "",
     link(t.downloads.manifest, base + "releases.json"),
     link(t.nav.downloads, base + pagePath(code, "downloads").slice(1)),
@@ -41,6 +46,7 @@ for (const { code } of locales) {
     link(t.guide.title, guide),
     link(t.guide.start, guide + "#start"),
     link(t.nav.winlink, base + pagePath(code, "winlink").slice(1)),
+    ...["capabilities", "demos", "research"].map(page => link(project[page], base + pagePath(code, page).slice(1))),
     link(t.nav.docs, base + pagePath(code, "docs").slice(1)), "",
     "## " + varac.title, "", varac.lede, "", varac.setup, "", varac.bench, varac.scope, "",
     link(varac.title, base + pagePath(code, "varac").slice(1)),
