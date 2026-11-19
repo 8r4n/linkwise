@@ -4,6 +4,9 @@ from pathlib import Path
 import numpy as np
 METHODS=tuple(os.environ.get('STUDY_METHODS','baseline,tone,gated').split(','))
 assert METHODS and METHODS[0]=='baseline' and set(METHODS)<={'baseline','tone','gated','iterated','stable'}
+def converted_wav(folder, original):
+ return folder/'converted'/original['sha256']/original['name']
+
 def load(root,source):
  path=root/source['path'];assert hashlib.sha256(path.read_bytes()).hexdigest()==source['wav_sha256']
  with wave.open(str(path)) as f:

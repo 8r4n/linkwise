@@ -8,7 +8,8 @@ from pathlib import Path
 import numpy as np
 from best_common import load,band_noise,quantize,invoke
 root=Path(sys.argv[1]);assert not(root/'diversity-results.csv').exists()
-sources=json.loads((root/'sources.json').read_text());pairs=[];seen=set()
+sources=[source for source in json.loads((root/'sources.json').read_text()) if source.get('estimated_utc')]
+pairs=[];seen=set()
 for a in sorted(sources,key=lambda r:(r['expected_wire_sha256'],r['name'])):
  for b in sorted(sources,key=lambda r:r['name']):
   digest=a['expected_wire_sha256']

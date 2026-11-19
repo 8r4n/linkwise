@@ -100,4 +100,7 @@ subset; the local Windows runner uses the existing isolated audio bench.
 version and KISS equality. `adjudicate-best.py` and `natural-best.py` prepare
 separate diagnostic replays after the primary stock run has completed.
 `continuous-best.py` checks entire original captures, and `report-best.py`
-archives results and draws the A4 chart. Full audio remains local.
+archives results and draws the A4 chart. Each original WAV is converted and
+replayed separately, including after a capture spans multiple files. Captures
+with several files are excluded from diversity pairing because the packet log
+cannot establish a start time for each file. Full audio remains local.
