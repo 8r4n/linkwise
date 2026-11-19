@@ -1,0 +1,29 @@
+{
+  "selected": "iterated",
+  "summary": {
+    "baseline": {
+      "tone_exact": 0,
+      "clean": 6,
+      "unmatched": 0,
+      "seconds": 4.829347164999999
+    },
+    "gated": {
+      "tone_exact": 49,
+      "clean": 6,
+      "unmatched": 1,
+      "seconds": 4.267177917000002
+    },
+    "iterated": {
+      "tone_exact": 49,
+      "clean": 6,
+      "unmatched": 0,
+      "seconds": 4.266368162999999
+    },
+    "stable": {
+      "tone_exact": 49,
+      "clean": 6,
+      "unmatched": 0,
+      "seconds": 4.272453128
+    }
+  }
+}

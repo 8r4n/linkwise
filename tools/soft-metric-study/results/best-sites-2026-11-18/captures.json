@@ -1,0 +1,455 @@
+[
+  {
+    "site": "chichester",
+    "receiver": "http://g8ure.ddns.net:8079",
+    "dial_khz": 7105.0,
+    "mode": "USB",
+    "passband_hz": [
+      250,
+      3150
+    ],
+    "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+    "source_url": "https://www.varac-hamradio.com/",
+    "requested_seconds": 180,
+    "start_utc": "2026-11-18T03:07:40.982821+00:00",
+    "antenna": "80m Dipole",
+    "gps": "(50.846315, -0.661952)",
+    "receiver_name": "80m Dipole | Chichester UK",
+    "termination_reason": "Wall-clock bound or second connection failure",
+    "returncode": -15,
+    "end_utc": "2026-11-18T03:08:03.834309+00:00",
+    "files": [],
+    "packet_count": 0,
+    "sequence_gaps": null,
+    "missing_packets": null,
+    "sequence_resets_or_duplicates": null,
+    "adc_overload_packets": 0,
+    "recordings": [],
+    "failure": "No WAV/audio produced; Wall-clock bound or second connection failure"
+  },
+  {
+    "site": "free-union",
+    "receiver": "http://21748.proxy.kiwisdr.com:80",
+    "dial_khz": 7105.0,
+    "mode": "USB",
+    "passband_hz": [
+      250,
+      3150
+    ],
+    "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+    "source_url": "https://www.varac-hamradio.com/",
+    "requested_seconds": 180,
+    "start_utc": "2026-11-18T03:11:08.071258+00:00",
+    "failure": "<urlopen error [Errno 61] Connection refused>",
+    "end_utc": "2026-11-18T03:11:08.286921+00:00",
+    "files": [],
+    "packet_count": 0,
+    "sequence_gaps": null,
+    "missing_packets": null,
+    "sequence_resets_or_duplicates": null,
+    "adc_overload_packets": 0,
+    "recordings": []
+  },
+  {
+    "site": "glava",
+    "receiver": "http://sa4bna.hopto.org:8073",
+    "dial_khz": 7105.0,
+    "mode": "USB",
+    "passband_hz": [
+      250,
+      3150
+    ],
+    "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+    "source_url": "https://www.varac-hamradio.com/",
+    "requested_seconds": 180,
+    "start_utc": "2026-11-18T03:07:40.983004+00:00",
+    "antenna": "100 mtr beverage, end terminated",
+    "gps": "(59.546000, 12.526000)",
+    "receiver_name": "SA4BNA 0-32 MHZ SDR 1, Arvika",
+    "termination_reason": "Wall-clock bound or second connection failure",
+    "returncode": -15,
+    "end_utc": "2026-11-18T03:08:04.429138+00:00",
+    "files": [],
+    "packet_count": 0,
+    "sequence_gaps": null,
+    "missing_packets": null,
+    "sequence_resets_or_duplicates": null,
+    "adc_overload_packets": 0,
+    "recordings": [],
+    "failure": "No WAV/audio produced; Wall-clock bound or second connection failure"
+  },
+  {
+    "site": "hameenlinna",
+    "receiver": "http://oh3aa.ddns.net:18073",
+    "dial_khz": 7105.0,
+    "mode": "USB",
+    "passband_hz": [
+      250,
+      3150
+    ],
+    "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+    "source_url": "https://www.varac-hamradio.com/",
+    "requested_seconds": 180,
+    "start_utc": "2026-11-18T03:09:33.096434+00:00",
+    "antenna": "Crossed Loop Antennas with LZ1AQ AAA-1C Active Antenna Amplifier",
+    "gps": "(60.950613, 24.483177)",
+    "receiver_name": "OH3AA Hameenlinnan Radioamatoorit KiwiSDR 0-30 MHz | H\u00e4meenlinna, Finland",
+    "termination_reason": "Wall-clock bound or second connection failure",
+    "returncode": -15,
+    "end_utc": "2026-11-18T03:09:56.268109+00:00",
+    "files": [],
+    "packet_count": 0,
+    "sequence_gaps": null,
+    "missing_packets": null,
+    "sequence_resets_or_duplicates": null,
+    "adc_overload_packets": 0,
+    "recordings": [],
+    "failure": "No WAV/audio produced; Wall-clock bound or second connection failure"
+  },
+  {
+    "site": "newton",
+    "receiver": "http://24.218.56.55:8073",
+    "dial_khz": 7105.0,
+    "mode": "USB",
+    "passband_hz": [
+      250,
+      3150
+    ],
+    "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+    "source_url": "https://www.varac-hamradio.com/",
+    "requested_seconds": 180,
+    "start_utc": "2026-11-18T03:13:40.085212+00:00",
+    "antenna": "500' NE Beverage primary- may change with local operating",
+    "gps": "(42.867236, -71.003845)",
+    "receiver_name": "0-30 MHz SDR, W1NT \u300bNewton, New Hampshire, NH USA",
+    "hardware": "KiwiSDR 1 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3 Limits \u2063 \ud83d\udcfb DRM \u2063",
+    "termination_reason": "Wall-clock bound or second connection failure",
+    "returncode": -15,
+    "end_utc": "2026-11-18T03:14:02.496114+00:00",
+    "files": [],
+    "packet_count": 0,
+    "sequence_gaps": null,
+    "missing_packets": null,
+    "sequence_resets_or_duplicates": null,
+    "adc_overload_packets": 0,
+    "recordings": [],
+    "failure": "No WAV/audio produced; Wall-clock bound or second connection failure"
+  },
+  {
+    "site": "warrenton",
+    "receiver": "http://kiwisdr.k1ra.us:8075",
+    "dial_khz": 7105.0,
+    "mode": "USB",
+    "passband_hz": [
+      250,
+      3150
+    ],
+    "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+    "source_url": "https://www.varac-hamradio.com/",
+    "requested_seconds": 180,
+    "start_utc": "2026-11-18T03:13:40.084989+00:00",
+    "antenna": "80m EFHW, 160m Inv-L, LoG",
+    "gps": "(38.742298, -77.797982)",
+    "receiver_name": "0-30 MHz SDR, K1RA, Warrenton, VA, USA",
+    "hardware": "KiwiSDR 2 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3\ud83d\udeab Limits",
+    "returncode": 0,
+    "end_utc": "2026-11-18T03:16:41.320425+00:00",
+    "files": [
+      {
+        "name": "20261118T031341Z_7105000_usb.wav",
+        "sha256": "bac6c29f39b2357cc974a06795751414441284ca9a4c5f212f3f69799ed28f45"
+      }
+    ],
+    "packet_count": 9001,
+    "sequence_gaps": 0,
+    "missing_packets": 0,
+    "sequence_resets_or_duplicates": 0,
+    "adc_overload_packets": 0,
+    "recordings": [
+      {
+        "original": "20261118T031341Z_7105000_usb.wav",
+        "original_sha256": "bac6c29f39b2357cc974a06795751414441284ca9a4c5f212f3f69799ed28f45",
+        "sample_rate_hz": 12000,
+        "seconds": 180.02,
+        "frames": [
+          {
+            "level": 2,
+            "start": 5111808,
+            "wire_sha256": "fc9c27dcafc63ae54e6b22ea1197fc1fcc439eca87c77dddf627fd742499fd82",
+            "kiss_sha256": "f08e9172db624c235781299bcc58bb16cf7154fb406617901bfd6fc003edaeb8",
+            "estimated_utc": "2026-11-18T03:15:27.595988+00:00"
+          },
+          {
+            "level": 2,
+            "start": 6905728,
+            "wire_sha256": "d0a852e81ade579d678b1f23f41f63852a4f9fdb21a7c766e2e8c93ce1f178e6",
+            "kiss_sha256": "f1876d0324f87c2e24965d547bd1eee00893fb93208fc422cfae1610576b40af",
+            "estimated_utc": "2026-11-18T03:16:04.969321+00:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "site": "warrenton",
+    "receiver": "http://kiwisdr.k1ra.us:8075",
+    "dial_khz": 7105.0,
+    "mode": "USB",
+    "passband_hz": [
+      250,
+      3150
+    ],
+    "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+    "source_url": "https://www.varac-hamradio.com/",
+    "requested_seconds": 180,
+    "start_utc": "2026-11-18T03:17:25.445139+00:00",
+    "antenna": "80m EFHW, 160m Inv-L, LoG",
+    "gps": "(38.742298, -77.797982)",
+    "receiver_name": "0-30 MHz SDR, K1RA, Warrenton, VA, USA",
+    "hardware": "KiwiSDR 2 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3\ud83d\udeab Limits",
+    "returncode": 0,
+    "end_utc": "2026-11-18T03:20:26.616352+00:00",
+    "files": [
+      {
+        "name": "20261118T031726Z_7105000_usb.wav",
+        "sha256": "1eb06ec16dd163e46d845164950df81a8e0be399635a65072ac98d99ca88b359"
+      }
+    ],
+    "packet_count": 9001,
+    "sequence_gaps": 0,
+    "missing_packets": 0,
+    "sequence_resets_or_duplicates": 0,
+    "adc_overload_packets": 0,
+    "recordings": [
+      {
+        "original": "20261118T031726Z_7105000_usb.wav",
+        "original_sha256": "1eb06ec16dd163e46d845164950df81a8e0be399635a65072ac98d99ca88b359",
+        "sample_rate_hz": 12000,
+        "seconds": 180.02,
+        "frames": [
+          {
+            "level": 2,
+            "start": 954112,
+            "wire_sha256": "41cf83373dfbb51933c91290ef1577e5af0ec561b6f70f4de2f6ef0ebbe9064e",
+            "kiss_sha256": "cb8441875629b985c380facc836535b3e6acf3e9209ba8045e326db33de77428",
+            "estimated_utc": "2026-11-18T03:17:46.364381+00:00"
+          },
+          {
+            "level": 2,
+            "start": 1599360,
+            "wire_sha256": "50fbb2650dd3728d9e29cc9bf1f32ae254d206560feffa82cf3ca00713099807",
+            "kiss_sha256": "608f471f8da65288bc9d844060f1cd7581bc30d15bdc36000df306df09a652b5",
+            "estimated_utc": "2026-11-18T03:17:59.807048+00:00"
+          },
+          {
+            "level": 2,
+            "start": 2311936,
+            "wire_sha256": "a8e327a42cfebbdea86d5b53b76437a14c7a754ed322b1847bf414082dbe3356",
+            "kiss_sha256": "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42",
+            "estimated_utc": "2026-11-18T03:18:14.652381+00:00"
+          },
+          {
+            "level": 2,
+            "start": 4239360,
+            "wire_sha256": "e8641107e1f7d203a88221688dd63e8d26823ec81f0ddb54073cb066b0c985eb",
+            "kiss_sha256": "9ecbfaee85f1de7d5569a61a3618583db8d8bdbf673c66aecae8a56a604a391e",
+            "estimated_utc": "2026-11-18T03:18:54.807048+00:00"
+          },
+          {
+            "level": 2,
+            "start": 7806336,
+            "wire_sha256": "c69ab202b56837ccf1bcbbbcfebe2fa64494e1490696c3a1715ce27a05c92aa2",
+            "kiss_sha256": "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1",
+            "estimated_utc": "2026-11-18T03:20:09.119048+00:00"
+          },
+          {
+            "level": 2,
+            "start": 8184192,
+            "wire_sha256": "5e780d5e8b6b0b5db4b5828f080e5d10ec84aeb04ababba40d4ba3731c985198",
+            "kiss_sha256": "804c4971b5c835101b319437b6958b43b8b742896f9d3059e6d3def83aa4c51b",
+            "estimated_utc": "2026-11-18T03:20:16.991048+00:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "site": "westminster",
+    "receiver": "http://sdr.hfunderground.com:8073",
+    "dial_khz": 7105.0,
+    "mode": "USB",
+    "passband_hz": [
+      250,
+      3150
+    ],
+    "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+    "source_url": "https://www.varac-hamradio.com/",
+    "requested_seconds": 180,
+    "start_utc": "2026-11-18T03:09:33.096625+00:00",
+    "antenna": "120 ft T2FD ",
+    "gps": "(39.704000, -76.974000)",
+    "receiver_name": "W3HFU - Westminster, MD, USA - 120 ft T2FD Antenna",
+    "returncode": 0,
+    "end_utc": "2026-11-18T03:12:34.857960+00:00",
+    "files": [
+      {
+        "name": "20261118T030934Z_7105000_usb.wav",
+        "sha256": "f7fb91657ebddccc54877660dec11ab324228c3b29b2d212d1156da3fe863baa"
+      }
+    ],
+    "packet_count": 4223,
+    "sequence_gaps": 0,
+    "missing_packets": 0,
+    "sequence_resets_or_duplicates": 0,
+    "adc_overload_packets": 0,
+    "recordings": [
+      {
+        "original": "20261118T030934Z_7105000_usb.wav",
+        "original_sha256": "f7fb91657ebddccc54877660dec11ab324228c3b29b2d212d1156da3fe863baa",
+        "sample_rate_hz": 11999,
+        "seconds": 180.19634969580798,
+        "frames": [
+          {
+            "level": 2,
+            "start": 394624,
+            "wire_sha256": "36330962cd48d2f1b0e44c1f5f589f007bfdd9586fc3f5c86e05e5649826b868",
+            "kiss_sha256": "f687630545f6e791f244a9dd0610b1a77fbf03f4a075bc34167eabeb826ab67e",
+            "estimated_utc": "2026-11-18T03:09:42.910720+00:00"
+          },
+          {
+            "level": 2,
+            "start": 756464,
+            "wire_sha256": "da839fea1c18c24ecb898fc5b0e24611f91b389f4208bd28e50b49df40196c7a",
+            "kiss_sha256": "23c9ca33a2fec62a16bd044023ee316b30fddfe3950990bf5cd3e3c27c6e338e",
+            "estimated_utc": "2026-11-18T03:09:50.449054+00:00"
+          },
+          {
+            "level": 2,
+            "start": 2756864,
+            "wire_sha256": "1738c522d41cbdd334a3097f2b505214ca0c6e9343f184c3cfd843baa9547797",
+            "kiss_sha256": "e78a16970c53ac1a36d89deac9e1ba2e4df0fb467e0cdc8b3d7ed847ac8f012a",
+            "estimated_utc": "2026-11-18T03:10:32.124054+00:00"
+          },
+          {
+            "level": 2,
+            "start": 6591488,
+            "wire_sha256": "1b15a562479ffeb0b64c45511b5ef0ab086c9e1f3162f8924c14450f8693603a",
+            "kiss_sha256": "ce719da55813052dd3466809fd1d3dcaf998279963f6dd565742106fec59ef1b",
+            "estimated_utc": "2026-11-18T03:11:52.012054+00:00"
+          },
+          {
+            "level": 2,
+            "start": 7081856,
+            "wire_sha256": "c461c01bac88b94f1b93c7f9539b0b8db2339c2f1a0aaed2f89b8f2f2b62cb14",
+            "kiss_sha256": "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314",
+            "estimated_utc": "2026-11-18T03:12:02.228054+00:00"
+          },
+          {
+            "level": 2,
+            "start": 7869184,
+            "wire_sha256": "9d4564d58e5dbae4fceb88ebbf8e8cc64c0462f9c2336ad39e2cd7cc266a8cb6",
+            "kiss_sha256": "858101e781dc4321ccdabf128ecd47051fb7195193889ed8571448ee3d30e15c",
+            "estimated_utc": "2026-11-18T03:12:18.630720+00:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "site": "westminster",
+    "receiver": "http://sdr.hfunderground.com:8073",
+    "dial_khz": 7105.0,
+    "mode": "USB",
+    "passband_hz": [
+      250,
+      3150
+    ],
+    "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+    "source_url": "https://www.varac-hamradio.com/",
+    "requested_seconds": 180,
+    "start_utc": "2026-11-18T03:16:22.220281+00:00",
+    "antenna": "120 ft T2FD ",
+    "gps": "(39.704000, -76.974000)",
+    "receiver_name": "W3HFU - Westminster, MD, USA - 120 ft T2FD Antenna",
+    "hardware": "KiwiSDR 1 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3\ud83d\udeab Limits \u2063 \ud83d\udcfb DRM \u2063",
+    "returncode": 0,
+    "end_utc": "2026-11-18T03:19:23.799448+00:00",
+    "files": [
+      {
+        "name": "20261118T031623Z_7105000_usb.wav",
+        "sha256": "2a91857ac04e36d605ec5b487c6b6ce980e860db21559ba35acabb7850cd1227"
+      }
+    ],
+    "packet_count": 4222,
+    "sequence_gaps": 0,
+    "missing_packets": 0,
+    "sequence_resets_or_duplicates": 0,
+    "adc_overload_packets": 0,
+    "recordings": [
+      {
+        "original": "20261118T031623Z_7105000_usb.wav",
+        "original_sha256": "2a91857ac04e36d605ec5b487c6b6ce980e860db21559ba35acabb7850cd1227",
+        "sample_rate_hz": 11999,
+        "seconds": 180.15367947328943,
+        "frames": [
+          {
+            "level": 2,
+            "start": 670848,
+            "wire_sha256": "ffb5b602fc69a9ff2036b0ecb20f3be87e96b771285280f0cb5e19a4a80193ca",
+            "kiss_sha256": "40132889ce351c4303a47e3ed533155d45baf1c7cc734abf72d659f42b436df5",
+            "estimated_utc": "2026-11-18T03:16:37.567684+00:00"
+          },
+          {
+            "level": 2,
+            "start": 2199424,
+            "wire_sha256": "8100e651f5b67e581bed60d86ecb1504664c2b6d3ae103838f7207ae70313bc7",
+            "kiss_sha256": "7ccf9a337aad4b4a0c39e80ffcc5c3eb0b6bca741528e19926a850c9cca2463c",
+            "estimated_utc": "2026-11-18T03:17:09.413017+00:00"
+          },
+          {
+            "level": 2,
+            "start": 4625408,
+            "wire_sha256": "50fbb2650dd3728d9e29cc9bf1f32ae254d206560feffa82cf3ca00713099807",
+            "kiss_sha256": "608f471f8da65288bc9d844060f1cd7581bc30d15bdc36000df306df09a652b5",
+            "estimated_utc": "2026-11-18T03:17:59.954351+00:00"
+          },
+          {
+            "level": 2,
+            "start": 5337856,
+            "wire_sha256": "a8e327a42cfebbdea86d5b53b76437a14c7a754ed322b1847bf414082dbe3356",
+            "kiss_sha256": "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42",
+            "estimated_utc": "2026-11-18T03:18:14.797017+00:00"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "site": "westminster-beverage",
+    "receiver": "http://sdr.hfunderground.com:8076",
+    "dial_khz": 7105.0,
+    "mode": "USB",
+    "passband_hz": [
+      250,
+      3150
+    ],
+    "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+    "source_url": "https://www.varac-hamradio.com/",
+    "requested_seconds": 180,
+    "start_utc": "2026-11-18T03:11:08.071057+00:00",
+    "antenna": "500 ft Northeast Beverage to Europe",
+    "gps": "(39.704000, -76.974000)",
+    "receiver_name": "W3HFU - Westminster, MD, USA - 500 ft Northeast Beverage to Europe",
+    "termination_reason": "Wall-clock bound or second connection failure",
+    "returncode": -15,
+    "end_utc": "2026-11-18T03:11:30.437119+00:00",
+    "files": [],
+    "packet_count": 0,
+    "sequence_gaps": null,
+    "missing_packets": null,
+    "sequence_resets_or_duplicates": null,
+    "adc_overload_packets": 0,
+    "recordings": [],
+    "failure": "No WAV/audio produced; Wall-clock bound or second connection failure"
+  }
+]

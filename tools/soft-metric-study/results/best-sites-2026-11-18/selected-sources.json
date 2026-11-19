@@ -1,0 +1,134 @@
+[
+  {
+    "name": "warrenton-7105-overlap-frame-2",
+    "site": "warrenton",
+    "receiver": "http://kiwisdr.k1ra.us:8075",
+    "antenna": "80m EFHW, 160m Inv-L, LoG",
+    "dial_khz": 7105.0,
+    "path": "clips/warrenton-7105-overlap-frame-2.wav",
+    "wav_sha256": "fcd4c89e7884dd2d3d30f64404accabbfcaa67bd6b29569ec6de82f40bd65d0e",
+    "expected_wire_sha256": "a8e327a42cfebbdea86d5b53b76437a14c7a754ed322b1847bf414082dbe3356",
+    "expected_kiss_sha256": "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42",
+    "allowed_wire_sha256": [
+      "a8e327a42cfebbdea86d5b53b76437a14c7a754ed322b1847bf414082dbe3356"
+    ],
+    "start_in_original": 2311936,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T03:18:14.652381+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  },
+  {
+    "name": "warrenton-7105-overlap-frame-1",
+    "site": "warrenton",
+    "receiver": "http://kiwisdr.k1ra.us:8075",
+    "antenna": "80m EFHW, 160m Inv-L, LoG",
+    "dial_khz": 7105.0,
+    "path": "clips/warrenton-7105-overlap-frame-1.wav",
+    "wav_sha256": "d2ce158ce340c4c0504704a5af6d49dba8d193c939b9f7a15f8cccf410974ca7",
+    "expected_wire_sha256": "50fbb2650dd3728d9e29cc9bf1f32ae254d206560feffa82cf3ca00713099807",
+    "expected_kiss_sha256": "608f471f8da65288bc9d844060f1cd7581bc30d15bdc36000df306df09a652b5",
+    "allowed_wire_sha256": [
+      "50fbb2650dd3728d9e29cc9bf1f32ae254d206560feffa82cf3ca00713099807"
+    ],
+    "start_in_original": 1599360,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T03:17:59.807048+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  },
+  {
+    "name": "warrenton-7105-overlap-frame-5",
+    "site": "warrenton",
+    "receiver": "http://kiwisdr.k1ra.us:8075",
+    "antenna": "80m EFHW, 160m Inv-L, LoG",
+    "dial_khz": 7105.0,
+    "path": "clips/warrenton-7105-overlap-frame-5.wav",
+    "wav_sha256": "18c393c71034e26269ef204e6b17c8a12420f61ae15eef1fba1dfd83ae39b954",
+    "expected_wire_sha256": "5e780d5e8b6b0b5db4b5828f080e5d10ec84aeb04ababba40d4ba3731c985198",
+    "expected_kiss_sha256": "804c4971b5c835101b319437b6958b43b8b742896f9d3059e6d3def83aa4c51b",
+    "allowed_wire_sha256": [
+      "5e780d5e8b6b0b5db4b5828f080e5d10ec84aeb04ababba40d4ba3731c985198"
+    ],
+    "start_in_original": 8184192,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T03:20:16.991048+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  },
+  {
+    "name": "westminster-7105-frame-1",
+    "site": "westminster",
+    "receiver": "http://sdr.hfunderground.com:8073",
+    "antenna": "120 ft T2FD ",
+    "dial_khz": 7105.0,
+    "path": "clips/westminster-7105-frame-1.wav",
+    "wav_sha256": "3b81d67fb4f09441708f2cc6b3b398b4e54396b5d1caa87cf964003c122e1fd3",
+    "expected_wire_sha256": "da839fea1c18c24ecb898fc5b0e24611f91b389f4208bd28e50b49df40196c7a",
+    "expected_kiss_sha256": "23c9ca33a2fec62a16bd044023ee316b30fddfe3950990bf5cd3e3c27c6e338e",
+    "allowed_wire_sha256": [
+      "da839fea1c18c24ecb898fc5b0e24611f91b389f4208bd28e50b49df40196c7a"
+    ],
+    "start_in_original": 756464,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T03:09:50.449054+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  },
+  {
+    "name": "westminster-7105-overlap-frame-3",
+    "site": "westminster",
+    "receiver": "http://sdr.hfunderground.com:8073",
+    "antenna": "120 ft T2FD ",
+    "dial_khz": 7105.0,
+    "path": "clips/westminster-7105-overlap-frame-3.wav",
+    "wav_sha256": "f98ca19e73b26b5c44f4a7589f65d122c1e392a97096ecff312c22481e32bd7b",
+    "expected_wire_sha256": "a8e327a42cfebbdea86d5b53b76437a14c7a754ed322b1847bf414082dbe3356",
+    "expected_kiss_sha256": "2ed0debcd09ddf077483c7a71e2dd65d5724b61d6f78b7a933a8be8ec5517d42",
+    "allowed_wire_sha256": [
+      "a8e327a42cfebbdea86d5b53b76437a14c7a754ed322b1847bf414082dbe3356"
+    ],
+    "start_in_original": 5337856,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T03:18:14.797017+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  },
+  {
+    "name": "westminster-7105-overlap-frame-0",
+    "site": "westminster",
+    "receiver": "http://sdr.hfunderground.com:8073",
+    "antenna": "120 ft T2FD ",
+    "dial_khz": 7105.0,
+    "path": "clips/westminster-7105-overlap-frame-0.wav",
+    "wav_sha256": "2e347daf56c25287a434229c19e6213010f66cd01f176daad7f76ca4d3bb9cfb",
+    "expected_wire_sha256": "ffb5b602fc69a9ff2036b0ecb20f3be87e96b771285280f0cb5e19a4a80193ca",
+    "expected_kiss_sha256": "40132889ce351c4303a47e3ed533155d45baf1c7cc734abf72d659f42b436df5",
+    "allowed_wire_sha256": [
+      "ffb5b602fc69a9ff2036b0ecb20f3be87e96b771285280f0cb5e19a4a80193ca"
+    ],
+    "start_in_original": 670848,
+    "frame_start_in_clip": 96000,
+    "estimated_utc": "2026-11-18T03:16:37.567684+00:00",
+    "padding_samples": [
+      0,
+      0
+    ],
+    "reference": "clean baseline CRC; stock qualification pending"
+  }
+]

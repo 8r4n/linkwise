@@ -1,0 +1,454 @@
+{
+  "scope": "Receive-only KiwiSDR observations with sample-rate conversion and no added impairments. Transmitter frame counts and exact payload oracle are unknown. CRC-valid candidate-only output requires independent corroboration. Cross-site counts are paired receiver observations. Timing uses internet packet arrival estimates.",
+  "replay_sha256": "366985865f14755eb5908987c5b5366858a55361fe1df18b83e2282389164a6c",
+  "converter": "macOS afconvert LEI16@48000 mono",
+  "totals": {
+    "receiver_attempts": 2,
+    "recordings": 2,
+    "recorded_seconds": 360.0936794732894,
+    "complete_recordings": 2,
+    "usable_recordings": 2,
+    "usable_seconds": 360.0936794732894,
+    "baseline_frames": 14,
+    "baseline_kiss_frames": 14,
+    "baseline_gate_attempts": 0,
+    "baseline_gate_activations": 0,
+    "baseline_replay_wall_seconds": 3.880982165999999,
+    "stable_frames": 14,
+    "stable_kiss_frames": 14,
+    "stable_gate_attempts": 440,
+    "stable_gate_activations": 0,
+    "stable_replay_wall_seconds": 4.488866958999999,
+    "retained": 14,
+    "lost": 0,
+    "additional": 0
+  },
+  "cross_receiver_matches": [
+    {
+      "sites": [
+        "warrenton",
+        "westminster"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+      "kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+      "arrival_estimate_difference_s": 0.147463
+    },
+    {
+      "sites": [
+        "warrenton",
+        "westminster"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+      "kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+      "arrival_estimate_difference_s": 0.147464
+    },
+    {
+      "sites": [
+        "warrenton",
+        "westminster"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5",
+      "kiss_sha256": "0b3d595df02c9a99dd57096cb4c91d04721fc74e93ec3fc23e670cba41674099",
+      "arrival_estimate_difference_s": 0.15013
+    },
+    {
+      "sites": [
+        "warrenton",
+        "westminster"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+      "kiss_sha256": "880f547d1836979b1b42495b6633a192c5102ea74e50ce11427e22dd73a7be57",
+      "arrival_estimate_difference_s": 0.147463
+    },
+    {
+      "sites": [
+        "warrenton",
+        "westminster"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+      "kiss_sha256": "1069258b5888c361de01b8072674b7d060ea49621348ecf13e42d09b29e33eae",
+      "arrival_estimate_difference_s": 0.147463
+    },
+    {
+      "sites": [
+        "warrenton",
+        "westminster"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+      "kiss_sha256": "163d457ebc7b33f6bd673f3f82331d6f60fb147b95921e5f9718c38ae0c13e2d",
+      "arrival_estimate_difference_s": 0.147463
+    },
+    {
+      "sites": [
+        "warrenton",
+        "westminster"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+      "kiss_sha256": "438a486da8b3398e19dbdf2a4eb8971525aad4ad408083aa8cea06268b852d7c",
+      "arrival_estimate_difference_s": 0.144797
+    }
+  ],
+  "captures": [
+    {
+      "site": "warrenton",
+      "receiver": "http://kiwisdr.k1ra.us:8075",
+      "dial_khz": 7105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T12:59:19.646489+00:00",
+      "antenna": "80m EFHW, 160m Inv-L, LoG",
+      "gps": "(38.742298, -77.797982)",
+      "receiver_name": "0-30 MHz SDR, K1RA, Warrenton, VA, USA",
+      "hardware": "KiwiSDR 2 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3\ud83d\udeab Limits",
+      "returncode": 0,
+      "end_utc": "2026-11-18T13:02:20.875969+00:00",
+      "files": [
+        {
+          "name": "20261118T125920Z_7105000_usb.wav",
+          "sha256": "e122d8e333a7b671a2b0525e0683ed3f5bc076b49e4512b16505c82a5c4acf6a"
+        }
+      ],
+      "continuity": {
+        "packets": 8997,
+        "missing": 0,
+        "duplicates": 0,
+        "reverse_or_reset": 0,
+        "overload": 0,
+        "first_packet_utc": "2026-11-18T12:59:20.695873+00:00"
+      },
+      "recordings": [
+        {
+          "original": "20261118T125920Z_7105000_usb.wav",
+          "source_rate_hz": 12000,
+          "seconds": 179.94,
+          "complete": true,
+          "usable": true,
+          "derivative_sha256": "64714a6efa8f2a3ee969b7a72b6debf1e038d990f8507422afe25d227945108a",
+          "methods": {
+            "baseline": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 564992,
+                  "seconds": 11.770666666666667,
+                  "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+                  "kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+                  "estimated_utc": "2026-11-18T12:59:32.466540+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 2727424,
+                  "seconds": 56.821333333333335,
+                  "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+                  "kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+                  "estimated_utc": "2026-11-18T13:00:17.517206+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 3789056,
+                  "seconds": 78.93866666666666,
+                  "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5",
+                  "kiss_sha256": "0b3d595df02c9a99dd57096cb4c91d04721fc74e93ec3fc23e670cba41674099",
+                  "estimated_utc": "2026-11-18T13:00:39.634540+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 4985216,
+                  "seconds": 103.85866666666666,
+                  "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+                  "kiss_sha256": "880f547d1836979b1b42495b6633a192c5102ea74e50ce11427e22dd73a7be57",
+                  "estimated_utc": "2026-11-18T13:01:04.554540+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 5508224,
+                  "seconds": 114.75466666666667,
+                  "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+                  "kiss_sha256": "1069258b5888c361de01b8072674b7d060ea49621348ecf13e42d09b29e33eae",
+                  "estimated_utc": "2026-11-18T13:01:15.450540+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 6054272,
+                  "seconds": 126.13066666666667,
+                  "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+                  "kiss_sha256": "163d457ebc7b33f6bd673f3f82331d6f60fb147b95921e5f9718c38ae0c13e2d",
+                  "estimated_utc": "2026-11-18T13:01:26.826540+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 6564352,
+                  "seconds": 136.75733333333332,
+                  "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+                  "kiss_sha256": "438a486da8b3398e19dbdf2a4eb8971525aad4ad408083aa8cea06268b852d7c",
+                  "estimated_utc": "2026-11-18T13:01:37.453206+00:00"
+                }
+              ],
+              "gate_attempts": 0,
+              "gate_activations": 0,
+              "replay_wall_seconds": 1.94191925
+            },
+            "stable": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 564992,
+                  "seconds": 11.770666666666667,
+                  "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+                  "kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+                  "estimated_utc": "2026-11-18T12:59:32.466540+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 2727424,
+                  "seconds": 56.821333333333335,
+                  "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+                  "kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+                  "estimated_utc": "2026-11-18T13:00:17.517206+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 3789056,
+                  "seconds": 78.93866666666666,
+                  "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5",
+                  "kiss_sha256": "0b3d595df02c9a99dd57096cb4c91d04721fc74e93ec3fc23e670cba41674099",
+                  "estimated_utc": "2026-11-18T13:00:39.634540+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 4985216,
+                  "seconds": 103.85866666666666,
+                  "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+                  "kiss_sha256": "880f547d1836979b1b42495b6633a192c5102ea74e50ce11427e22dd73a7be57",
+                  "estimated_utc": "2026-11-18T13:01:04.554540+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 5508224,
+                  "seconds": 114.75466666666667,
+                  "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+                  "kiss_sha256": "1069258b5888c361de01b8072674b7d060ea49621348ecf13e42d09b29e33eae",
+                  "estimated_utc": "2026-11-18T13:01:15.450540+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 6054272,
+                  "seconds": 126.13066666666667,
+                  "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+                  "kiss_sha256": "163d457ebc7b33f6bd673f3f82331d6f60fb147b95921e5f9718c38ae0c13e2d",
+                  "estimated_utc": "2026-11-18T13:01:26.826540+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 6564352,
+                  "seconds": 136.75733333333332,
+                  "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+                  "kiss_sha256": "438a486da8b3398e19dbdf2a4eb8971525aad4ad408083aa8cea06268b852d7c",
+                  "estimated_utc": "2026-11-18T13:01:37.453206+00:00"
+                }
+              ],
+              "gate_attempts": 227,
+              "gate_activations": 0,
+              "replay_wall_seconds": 2.2624196669999996
+            }
+          },
+          "paired": {
+            "retained": 7,
+            "lost": [],
+            "additional": []
+          }
+        }
+      ]
+    },
+    {
+      "site": "westminster",
+      "receiver": "http://sdr.hfunderground.com:8073",
+      "dial_khz": 7105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T12:59:19.646271+00:00",
+      "antenna": "120 ft T2FD ",
+      "gps": "(39.704000, -76.974000)",
+      "receiver_name": "W3HFU - Westminster, MD, USA - 120 ft T2FD Antenna",
+      "hardware": "KiwiSDR 1 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3\ud83d\udeab Limits \u2063 \ud83d\udcfb DRM \u2063",
+      "returncode": 0,
+      "end_utc": "2026-11-18T13:02:21.310662+00:00",
+      "files": [
+        {
+          "name": "20261118T125921Z_7105000_usb.wav",
+          "sha256": "3c9b470c4c60cc70e06a99715dbe08bcb97132041b6a8deac35ac5b24f116781"
+        }
+      ],
+      "continuity": {
+        "packets": 4222,
+        "missing": 0,
+        "duplicates": 0,
+        "reverse_or_reset": 0,
+        "overload": 0,
+        "first_packet_utc": "2026-11-18T12:59:21.008670+00:00"
+      },
+      "recordings": [
+        {
+          "original": "20261118T125921Z_7105000_usb.wav",
+          "source_rate_hz": 11999,
+          "seconds": 180.15367947328943,
+          "complete": true,
+          "usable": true,
+          "derivative_sha256": "022f38412b32cc9a2d24c8f4ab056eb0a84462b7a1634eafddacba2cb4a53b79",
+          "methods": {
+            "baseline": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 557056,
+                  "seconds": 11.605333333333334,
+                  "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+                  "kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+                  "estimated_utc": "2026-11-18T12:59:32.614003+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 2719488,
+                  "seconds": 56.656,
+                  "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+                  "kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+                  "estimated_utc": "2026-11-18T13:00:17.664670+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 3781248,
+                  "seconds": 78.776,
+                  "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5",
+                  "kiss_sha256": "0b3d595df02c9a99dd57096cb4c91d04721fc74e93ec3fc23e670cba41674099",
+                  "estimated_utc": "2026-11-18T13:00:39.784670+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 4977280,
+                  "seconds": 103.69333333333333,
+                  "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+                  "kiss_sha256": "880f547d1836979b1b42495b6633a192c5102ea74e50ce11427e22dd73a7be57",
+                  "estimated_utc": "2026-11-18T13:01:04.702003+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 5500288,
+                  "seconds": 114.58933333333333,
+                  "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+                  "kiss_sha256": "1069258b5888c361de01b8072674b7d060ea49621348ecf13e42d09b29e33eae",
+                  "estimated_utc": "2026-11-18T13:01:15.598003+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 6046336,
+                  "seconds": 125.96533333333333,
+                  "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+                  "kiss_sha256": "163d457ebc7b33f6bd673f3f82331d6f60fb147b95921e5f9718c38ae0c13e2d",
+                  "estimated_utc": "2026-11-18T13:01:26.974003+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 6556288,
+                  "seconds": 136.58933333333334,
+                  "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+                  "kiss_sha256": "438a486da8b3398e19dbdf2a4eb8971525aad4ad408083aa8cea06268b852d7c",
+                  "estimated_utc": "2026-11-18T13:01:37.598003+00:00"
+                }
+              ],
+              "gate_attempts": 0,
+              "gate_activations": 0,
+              "replay_wall_seconds": 1.9390629159999992
+            },
+            "stable": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 557056,
+                  "seconds": 11.605333333333334,
+                  "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+                  "kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+                  "estimated_utc": "2026-11-18T12:59:32.614003+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 2719488,
+                  "seconds": 56.656,
+                  "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+                  "kiss_sha256": "62b86a37735758078ce80e1d6c1c11b6cfdc474e07f7183a3c6dd89da63b0246",
+                  "estimated_utc": "2026-11-18T13:00:17.664670+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 3781248,
+                  "seconds": 78.776,
+                  "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5",
+                  "kiss_sha256": "0b3d595df02c9a99dd57096cb4c91d04721fc74e93ec3fc23e670cba41674099",
+                  "estimated_utc": "2026-11-18T13:00:39.784670+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 4977280,
+                  "seconds": 103.69333333333333,
+                  "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+                  "kiss_sha256": "880f547d1836979b1b42495b6633a192c5102ea74e50ce11427e22dd73a7be57",
+                  "estimated_utc": "2026-11-18T13:01:04.702003+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 5500288,
+                  "seconds": 114.58933333333333,
+                  "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+                  "kiss_sha256": "1069258b5888c361de01b8072674b7d060ea49621348ecf13e42d09b29e33eae",
+                  "estimated_utc": "2026-11-18T13:01:15.598003+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 6046336,
+                  "seconds": 125.96533333333333,
+                  "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+                  "kiss_sha256": "163d457ebc7b33f6bd673f3f82331d6f60fb147b95921e5f9718c38ae0c13e2d",
+                  "estimated_utc": "2026-11-18T13:01:26.974003+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 6556288,
+                  "seconds": 136.58933333333334,
+                  "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+                  "kiss_sha256": "438a486da8b3398e19dbdf2a4eb8971525aad4ad408083aa8cea06268b852d7c",
+                  "estimated_utc": "2026-11-18T13:01:37.598003+00:00"
+                }
+              ],
+              "gate_attempts": 213,
+              "gate_activations": 0,
+              "replay_wall_seconds": 2.2264472919999996
+            }
+          },
+          "paired": {
+            "retained": 7,
+            "lost": [],
+            "additional": []
+          }
+        }
+      ]
+    }
+  ]
+}

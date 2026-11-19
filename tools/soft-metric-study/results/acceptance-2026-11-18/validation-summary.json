@@ -1,0 +1,374 @@
+{
+  "sources": 6,
+  "distinct_payloads": 4,
+  "summary": {
+    "baseline": {
+      "clean:None": {
+        "exact": 6,
+        "trials": 6,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 0.5028092490000082,
+        "per_site": {
+          "warrenton": 3,
+          "westminster": 3
+        }
+      },
+      "noise:-12": {
+        "exact": 28,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 3.7388969190000076,
+        "per_site": {
+          "warrenton": 10,
+          "westminster": 18
+        }
+      },
+      "noise:-8": {
+        "exact": 40,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 3.7870045810000055,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 20
+        }
+      },
+      "noise:-4": {
+        "exact": 40,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 3.9422809590000085,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 20
+        }
+      },
+      "noise:0": {
+        "exact": 50,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.027090291000022,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 30
+        }
+      },
+      "noise:4": {
+        "exact": 58,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.40414007900001,
+        "per_site": {
+          "warrenton": 28,
+          "westminster": 30
+        }
+      },
+      "tone:0": {
+        "exact": 20,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.637650708000004,
+        "per_site": {
+          "warrenton": 10,
+          "westminster": 10
+        }
+      },
+      "echo:0": {
+        "exact": 42,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.39489537400007,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 22
+        }
+      }
+    },
+    "gated": {
+      "clean:None": {
+        "exact": 6,
+        "trials": 6,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 0.5498094999999911,
+        "per_site": {
+          "warrenton": 3,
+          "westminster": 3
+        }
+      },
+      "noise:-12": {
+        "exact": 28,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 3.7416315890000416,
+        "per_site": {
+          "warrenton": 10,
+          "westminster": 18
+        }
+      },
+      "noise:-8": {
+        "exact": 40,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 3.7765582070000043,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 20
+        }
+      },
+      "noise:-4": {
+        "exact": 40,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.038950126999968,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 20
+        }
+      },
+      "noise:0": {
+        "exact": 50,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.227389453999987,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 30
+        }
+      },
+      "noise:4": {
+        "exact": 58,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.81630758700001,
+        "per_site": {
+          "warrenton": 28,
+          "westminster": 30
+        }
+      },
+      "tone:0": {
+        "exact": 41,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 21,
+        "losses": 0,
+        "gate_active": 51,
+        "seconds": 3.827549042000033,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 21
+        }
+      },
+      "echo:0": {
+        "exact": 42,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.884880499000021,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 22
+        }
+      }
+    },
+    "iterated": {
+      "clean:None": {
+        "exact": 6,
+        "trials": 6,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 0.5498445830000123,
+        "per_site": {
+          "warrenton": 3,
+          "westminster": 3
+        }
+      },
+      "noise:-12": {
+        "exact": 28,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 3.7457607130000214,
+        "per_site": {
+          "warrenton": 10,
+          "westminster": 18
+        }
+      },
+      "noise:-8": {
+        "exact": 40,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 3.793974583,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 20
+        }
+      },
+      "noise:-4": {
+        "exact": 40,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.0126788309999535,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 20
+        }
+      },
+      "noise:0": {
+        "exact": 50,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.244158457000034,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 30
+        }
+      },
+      "noise:4": {
+        "exact": 58,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.778263166000016,
+        "per_site": {
+          "warrenton": 28,
+          "westminster": 30
+        }
+      },
+      "tone:0": {
+        "exact": 41,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 21,
+        "losses": 0,
+        "gate_active": 51,
+        "seconds": 3.8178674179999934,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 21
+        }
+      },
+      "echo:0": {
+        "exact": 42,
+        "trials": 60,
+        "unmatched": 0,
+        "gains": 0,
+        "losses": 0,
+        "gate_active": 0,
+        "seconds": 4.865850042000032,
+        "per_site": {
+          "warrenton": 20,
+          "westminster": 22
+        }
+      }
+    }
+  },
+  "controls": [
+    {
+      "condition": "gaussian",
+      "method": "baseline",
+      "exposure_seconds": 60,
+      "crc_frames": 0,
+      "gate_active": 0,
+      "seconds": 0.31971049999999934
+    },
+    {
+      "condition": "gaussian",
+      "method": "gated",
+      "exposure_seconds": 60,
+      "crc_frames": 0,
+      "gate_active": 0,
+      "seconds": 0.317369625000012
+    },
+    {
+      "condition": "gaussian",
+      "method": "iterated",
+      "exposure_seconds": 60,
+      "crc_frames": 0,
+      "gate_active": 0,
+      "seconds": 0.3161824999999965
+    },
+    {
+      "condition": "tone",
+      "method": "baseline",
+      "exposure_seconds": 60,
+      "crc_frames": 0,
+      "gate_active": 0,
+      "seconds": 0.31746525000001213
+    },
+    {
+      "condition": "tone",
+      "method": "gated",
+      "exposure_seconds": 60,
+      "crc_frames": 0,
+      "gate_active": 0,
+      "seconds": 0.3145112090000026
+    },
+    {
+      "condition": "tone",
+      "method": "iterated",
+      "exposure_seconds": 60,
+      "crc_frames": 0,
+      "gate_active": 0,
+      "seconds": 0.3252605419999952
+    }
+  ]
+}

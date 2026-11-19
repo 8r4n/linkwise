@@ -1,0 +1,153 @@
+{
+  "development": {
+    "baseline": {
+      "exact": 115,
+      "trials": 160,
+      "clean": 6,
+      "gains": 0,
+      "losses": 0,
+      "unexpected": 0,
+      "seconds": 9.606473253000022,
+      "per_snr": {
+        "-16": 0,
+        "-12": 0,
+        "-8": 15,
+        "-4": 20,
+        "0": 20,
+        "4": 20,
+        "8": 20,
+        "12": 20
+      }
+    },
+    "track": {
+      "exact": 114,
+      "trials": 160,
+      "clean": 6,
+      "gains": 0,
+      "losses": 1,
+      "unexpected": 0,
+      "seconds": 16.310937251000023,
+      "per_snr": {
+        "-16": 0,
+        "-12": 0,
+        "-8": 14,
+        "-4": 20,
+        "0": 20,
+        "4": 20,
+        "8": 20,
+        "12": 20
+      }
+    },
+    "clip": {
+      "exact": 115,
+      "trials": 160,
+      "clean": 6,
+      "gains": 0,
+      "losses": 0,
+      "unexpected": 0,
+      "seconds": 10.58082749699998,
+      "per_snr": {
+        "-16": 0,
+        "-12": 0,
+        "-8": 15,
+        "-4": 20,
+        "0": 20,
+        "4": 20,
+        "8": 20,
+        "12": 20
+      }
+    }
+  },
+  "validation": {
+    "baseline": {
+      "exact": 60,
+      "trials": 80,
+      "clean": 6,
+      "gains": 0,
+      "losses": 0,
+      "unexpected": 0,
+      "seconds": 5.665772293999979,
+      "per_snr": {
+        "-8": 10,
+        "-4": 10,
+        "0": 20,
+        "4": 20
+      }
+    },
+    "track": {
+      "exact": 60,
+      "trials": 80,
+      "clean": 6,
+      "gains": 0,
+      "losses": 0,
+      "unexpected": 0,
+      "seconds": 10.213875583000004,
+      "per_snr": {
+        "-8": 10,
+        "-4": 10,
+        "0": 20,
+        "4": 20
+      }
+    },
+    "clip": {
+      "exact": 60,
+      "trials": 80,
+      "clean": 6,
+      "gains": 0,
+      "losses": 0,
+      "unexpected": 0,
+      "seconds": 6.546779335000018,
+      "per_snr": {
+        "-8": 10,
+        "-4": 10,
+        "0": 20,
+        "4": 20
+      }
+    }
+  },
+  "selected": "baseline",
+  "controls": [
+    {
+      "seed": 991101,
+      "method": "baseline",
+      "seconds": 30,
+      "frames": 0,
+      "runtime": 0.16142399999999668
+    },
+    {
+      "seed": 991101,
+      "method": "track",
+      "seconds": 30,
+      "frames": 0,
+      "runtime": 0.15996266599999842
+    },
+    {
+      "seed": 991101,
+      "method": "clip",
+      "seconds": 30,
+      "frames": 0,
+      "runtime": 0.159529083999999
+    },
+    {
+      "seed": 991102,
+      "method": "baseline",
+      "seconds": 30,
+      "frames": 0,
+      "runtime": 0.1601913330000002
+    },
+    {
+      "seed": 991102,
+      "method": "track",
+      "seconds": 30,
+      "frames": 0,
+      "runtime": 0.1597179160000053
+    },
+    {
+      "seed": 991102,
+      "method": "clip",
+      "seconds": 30,
+      "frames": 0,
+      "runtime": 0.15993329100000153
+    }
+  ]
+}

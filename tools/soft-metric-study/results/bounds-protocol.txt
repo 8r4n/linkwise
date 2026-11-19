@@ -1,0 +1,10 @@
+Exploratory bounds, frozen before scoring.
+Two Nov17 clean clips,10 seeds each. Noise300-3300Hz,0dB recording/added noise
+over seconds2-6.864. Echo .6 amplitude,2ms delay. Compare baseline with known
+channel inverse H*/(|H|^2+.1); channel supplied by generator, NOT estimated.
+Zero pad to twice clip length to reduce circular boundary effects.
+Diversity: average two perfectly sample/phase/gain-aligned copies with
+independent added noise (-4dB recording/added noise per branch).
+This idealized audio combination is NOT soft diversity of actual KiwiSDRs.
+Both are feasibility bounds requiring estimation/alignment work before deployment.
+Baseline continuous acquisition .20,FEC,CRC and exact payload checks unchanged.

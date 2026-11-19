@@ -1,0 +1,7 @@
+{
+  "reference/kiwisdr-antenna-study/2026-11-18-summary.json": "7fd0c5c6e2ab143f28abc9fbbbe47f6546585fb5cec999ccfd8cd3ff45ec3708",
+  "reference/kiwisdr-antenna-study/2026-11-18-receivers.csv": "d0c2005b64a63bab19989e28121d0e93b0e3ff759ef9c468566993fc51460961",
+  "tools/analyze-kiwisdr-antennas.py": "6c7dbd2b7c4ff2f5509ca30e1db477b842f81e9787ae0445031385be5862e7f3",
+  "tools/plot-kiwisdr-antenna-study.py": "a49a469e6fda95227a12ffa50525026b3fcbf68f298d34a63882824d5412eae3",
+  "lab-notes/figures/kiwisdr-antennas/antenna-installations.pdf": "5fe2d9f8ea6ab862f1eaf8433d3a2ee2ca0fae6c5e6e38aa80d40aeb239f429d"
+}

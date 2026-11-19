@@ -1,0 +1,31 @@
+{
+  "branch_head": "57f705fefaeacd74b341bc63ad7f3551698b210b",
+  "source_sha256": {
+    "tools/test-vara-interop.py": "666456f6f1c2b4f9f2a805c5d12bc0311ca302d395547215a3eb5004a0b645b5",
+    "tools/soft-metric-study/evaluate-level4-cw.py": "42353f8b1dfd48bfae607caf688835ca65a7b8ceb4d891956f0d3275e780891f",
+    "tools/soft-metric-study/replay-level4.rs": "70079240fd997d80e6e40d5cc5e44cd3136403f1d21487e500792c7233e3901f",
+    "tools/soft-metric-study/structured-level4-cw.py": "b34a99e6c3e233b2116599af247d355cf63b32dde2cee5df16fcf35ca14d2298",
+    "rust/src/modem/bw500_waveform.rs": "cfe2c10fb2ce716ce412166b17c23d499b9f762def1e2051006b1071215e6d32",
+    "rust/src/modem/bw500_level4.rs": "c632baebb7cd6e83ed68b1b24982ceb573fd5b5fadd877cf1d3f85f0c50c55a9",
+    "rust/src/modem/data.rs": "3db11795ce5af9164c0d75fb770e46013775c720f6031944da6092ce68b593aa"
+  },
+  "archived": {
+    "level4-structured-negatives.json": "c43d89a2edca0b889e3b6b24f0d25c5a3e664c860ee534aadc2df086bae8b52f",
+    "README.md": "f752961392a250c9e8dc7f4c9ea36bcbe2fb68bcdda874097552eb97d546bacf",
+    "level4-protocol.json": "a2edd9ee94907d955a84ab06754db1ddc72cbc0b1a12b9dda5aa959e9bf2613e",
+    "level4-later.json": "4980fd24010ce40724ff2033301e4a059f1bc1863a2b0ed9375e2aafc6c33bb3",
+    "level4-development.csv": "975b489f8d742911f4ca8fdccf5808ee9d66f985a6e7c239e395c17a12b0b318",
+    "level4-later.csv": "91dbd4b53dfa2bf1ae756f26e3f4cfac2af5ef11055f86a3dc959dbb07e93142",
+    "classify-local-captures.py": "abdfa3e3e9883a19ce68d005c1814ee64e4974f470d764cc6fe4fe647be6f515",
+    "check-stock-oracle.py": "c866c931ba9893197cee04896ca8f762883914e261fbb37a0d25d9deaa40fcd9",
+    "synth-positive-bits.rs": "f167ba283ed2dd81a691d27b89ba5c0f8d7163f3f698fa3072263358cd2dbc01",
+    "level4-development.json": "4a9443180135b63347f772db7438db6fbbc24ef672756ff95aabbacedde5d002"
+  },
+  "live_preflight": {
+    "state": "blocked before a fresh stock trial started",
+    "guest_agent_probe": "UTM reported OSStatus -2700 and Port is not connected on file push and guest exec",
+    "production_oracle": "level-4 waveform and host parser source match checked-out baseline",
+    "recorded_stock_version": "VARA HF 4.9.1 (archived mixed bench)"
+  },
+  "production_change": false
+}

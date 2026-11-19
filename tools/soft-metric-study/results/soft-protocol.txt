@@ -1,0 +1,15 @@
+Retrospective screen; all recordings were previously inspected.
+Development: Nov15 sweep. Validation: Nov17 sweep, different transmissions.
+No tuning on validation. Select highest development exact count, ties prefer
+baseline then tone weighting then symbol weighting then combined.
+Metrics: baseline; tone noise whitening; symbol reliability; combined.
+Estimate each tone's normalized noise floor as its median over DATA columns.
+Floor = max(estimate, 0.1 * median of tone estimates, 1e-12).
+Tone whitening divides power by that floor, multiplies by median floor.
+Symbol reliability = clamp(frame median of symbol noise / symbol noise, .1, 10).
+Symbol noise = median of eight candidate tone powers in each DATA column.
+Only level2 changes; acquisition .20, timing/CFO, max-log FEC and CRC fixed.
+Exact KISS SHA256 oracle; unexpected payloads, clean controls and runtime logged.
+This is offline frame-conditioned noise estimation, not a causal noise tracker.
+SNR is recording power / injected 3kHz noise, not absolute RF SNR.
+No production promotion without independent signals and mixed-stock interop.

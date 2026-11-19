@@ -1,0 +1,130 @@
+{
+  "split": "later",
+  "source_count": 3,
+  "cells": {
+    "clean:None:None:None": {
+      "trials": 3,
+      "baseline": 3,
+      "candidate": 3,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 0
+    },
+    "awgn:0:None:None": {
+      "trials": 30,
+      "baseline": 30,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 0
+    },
+    "awgn:6:None:None": {
+      "trials": 30,
+      "baseline": 30,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 0
+    },
+    "cw:0:1309:-12": {
+      "trials": 30,
+      "baseline": 0,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 30
+    },
+    "cw:0:1309:-6": {
+      "trials": 30,
+      "baseline": 0,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 30
+    },
+    "cw:0:1309:0": {
+      "trials": 30,
+      "baseline": 19,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 11
+    },
+    "cw:0:1453:-12": {
+      "trials": 30,
+      "baseline": 0,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 30
+    },
+    "cw:0:1453:-6": {
+      "trials": 30,
+      "baseline": 30,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 0
+    },
+    "cw:0:1453:0": {
+      "trials": 30,
+      "baseline": 30,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 0
+    },
+    "cw:0:1661:-12": {
+      "trials": 30,
+      "baseline": 0,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 30
+    },
+    "cw:0:1661:-6": {
+      "trials": 30,
+      "baseline": 0,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 30
+    },
+    "cw:0:1661:0": {
+      "trials": 30,
+      "baseline": 0,
+      "candidate": 30,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 30
+    },
+    "noise_cw:None:1309:None": {
+      "trials": 34,
+      "baseline": 0,
+      "candidate": 0,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 34
+    },
+    "noise_cw:None:1453:None": {
+      "trials": 33,
+      "baseline": 0,
+      "candidate": 0,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 33
+    },
+    "noise_cw:None:1661:None": {
+      "trials": 33,
+      "baseline": 0,
+      "candidate": 0,
+      "baseline_wrong": 0,
+      "candidate_wrong": 0,
+      "activation": 33
+    }
+  },
+  "scope": "Framed archived stock level-4 input with injected 300\u20133300 Hz noise/CW. Includes unstructured noise+CW negative windows only. In-session qualification pending.",
+  "manifest_sha256": "a2edd9ee94907d955a84ab06754db1ddc72cbc0b1a12b9dda5aa959e9bf2613e",
+  "profile_sha256": "7fe1eed44ca50f20cb7f64e1e70b9e21d8fe9c348a920609b9888bfdde82bb48",
+  "replay_sha256": "d7caca32499df258accbcc4ee62fa3212ef5ac14a60918d1ca3d7fe123ca8d5f"
+}

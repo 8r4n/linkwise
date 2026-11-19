@@ -1,0 +1,12 @@
+{
+  "prototype/main.rs": "1ac8f8e184170e505b6ccf0cc3675be48a5a77fa03e1c58c60c89474827173c7",
+  "prototype/modem/receiver.rs": "7f55cf4c25794112ae658f29b9eb28b00b4c2e02ca884d600d0aed731f3f92e4",
+  "prototype/modem/bw500.rs": "4649dea0d423dbf45f889929f6b198fe963a638b3de88706827d659e01ac9603",
+  "prototype/modem/bw500_waveform.rs": "cfe2c10fb2ce716ce412166b17c23d499b9f762def1e2051006b1071215e6d32",
+  "prototype/modem/coding.rs": "872e063ef2d565a5b6153958d3e80d32810c92a21aa4ee2f62bb8cea8ba84499",
+  "prototype/modem/waveform.rs": "ee30839f6a399b407a87c190e54f79e62a82edeec82ef40dbfa39c41f910cd27",
+  "prototype/modem/bw500_level4.rs": "c632baebb7cd6e83ed68b1b24982ceb573fd5b5fadd877cf1d3f85f0c50c55a9",
+  "prototype/modem/bw500/sensitivity.rs": "b7fd1c19abc4acb5b506d00fab0289a9ac53a25758789f52429451898aabc2b1",
+  "prototype/modem/bw500/scan.rs": "08a21d868d65c38f7db0b3775dc3ecdfdb06709afc11f589561b13e07bf6e33e",
+  "prototype/modem/waveform/bw500.rs": "96c88018044894adb5dd562a67920703bfd6fd1be5e20d2671e62f1ff854ded3"
+}

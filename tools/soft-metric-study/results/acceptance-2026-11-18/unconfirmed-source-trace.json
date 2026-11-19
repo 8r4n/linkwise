@@ -1,0 +1,18 @@
+{
+  "source": "warrenton-7105-frame-3",
+  "valid_iterations": [
+    "FEC,0,2,true,b5af3e76e86c9fa7,0.872767579,3",
+    "FEC,0,3,true,b5af3e76e86c9fa7,0.872767579,0",
+    "FEC,0,4,true,b5af3e76e86c9fa7,0.872767579,0",
+    "FEC,0,5,true,b5af3e76e86c9fa7,0.872767579,0",
+    "FEC,0,6,true,b5af3e76e86c9fa7,0.872767579,0",
+    "FEC,0,7,true,b5af3e76e86c9fa7,0.872767579,0",
+    "FEC,0,8,true,b5af3e76e86c9fa7,0.872767579,0"
+  ],
+  "frames": [
+    {
+      "wire_sha256": "5e780d5e8b6b0b5db4b5828f080e5d10ec84aeb04ababba40d4ba3731c985198",
+      "generic_kiss": true
+    }
+  ]
+}

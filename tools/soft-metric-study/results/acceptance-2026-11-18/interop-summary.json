@@ -1,0 +1,131 @@
+{
+  "results": [
+    {
+      "case": "linkwise-caller",
+      "hf_snr_db": null,
+      "stock_awgn_db_3khz": null,
+      "linkwise_awgn_db_3khz": null,
+      "stock_awgn_gain": null,
+      "stock_awgn_seed": null,
+      "hf_delay_spread_echo_seed": null,
+      "hf_worker_sha256": null,
+      "pace_virtual": false,
+      "bandwidth": 500,
+      "payload_length": 13,
+      "reply_length": 6,
+      "stock_bridge_base": 28760,
+      "verify_disconnect": true,
+      "disconnect_from": "caller",
+      "verify_reconnect": false,
+      "late_caller_write_delay": null,
+      "modem_sha256": "7127bdfb0b2a2217003603d5f310baa722cfea511846988296daac53cc9340cb",
+      "profile_sha256": "7fe1eed44ca50f20cb7f64e1e70b9e21d8fe9c348a920609b9888bfdde82bb48",
+      "expected_burst_sha256": null,
+      "corrupt_stock_first": false,
+      "corrupt_stock_after_prefix": false,
+      "drop_stock_ack": null,
+      "drop_linkwise_ack": null,
+      "rate_reply_pcm_sha256": null,
+      "replacement_pcm_sha256": null,
+      "result": "pass",
+      "phase": "disconnect",
+      "measurements": {
+        "connect_seconds": 10.503605125,
+        "first delivery_seconds": 9.91278925,
+        "reverse delivery_seconds": 10.372668333999997,
+        "second delivery_seconds": 6.767224708999997,
+        "transfer_seconds": 27.491256417,
+        "disconnect_seconds": 1.8299006250000005
+      },
+      "expected_sha256": [
+        "4ae9679fd60c96157422bb41189826072af3aa64d98a90f2f3a3156a939b8911",
+        "0d8e7bf8962ea80f2783240fcee1d76b9078c6bc441fb33e815944245c24e0a4"
+      ],
+      "received_lengths": [
+        6,
+        26
+      ],
+      "received_sha256": [
+        "4ae9679fd60c96157422bb41189826072af3aa64d98a90f2f3a3156a939b8911",
+        "0d8e7bf8962ea80f2783240fcee1d76b9078c6bc441fb33e815944245c24e0a4"
+      ],
+      "recorded_audio_seconds": {
+        "caller": 21.701395833333333,
+        "responder": 45.84
+      },
+      "stock_awgn_records": 0,
+      "linkwise_awgn_records": 0,
+      "fault_injected": false,
+      "rate_reply_injected": false,
+      "disconnect_confirmed": [
+        true,
+        true
+      ]
+    },
+    {
+      "case": "linkwise-responder",
+      "hf_snr_db": null,
+      "stock_awgn_db_3khz": null,
+      "linkwise_awgn_db_3khz": null,
+      "stock_awgn_gain": null,
+      "stock_awgn_seed": null,
+      "hf_delay_spread_echo_seed": null,
+      "hf_worker_sha256": null,
+      "pace_virtual": false,
+      "bandwidth": 500,
+      "payload_length": 13,
+      "reply_length": 6,
+      "stock_bridge_base": 28760,
+      "verify_disconnect": true,
+      "disconnect_from": "caller",
+      "verify_reconnect": false,
+      "late_caller_write_delay": null,
+      "modem_sha256": "7127bdfb0b2a2217003603d5f310baa722cfea511846988296daac53cc9340cb",
+      "profile_sha256": "7fe1eed44ca50f20cb7f64e1e70b9e21d8fe9c348a920609b9888bfdde82bb48",
+      "expected_burst_sha256": null,
+      "corrupt_stock_first": false,
+      "corrupt_stock_after_prefix": false,
+      "drop_stock_ack": null,
+      "drop_linkwise_ack": null,
+      "rate_reply_pcm_sha256": null,
+      "replacement_pcm_sha256": null,
+      "result": "pass",
+      "phase": "disconnect",
+      "measurements": {
+        "connect_seconds": 9.608518167000001,
+        "first delivery_seconds": 10.501770707999999,
+        "reverse delivery_seconds": 6.816527750000002,
+        "second delivery_seconds": 6.117787291999996,
+        "transfer_seconds": 24.379622458,
+        "disconnect_seconds": 5.650584500000001
+      },
+      "expected_sha256": [
+        "4ae9679fd60c96157422bb41189826072af3aa64d98a90f2f3a3156a939b8911",
+        "0d8e7bf8962ea80f2783240fcee1d76b9078c6bc441fb33e815944245c24e0a4"
+      ],
+      "received_lengths": [
+        6,
+        26
+      ],
+      "received_sha256": [
+        "4ae9679fd60c96157422bb41189826072af3aa64d98a90f2f3a3156a939b8911",
+        "0d8e7bf8962ea80f2783240fcee1d76b9078c6bc441fb33e815944245c24e0a4"
+      ],
+      "recorded_audio_seconds": {
+        "caller": 45.53,
+        "responder": 10.652020833333333
+      },
+      "stock_awgn_records": 0,
+      "linkwise_awgn_records": 0,
+      "fault_injected": false,
+      "rate_reply_injected": false,
+      "disconnect_confirmed": [
+        true,
+        true
+      ]
+    }
+  ],
+  "method": "stable",
+  "binary_sha256": "7127bdfb0b2a2217003603d5f310baa722cfea511846988296daac53cc9340cb",
+  "scope": "Isolated ordinary13+6+13-byte BW500 mixed transfers; not proof that the new weighted level2 fallback was exercised under interference."
+}

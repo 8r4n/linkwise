@@ -1,0 +1,326 @@
+[
+  {
+    "capture": "warrenton-7105",
+    "seconds": 179.94,
+    "methods": {
+      "baseline": {
+        "wires": [
+          "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+          "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+          "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+          "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+          "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+          "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+        ],
+        "seconds": 1.495448167,
+        "gate_attempts": 0,
+        "gate_active": 0,
+        "frames": [
+          {
+            "level": 2,
+            "start": 564992,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 2727424,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 3789056,
+            "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+          },
+          {
+            "level": 2,
+            "start": 4985216,
+            "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb"
+          },
+          {
+            "level": 2,
+            "start": 5508224,
+            "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96"
+          },
+          {
+            "level": 2,
+            "start": 6054272,
+            "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8"
+          },
+          {
+            "level": 2,
+            "start": 6564352,
+            "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0"
+          }
+        ],
+        "gains": [],
+        "losses": []
+      },
+      "gated": {
+        "wires": [
+          "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+          "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+          "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+          "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+          "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+          "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+        ],
+        "seconds": 1.722580042,
+        "gate_attempts": 227,
+        "gate_active": 0,
+        "frames": [
+          {
+            "level": 2,
+            "start": 564992,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 2727424,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 3789056,
+            "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+          },
+          {
+            "level": 2,
+            "start": 4985216,
+            "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb"
+          },
+          {
+            "level": 2,
+            "start": 5508224,
+            "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96"
+          },
+          {
+            "level": 2,
+            "start": 6054272,
+            "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8"
+          },
+          {
+            "level": 2,
+            "start": 6564352,
+            "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0"
+          }
+        ],
+        "gains": [],
+        "losses": []
+      },
+      "stable": {
+        "wires": [
+          "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+          "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+          "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+          "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+          "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+          "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+        ],
+        "seconds": 1.700580334,
+        "gate_attempts": 227,
+        "gate_active": 0,
+        "frames": [
+          {
+            "level": 2,
+            "start": 564992,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 2727424,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 3789056,
+            "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+          },
+          {
+            "level": 2,
+            "start": 4985216,
+            "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb"
+          },
+          {
+            "level": 2,
+            "start": 5508224,
+            "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96"
+          },
+          {
+            "level": 2,
+            "start": 6054272,
+            "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8"
+          },
+          {
+            "level": 2,
+            "start": 6564352,
+            "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0"
+          }
+        ],
+        "gains": [],
+        "losses": []
+      }
+    }
+  },
+  {
+    "capture": "westminster-7105",
+    "seconds": 180.15366666666668,
+    "methods": {
+      "baseline": {
+        "wires": [
+          "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+          "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+          "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+          "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+          "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+          "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+        ],
+        "seconds": 1.413718125,
+        "gate_attempts": 0,
+        "gate_active": 0,
+        "frames": [
+          {
+            "level": 2,
+            "start": 557056,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 2719488,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 3781248,
+            "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+          },
+          {
+            "level": 2,
+            "start": 4977280,
+            "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb"
+          },
+          {
+            "level": 2,
+            "start": 5500288,
+            "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96"
+          },
+          {
+            "level": 2,
+            "start": 6046336,
+            "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8"
+          },
+          {
+            "level": 2,
+            "start": 6556288,
+            "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0"
+          }
+        ],
+        "gains": [],
+        "losses": []
+      },
+      "gated": {
+        "wires": [
+          "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+          "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+          "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+          "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+          "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+          "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+        ],
+        "seconds": 1.7226587080000009,
+        "gate_attempts": 213,
+        "gate_active": 0,
+        "frames": [
+          {
+            "level": 2,
+            "start": 557056,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 2719488,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 3781248,
+            "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+          },
+          {
+            "level": 2,
+            "start": 4977280,
+            "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb"
+          },
+          {
+            "level": 2,
+            "start": 5500288,
+            "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96"
+          },
+          {
+            "level": 2,
+            "start": 6046336,
+            "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8"
+          },
+          {
+            "level": 2,
+            "start": 6556288,
+            "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0"
+          }
+        ],
+        "gains": [],
+        "losses": []
+      },
+      "stable": {
+        "wires": [
+          "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96",
+          "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944",
+          "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb",
+          "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8",
+          "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0",
+          "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+        ],
+        "seconds": 1.8766110420000004,
+        "gate_attempts": 213,
+        "gate_active": 0,
+        "frames": [
+          {
+            "level": 2,
+            "start": 557056,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 2719488,
+            "wire_sha256": "696c9dc2e89288dbb09704ba2536bff625eb22588f1ac5f435475f338d2f1944"
+          },
+          {
+            "level": 2,
+            "start": 3781248,
+            "wire_sha256": "f6e0eec3d544370b1c74f00667659f1d421e5f2b9b36e14a84739bbe4477beb5"
+          },
+          {
+            "level": 2,
+            "start": 4977280,
+            "wire_sha256": "728cc19c4a120886d211f17cb2b7cabb25b52e94aca62e811c41b57005041abb"
+          },
+          {
+            "level": 2,
+            "start": 5500288,
+            "wire_sha256": "59e3df0ce1f896a67fcaeff5eec84c0436a82e41099837a1d34479d446b3ee96"
+          },
+          {
+            "level": 2,
+            "start": 6046336,
+            "wire_sha256": "86bef93a85181580ba83b88e7fa51f1c2abe7d1c667bf5e18c414aa0f2b70de8"
+          },
+          {
+            "level": 2,
+            "start": 6556288,
+            "wire_sha256": "bbecaef0b845a06cd456bb1baefbc505fcd6497aaff7632fe81e20df82ebc3a0"
+          }
+        ],
+        "gains": [],
+        "losses": []
+      }
+    }
+  }
+]

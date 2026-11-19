@@ -1,0 +1,5 @@
+{
+  "evidence_directory": "/Users/user/Documents/Codex/Linkwise KiwiSDR collection/acceptance-retest-20261118T123629Z",
+  "production_changed": false,
+  "scope": "Development, first RF batch, later prospective holdout kept separate; no95percent RF threshold or global antenna ranking."
+}

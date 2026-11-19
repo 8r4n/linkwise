@@ -1,0 +1,713 @@
+{
+  "trials_per_method": 20,
+  "exact": {
+    "echo": 10,
+    "oracle_equalizer": 15,
+    "branch1": 10,
+    "branch2": 10,
+    "oracle_diversity": 19
+  },
+  "unexpected": 0,
+  "trials": [
+    {
+      "source": 0,
+      "seed": 994000,
+      "method": "echo",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994000,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994000,
+      "method": "branch1",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994000,
+      "method": "branch2",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994000,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994001,
+      "method": "echo",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994001,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994001,
+      "method": "branch1",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994001,
+      "method": "branch2",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994001,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994002,
+      "method": "echo",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994002,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994002,
+      "method": "branch1",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994002,
+      "method": "branch2",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994002,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994003,
+      "method": "echo",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994003,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994003,
+      "method": "branch1",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994003,
+      "method": "branch2",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994003,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994004,
+      "method": "echo",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994004,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994004,
+      "method": "branch1",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994004,
+      "method": "branch2",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994004,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994005,
+      "method": "echo",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994005,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994005,
+      "method": "branch1",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994005,
+      "method": "branch2",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994005,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994006,
+      "method": "echo",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994006,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994006,
+      "method": "branch1",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994006,
+      "method": "branch2",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994006,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994007,
+      "method": "echo",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994007,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994007,
+      "method": "branch1",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994007,
+      "method": "branch2",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994007,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994008,
+      "method": "echo",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994008,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994008,
+      "method": "branch1",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994008,
+      "method": "branch2",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994008,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994009,
+      "method": "echo",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994009,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994009,
+      "method": "branch1",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994009,
+      "method": "branch2",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 0,
+      "seed": 994009,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994000,
+      "method": "echo",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994000,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994000,
+      "method": "branch1",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994000,
+      "method": "branch2",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994000,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994001,
+      "method": "echo",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994001,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994001,
+      "method": "branch1",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994001,
+      "method": "branch2",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994001,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994002,
+      "method": "echo",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994002,
+      "method": "oracle_equalizer",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994002,
+      "method": "branch1",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994002,
+      "method": "branch2",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994002,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994003,
+      "method": "echo",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994003,
+      "method": "oracle_equalizer",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994003,
+      "method": "branch1",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994003,
+      "method": "branch2",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994003,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994004,
+      "method": "echo",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994004,
+      "method": "oracle_equalizer",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994004,
+      "method": "branch1",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994004,
+      "method": "branch2",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994004,
+      "method": "oracle_diversity",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994005,
+      "method": "echo",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994005,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994005,
+      "method": "branch1",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994005,
+      "method": "branch2",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994005,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994006,
+      "method": "echo",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994006,
+      "method": "oracle_equalizer",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994006,
+      "method": "branch1",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994006,
+      "method": "branch2",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994006,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994007,
+      "method": "echo",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994007,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994007,
+      "method": "branch1",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994007,
+      "method": "branch2",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994007,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994008,
+      "method": "echo",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994008,
+      "method": "oracle_equalizer",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994008,
+      "method": "branch1",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994008,
+      "method": "branch2",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994008,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994009,
+      "method": "echo",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994009,
+      "method": "oracle_equalizer",
+      "exact": 1,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994009,
+      "method": "branch1",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994009,
+      "method": "branch2",
+      "exact": 0,
+      "unexpected": 0
+    },
+    {
+      "source": 1,
+      "seed": 994009,
+      "method": "oracle_diversity",
+      "exact": 1,
+      "unexpected": 0
+    }
+  ]
+}

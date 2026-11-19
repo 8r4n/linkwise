@@ -1,0 +1,60 @@
+{
+  "version": "VARA HF v4.9.1",
+  "transport_controls_pass": 2,
+  "transport_controls": 2,
+  "comparator_qualified": true,
+  "new_clean_pass": 0,
+  "new_clean": 0,
+  "rows": [
+    {
+      "name": "natural-0",
+      "kind": "natural_candidate",
+      "source": null,
+      "site": null,
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 0,
+      "stock_additional": 0,
+      "stock_hashes": [],
+      "baseline": 0,
+      "tone": 1,
+      "gated": 0
+    },
+    {
+      "name": "clean-0",
+      "kind": "transport_control",
+      "source": null,
+      "site": null,
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "6ead24f8e439afa68573c2559322281e7817096e7b247fcfdc75d8aa9575d314"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    },
+    {
+      "name": "clean-1",
+      "kind": "transport_control",
+      "source": null,
+      "site": null,
+      "condition": null,
+      "snr": null,
+      "seed": null,
+      "stock_exact": 1,
+      "stock_additional": 0,
+      "stock_hashes": [
+        "399ced1be44ed263578b86faf8867f43ace7d91cf38fb335a6a525f645b1f5b5"
+      ],
+      "baseline": 1,
+      "tone": 1,
+      "gated": 1
+    }
+  ],
+  "cells": {}
+}

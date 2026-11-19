@@ -1,0 +1,44 @@
+[
+  {
+    "trial": {
+      "source": "0",
+      "condition": "noise",
+      "seed": "993002",
+      "method": "track",
+      "input_sha256": "7c6fc21796e11f37fb3fc301eb8e81dc83e3e27825c2ee2bb1bfa287b8f52613",
+      "exact": "0",
+      "unexpected": "1",
+      "seconds": "0.07156437500000035"
+    },
+    "frames": [
+      {
+        "level": 2,
+        "sample": 66560,
+        "wire_payload_bytes": 22,
+        "wire_body_sha256": "883a0f6cae412c1615de86a6339501d299eae24b6c0c662bb4e61da8b17f22e7",
+        "generic_kiss": false
+      }
+    ]
+  },
+  {
+    "trial": {
+      "source": "1",
+      "condition": "echo",
+      "seed": "993002",
+      "method": "clip",
+      "input_sha256": "b36c39ad56f0554b5da4c7187acfcc7ac46d1974b1bcf3023b9d77af4a95e2ed",
+      "exact": "0",
+      "unexpected": "1",
+      "seconds": "0.0724048750000037"
+    },
+    "frames": [
+      {
+        "level": 2,
+        "sample": 96256,
+        "wire_payload_bytes": 22,
+        "wire_body_sha256": "acc65b3e9b4e4dd7ddf989202ec41c3aeca07493885bcf2993d689605a294be8",
+        "generic_kiss": false
+      }
+    ]
+  }
+]

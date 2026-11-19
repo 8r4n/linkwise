@@ -1,0 +1,11 @@
+Frozen before scoring. Use simultaneous fresh captures
+from Rockport and Kitchener, match equal generic payload hashes in clean decodes.
+Supply each clean frame's timing and CFO to impaired trials; no weak acquisition claim.
+Estimate CFO on clean pilots over -50..50Hz in2Hz steps. Three decodes per pair:
+single branch1, single branch2, equal-weight sum of normalized bit metrics.
+Unchanged max-log FEC/interleaver/CRC; no transmitter or wire-format change.
+SNR -8,-4,0dB,10 independent added-noise seeds per transmission and SNR.
+Band-limit Gaussian noise300-3300Hz; use each recorded frame RMS as reference.
+Record known-payload exact results, gains over best branch and oracle union.
+Previously unseen captures, but pairing requires clean successful reception.
+This selection does not establish a natural weak-signal RF error rate.

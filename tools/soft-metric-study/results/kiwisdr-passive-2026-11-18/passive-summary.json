@@ -1,0 +1,760 @@
+{
+  "scope": "Receive-only KiwiSDR observations with sample-rate conversion and no added impairments. Transmitter frame counts and exact payload oracle are unknown. CRC-valid candidate-only output requires independent corroboration. Cross-site counts are paired receiver observations. Timing uses internet packet arrival estimates.",
+  "replay_sha256": "366985865f14755eb5908987c5b5366858a55361fe1df18b83e2282389164a6c",
+  "converter": "macOS afconvert LEI16@48000 mono",
+  "totals": {
+    "receiver_attempts": 10,
+    "recordings": 5,
+    "recorded_seconds": 729.7721376781399,
+    "complete_recordings": 4,
+    "usable_recordings": 5,
+    "usable_seconds": 729.7721376781399,
+    "baseline_frames": 12,
+    "baseline_kiss_frames": 12,
+    "baseline_gate_attempts": 0,
+    "baseline_gate_activations": 0,
+    "baseline_replay_wall_seconds": 6.436285334000001,
+    "stable_frames": 12,
+    "stable_kiss_frames": 12,
+    "stable_gate_attempts": 113,
+    "stable_gate_activations": 0,
+    "stable_replay_wall_seconds": 6.563761874000001,
+    "retained": 12,
+    "lost": 0,
+    "additional": 0
+  },
+  "cross_receiver_matches": [
+    {
+      "sites": [
+        "kitchener",
+        "warrenton"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "6cfa1556afa817c13fa0b58d7e41e960fea85393ecb21662d031c351e368b4ee",
+      "kiss_sha256": "6081858df6337d399a9707f58773f697cd80d13307293c445436610601cbe3e3",
+      "arrival_estimates_utc": [
+        "2026-11-18T23:47:58.904558+00:00",
+        "2026-11-18T23:47:58.841819+00:00"
+      ],
+      "arrival_estimate_difference_s": 0.062739
+    },
+    {
+      "sites": [
+        "kitchener",
+        "warrenton"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "e368688ef5edf02cfc02d8d043c3d4eedbd7c4b94bc7c1c7073eef46b7160ead",
+      "kiss_sha256": "4e209a84201fb5685a885e1430e888496063e3fb5781cbd117511bedebe8b01f",
+      "arrival_estimates_utc": [
+        "2026-11-18T23:52:01.384293+00:00",
+        "2026-11-18T23:52:01.368986+00:00"
+      ],
+      "arrival_estimate_difference_s": 0.015307
+    },
+    {
+      "sites": [
+        "kitchener",
+        "warrenton"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "3effe50d5aaf5dcfbcceca578d8072700761d2561b9d44bba5e161bec89f4c47",
+      "kiss_sha256": "d1cb23e7b6f55abdb908de5d1259851d8644e5ab25818463677b844740061887",
+      "arrival_estimates_utc": [
+        "2026-11-18T23:54:24.128293+00:00",
+        "2026-11-18T23:54:24.115653+00:00"
+      ],
+      "arrival_estimate_difference_s": 0.01264
+    },
+    {
+      "sites": [
+        "kitchener",
+        "warrenton"
+      ],
+      "dial_khz": 7105.0,
+      "wire_sha256": "60d031817b1fc09bc4af3301cabc69bb5170bc4dc07f4556e07bea5d523b300a",
+      "kiss_sha256": "4606aaf4e81dcd2a01cb02a5d59aae2206cfdb5a1c1d3a834ce0b32e1b988e51",
+      "arrival_estimates_utc": [
+        "2026-11-18T23:54:47.808293+00:00",
+        "2026-11-18T23:54:47.795653+00:00"
+      ],
+      "arrival_estimate_difference_s": 0.01264
+    }
+  ],
+  "captures": [
+    {
+      "site": "free-union",
+      "receiver": "http://21748.proxy.kiwisdr.com:80",
+      "dial_khz": 14105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T23:46:17.944434+00:00",
+      "antenna": "27.4M T2FD abt 20M over ground",
+      "gps": "(38.150151, -78.554212)",
+      "receiver_name": "0.5-30 MHz SDR, W4KEL, Free Union, Virginia, USA",
+      "hardware": "KiwiSDR 2 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3 Limits \u2063 \ud83d\udcfb DRM \u2063",
+      "returncode": 0,
+      "end_utc": "2026-11-18T23:46:22.208610+00:00",
+      "files": [],
+      "capture_id": "free-union-14105",
+      "continuity": {
+        "packets": 0,
+        "missing": null,
+        "duplicates": null,
+        "reverse_or_reset": null,
+        "overload": null,
+        "first_packet_utc": null
+      },
+      "recordings": []
+    },
+    {
+      "site": "kfs-omni",
+      "receiver": "http://kiwisdr.kfsdr.com:8073",
+      "dial_khz": 14105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T23:51:25.153826+00:00",
+      "antenna": "\"Omni\" (TCI 530)",
+      "gps": "(37.390000, -122.410000)",
+      "receiver_name": "KFS Omni KiwiSDR | Half Moon Bay, California",
+      "hardware": "KiwiSDR 1 v1.902 \u2063 \u23f3 Limits \u2063 \ud83d\udcfb DRM \u2063",
+      "termination_reason": "Wall-clock bound or second connection failure",
+      "returncode": -15,
+      "end_utc": "2026-11-18T23:51:46.937769+00:00",
+      "files": [],
+      "capture_id": "kfs-omni-14105",
+      "continuity": {
+        "packets": 0,
+        "missing": null,
+        "duplicates": null,
+        "reverse_or_reset": null,
+        "overload": null,
+        "first_packet_utc": null
+      },
+      "recordings": []
+    },
+    {
+      "site": "kitchener",
+      "receiver": "http://ve3nsv.ddns.net:8074",
+      "dial_khz": 7105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T23:47:14.538702+00:00",
+      "antenna": "80m Doublet at 50' ",
+      "gps": "(43.403945, -80.440380)",
+      "receiver_name": "0-30 MHz SDR | Kitchener, Ontario",
+      "hardware": "KiwiSDR 2 v1.902 \u2063 \u23f3 Limits \u2063 \ud83d\udcfb DRM \u2063",
+      "returncode": 0,
+      "end_utc": "2026-11-18T23:50:16.659121+00:00",
+      "files": [
+        {
+          "name": "20261118T234716Z_7105000_usb.wav",
+          "sha256": "ae3faf5a8bb0936c7baaaf72b2dde37c5e371d34d712e24fb114744957da5688"
+        }
+      ],
+      "capture_id": "kitchener-7105",
+      "continuity": {
+        "packets": 4220,
+        "missing": 0,
+        "duplicates": 0,
+        "reverse_or_reset": 0,
+        "overload": 0,
+        "first_packet_utc": "2026-11-18T23:47:16.376558+00:00"
+      },
+      "recordings": [
+        {
+          "original": "20261118T234716Z_7105000_usb.wav",
+          "source_rate_hz": 11999,
+          "seconds": 180.06833902825235,
+          "complete": true,
+          "usable": true,
+          "derivative_sha256": "1707379999b77fa7b010fc233835da07be2e0e4c402b836559733d0bcd187c9d",
+          "methods": {
+            "baseline": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 2041344,
+                  "seconds": 42.528,
+                  "wire_sha256": "6cfa1556afa817c13fa0b58d7e41e960fea85393ecb21662d031c351e368b4ee",
+                  "kiss_sha256": "6081858df6337d399a9707f58773f697cd80d13307293c445436610601cbe3e3",
+                  "estimated_utc": "2026-11-18T23:47:58.904558+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 8334208,
+                  "seconds": 173.62933333333334,
+                  "wire_sha256": "52f6e1d4419e5a4b3ba9e6f01af9071403b38be77a55478850f9e07099728698",
+                  "kiss_sha256": "8b349ba0ac66d33cec6b1cc6d964ea8b88d47ee6702abd2a5ace79aceadc67c5",
+                  "estimated_utc": "2026-11-18T23:50:10.005891+00:00"
+                }
+              ],
+              "gate_attempts": 0,
+              "gate_activations": 0,
+              "replay_wall_seconds": 1.596401958
+            },
+            "stable": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 2041344,
+                  "seconds": 42.528,
+                  "wire_sha256": "6cfa1556afa817c13fa0b58d7e41e960fea85393ecb21662d031c351e368b4ee",
+                  "kiss_sha256": "6081858df6337d399a9707f58773f697cd80d13307293c445436610601cbe3e3",
+                  "estimated_utc": "2026-11-18T23:47:58.904558+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 8334208,
+                  "seconds": 173.62933333333334,
+                  "wire_sha256": "52f6e1d4419e5a4b3ba9e6f01af9071403b38be77a55478850f9e07099728698",
+                  "kiss_sha256": "8b349ba0ac66d33cec6b1cc6d964ea8b88d47ee6702abd2a5ace79aceadc67c5",
+                  "estimated_utc": "2026-11-18T23:50:10.005891+00:00"
+                }
+              ],
+              "gate_attempts": 17,
+              "gate_activations": 0,
+              "replay_wall_seconds": 1.672669166
+            }
+          },
+          "paired": {
+            "retained": 2,
+            "lost": [],
+            "additional": []
+          }
+        }
+      ]
+    },
+    {
+      "site": "kitchener",
+      "receiver": "http://ve3nsv.ddns.net:8074",
+      "dial_khz": 7105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T23:51:54.498226+00:00",
+      "antenna": "80m Doublet at 50' ",
+      "gps": "(43.403945, -80.440380)",
+      "receiver_name": "0-30 MHz SDR | Kitchener, Ontario",
+      "hardware": "KiwiSDR 2 v1.902 \u2063 \u23f3 Limits \u2063 \ud83d\udcfb DRM \u2063",
+      "returncode": 0,
+      "end_utc": "2026-11-18T23:54:58.544912+00:00",
+      "files": [
+        {
+          "name": "20261118T235158Z_7105000_usb.wav",
+          "sha256": "6fb5b71dece854399fcf0ad61da2352fbf41b0e33ea2d16798999e313784a2e5"
+        }
+      ],
+      "capture_id": "kitchener-7105-repeat",
+      "continuity": {
+        "packets": 4220,
+        "missing": 0,
+        "duplicates": 0,
+        "reverse_or_reset": 0,
+        "overload": 0,
+        "first_packet_utc": "2026-11-18T23:51:58.328293+00:00"
+      },
+      "recordings": [
+        {
+          "original": "20261118T235158Z_7105000_usb.wav",
+          "source_rate_hz": 11999,
+          "seconds": 180.06833902825235,
+          "complete": true,
+          "usable": true,
+          "derivative_sha256": "d5b8110ad582660f68def09edcf4e1c825a395ca4aeba22d6fc155a33bc59a03",
+          "methods": {
+            "baseline": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 146688,
+                  "seconds": 3.056,
+                  "wire_sha256": "e368688ef5edf02cfc02d8d043c3d4eedbd7c4b94bc7c1c7073eef46b7160ead",
+                  "kiss_sha256": "4e209a84201fb5685a885e1430e888496063e3fb5781cbd117511bedebe8b01f",
+                  "estimated_utc": "2026-11-18T23:52:01.384293+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 6998400,
+                  "seconds": 145.8,
+                  "wire_sha256": "3effe50d5aaf5dcfbcceca578d8072700761d2561b9d44bba5e161bec89f4c47",
+                  "kiss_sha256": "d1cb23e7b6f55abdb908de5d1259851d8644e5ab25818463677b844740061887",
+                  "estimated_utc": "2026-11-18T23:54:24.128293+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 7542256,
+                  "seconds": 157.13033333333334,
+                  "wire_sha256": "763568fdec89e526bba1c860f0e8f67718da41bf0c678b1aeac9ac8c41aa3522",
+                  "kiss_sha256": "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1",
+                  "estimated_utc": "2026-11-18T23:54:35.458626+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 8135040,
+                  "seconds": 169.48,
+                  "wire_sha256": "60d031817b1fc09bc4af3301cabc69bb5170bc4dc07f4556e07bea5d523b300a",
+                  "kiss_sha256": "4606aaf4e81dcd2a01cb02a5d59aae2206cfdb5a1c1d3a834ce0b32e1b988e51",
+                  "estimated_utc": "2026-11-18T23:54:47.808293+00:00"
+                }
+              ],
+              "gate_attempts": 0,
+              "gate_activations": 0,
+              "replay_wall_seconds": 1.5815799999999998
+            },
+            "stable": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 146688,
+                  "seconds": 3.056,
+                  "wire_sha256": "e368688ef5edf02cfc02d8d043c3d4eedbd7c4b94bc7c1c7073eef46b7160ead",
+                  "kiss_sha256": "4e209a84201fb5685a885e1430e888496063e3fb5781cbd117511bedebe8b01f",
+                  "estimated_utc": "2026-11-18T23:52:01.384293+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 6998400,
+                  "seconds": 145.8,
+                  "wire_sha256": "3effe50d5aaf5dcfbcceca578d8072700761d2561b9d44bba5e161bec89f4c47",
+                  "kiss_sha256": "d1cb23e7b6f55abdb908de5d1259851d8644e5ab25818463677b844740061887",
+                  "estimated_utc": "2026-11-18T23:54:24.128293+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 7542256,
+                  "seconds": 157.13033333333334,
+                  "wire_sha256": "763568fdec89e526bba1c860f0e8f67718da41bf0c678b1aeac9ac8c41aa3522",
+                  "kiss_sha256": "d4b6676b49b310ae7059a8e951646fe0876a82a2ce08e4ac1bcdf873840fe6a1",
+                  "estimated_utc": "2026-11-18T23:54:35.458626+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 8135040,
+                  "seconds": 169.48,
+                  "wire_sha256": "60d031817b1fc09bc4af3301cabc69bb5170bc4dc07f4556e07bea5d523b300a",
+                  "kiss_sha256": "4606aaf4e81dcd2a01cb02a5d59aae2206cfdb5a1c1d3a834ce0b32e1b988e51",
+                  "estimated_utc": "2026-11-18T23:54:47.808293+00:00"
+                }
+              ],
+              "gate_attempts": 29,
+              "gate_activations": 0,
+              "replay_wall_seconds": 1.5574365420000005
+            }
+          },
+          "paired": {
+            "retained": 4,
+            "lost": [],
+            "additional": []
+          }
+        }
+      ]
+    },
+    {
+      "site": "newton",
+      "receiver": "http://24.218.56.55:8073",
+      "dial_khz": 14105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T23:46:17.944726+00:00",
+      "antenna": "500' NE Beverage primary- may change with local operating",
+      "gps": "(42.867236, -71.003845)",
+      "receiver_name": "0-30 MHz SDR, W1NT \u300bNewton, New Hampshire, NH USA",
+      "hardware": "KiwiSDR 1 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3 Limits \u2063 \ud83d\udcfb DRM \u2063",
+      "termination_reason": "Wall-clock bound or second connection failure",
+      "returncode": -15,
+      "end_utc": "2026-11-18T23:46:40.294345+00:00",
+      "files": [],
+      "capture_id": "newton-14105",
+      "continuity": {
+        "packets": 0,
+        "missing": null,
+        "duplicates": null,
+        "reverse_or_reset": null,
+        "overload": null,
+        "first_packet_utc": null
+      },
+      "recordings": []
+    },
+    {
+      "site": "rockport",
+      "receiver": "http://rx2.wa2zkd.net:8073",
+      "dial_khz": 7105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T23:47:14.538327+00:00",
+      "antenna": "Pixel Loop",
+      "gps": "(44.170000, -69.080000)",
+      "receiver_name": "10 KHz-30 MHz SDR | Rockport, Maine",
+      "hardware": "KiwiSDR 1 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3\ud83d\udeab Limits \u2063 \ud83d\udcfb DRM \u2063",
+      "returncode": 0,
+      "end_utc": "2026-11-18T23:47:25.948048+00:00",
+      "files": [
+        {
+          "name": "20261118T234716Z_7105000_usb.wav",
+          "sha256": "8c60fdd839e2e13e1221c7ad95b0c7b45fb99ce73773e7e813511002b7242eeb"
+        }
+      ],
+      "capture_id": "rockport-7105",
+      "continuity": {
+        "packets": 223,
+        "missing": 0,
+        "duplicates": 0,
+        "reverse_or_reset": 0,
+        "overload": 0,
+        "first_packet_utc": "2026-11-18T23:47:16.145772+00:00"
+      },
+      "recordings": [
+        {
+          "original": "20261118T234716Z_7105000_usb.wav",
+          "source_rate_hz": 11999,
+          "seconds": 9.515459621635136,
+          "complete": false,
+          "usable": true,
+          "derivative_sha256": "d2bb97898cfcf5d38acdf3c43d7677a95ded8fa7a227b0b04a74dfc1be70d30b",
+          "methods": {
+            "baseline": {
+              "frames": [],
+              "gate_attempts": 0,
+              "gate_activations": 0,
+              "replay_wall_seconds": 0.09255920900000003
+            },
+            "stable": {
+              "frames": [],
+              "gate_attempts": 0,
+              "gate_activations": 0,
+              "replay_wall_seconds": 0.0793172499999999
+            }
+          },
+          "paired": {
+            "retained": 0,
+            "lost": [],
+            "additional": []
+          }
+        }
+      ]
+    },
+    {
+      "site": "san-diego",
+      "receiver": "http://kiwisdr.ka9q.net:8073",
+      "dial_khz": 14105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T23:51:25.153450+00:00",
+      "antenna": "W6LVP loop",
+      "gps": "(32.860591, -117.188889)",
+      "receiver_name": "0-30 MHz SDR | San Diego, CA",
+      "hardware": "KiwiSDR 2 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3 Limits \u2063 \ud83d\udcfb DRM \u2063",
+      "termination_reason": "Wall-clock bound or second connection failure",
+      "returncode": -15,
+      "end_utc": "2026-11-18T23:51:46.921260+00:00",
+      "files": [],
+      "capture_id": "san-diego-14105",
+      "continuity": {
+        "packets": 0,
+        "missing": null,
+        "duplicates": null,
+        "reverse_or_reset": null,
+        "overload": null,
+        "first_packet_utc": null
+      },
+      "recordings": []
+    },
+    {
+      "site": "warrenton",
+      "receiver": "http://kiwisdr.k1ra.us:8075",
+      "dial_khz": 7105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T23:46:01.990559+00:00",
+      "antenna": "80m EFHW, 160m Inv-L, LoG",
+      "gps": "(38.742298, -77.797982)",
+      "receiver_name": "0-30 MHz SDR, K1RA, Warrenton, VA, USA",
+      "hardware": "KiwiSDR 2 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3\ud83d\udeab Limits",
+      "returncode": 0,
+      "end_utc": "2026-11-18T23:49:03.352802+00:00",
+      "files": [
+        {
+          "name": "20261118T234603Z_7105000_usb.wav",
+          "sha256": "d1dd0020f97bde090a1c79d20312a4cc885c80f2356c2fbd9894edeeaaad03f4"
+        }
+      ],
+      "capture_id": "warrenton-7105",
+      "continuity": {
+        "packets": 9002,
+        "missing": 0,
+        "duplicates": 0,
+        "reverse_or_reset": 0,
+        "overload": 0,
+        "first_packet_utc": "2026-11-18T23:46:03.167152+00:00"
+      },
+      "recordings": [
+        {
+          "original": "20261118T234603Z_7105000_usb.wav",
+          "source_rate_hz": 12000,
+          "seconds": 180.04,
+          "complete": true,
+          "usable": true,
+          "derivative_sha256": "4afd47c2232fbc4caa699981d9720635fece2841177e379882c819a8a1e45089",
+          "methods": {
+            "baseline": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 4184704,
+                  "seconds": 87.18133333333333,
+                  "wire_sha256": "a602d29b51df9d018b453dfbb127b183a471377a6d939b4511e67ca75f992c09",
+                  "kiss_sha256": "f1876d0324f87c2e24965d547bd1eee00893fb93208fc422cfae1610576b40af",
+                  "estimated_utc": "2026-11-18T23:47:30.348485+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 5552384,
+                  "seconds": 115.67466666666667,
+                  "wire_sha256": "6cfa1556afa817c13fa0b58d7e41e960fea85393ecb21662d031c351e368b4ee",
+                  "kiss_sha256": "6081858df6337d399a9707f58773f697cd80d13307293c445436610601cbe3e3",
+                  "estimated_utc": "2026-11-18T23:47:58.841819+00:00"
+                }
+              ],
+              "gate_attempts": 0,
+              "gate_activations": 0,
+              "replay_wall_seconds": 1.542694042
+            },
+            "stable": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 4184704,
+                  "seconds": 87.18133333333333,
+                  "wire_sha256": "a602d29b51df9d018b453dfbb127b183a471377a6d939b4511e67ca75f992c09",
+                  "kiss_sha256": "f1876d0324f87c2e24965d547bd1eee00893fb93208fc422cfae1610576b40af",
+                  "estimated_utc": "2026-11-18T23:47:30.348485+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 5552384,
+                  "seconds": 115.67466666666667,
+                  "wire_sha256": "6cfa1556afa817c13fa0b58d7e41e960fea85393ecb21662d031c351e368b4ee",
+                  "kiss_sha256": "6081858df6337d399a9707f58773f697cd80d13307293c445436610601cbe3e3",
+                  "estimated_utc": "2026-11-18T23:47:58.841819+00:00"
+                }
+              ],
+              "gate_attempts": 8,
+              "gate_activations": 0,
+              "replay_wall_seconds": 1.5497912080000003
+            }
+          },
+          "paired": {
+            "retained": 2,
+            "lost": [],
+            "additional": []
+          }
+        }
+      ]
+    },
+    {
+      "site": "warrenton",
+      "receiver": "http://kiwisdr.k1ra.us:8075",
+      "dial_khz": 7105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T23:51:54.497860+00:00",
+      "antenna": "80m EFHW, 160m Inv-L, LoG",
+      "gps": "(38.742298, -77.797982)",
+      "receiver_name": "0-30 MHz SDR, K1RA, Warrenton, VA, USA",
+      "hardware": "KiwiSDR 2 v1.902 \u2063 \ud83d\udce1 GPS \u2063 \u23f3\ud83d\udeab Limits",
+      "returncode": 0,
+      "end_utc": "2026-11-18T23:54:56.120815+00:00",
+      "files": [
+        {
+          "name": "20261118T235155Z_7105000_usb.wav",
+          "sha256": "005b8d723e0b30fd9161eab5d82a906b72d959643284bcbf93c62597c5c1ad5a"
+        }
+      ],
+      "capture_id": "warrenton-7105-repeat",
+      "continuity": {
+        "packets": 9004,
+        "missing": 0,
+        "duplicates": 0,
+        "reverse_or_reset": 0,
+        "overload": 0,
+        "first_packet_utc": "2026-11-18T23:51:55.859653+00:00"
+      },
+      "recordings": [
+        {
+          "original": "20261118T235155Z_7105000_usb.wav",
+          "source_rate_hz": 12000,
+          "seconds": 180.08,
+          "complete": true,
+          "usable": true,
+          "derivative_sha256": "737412b1b0c250c08a028da4ffeb4cb27c4f40ef873d5f3344899e1d4fd7981c",
+          "methods": {
+            "baseline": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 264448,
+                  "seconds": 5.509333333333333,
+                  "wire_sha256": "e368688ef5edf02cfc02d8d043c3d4eedbd7c4b94bc7c1c7073eef46b7160ead",
+                  "kiss_sha256": "4e209a84201fb5685a885e1430e888496063e3fb5781cbd117511bedebe8b01f",
+                  "estimated_utc": "2026-11-18T23:52:01.368986+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 2403712,
+                  "seconds": 50.077333333333335,
+                  "wire_sha256": "a53df11a5b82560ada53a51c513f68bedf2bd97290647ea3b338ae520e3b3acc",
+                  "kiss_sha256": "b1d53721a2143d16c51cb6831ea483bb8954746297e3733519cc373305717141",
+                  "estimated_utc": "2026-11-18T23:52:45.936986+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 7116288,
+                  "seconds": 148.256,
+                  "wire_sha256": "3effe50d5aaf5dcfbcceca578d8072700761d2561b9d44bba5e161bec89f4c47",
+                  "kiss_sha256": "d1cb23e7b6f55abdb908de5d1259851d8644e5ab25818463677b844740061887",
+                  "estimated_utc": "2026-11-18T23:54:24.115653+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 8252928,
+                  "seconds": 171.936,
+                  "wire_sha256": "60d031817b1fc09bc4af3301cabc69bb5170bc4dc07f4556e07bea5d523b300a",
+                  "kiss_sha256": "4606aaf4e81dcd2a01cb02a5d59aae2206cfdb5a1c1d3a834ce0b32e1b988e51",
+                  "estimated_utc": "2026-11-18T23:54:47.795653+00:00"
+                }
+              ],
+              "gate_attempts": 0,
+              "gate_activations": 0,
+              "replay_wall_seconds": 1.6230501250000007
+            },
+            "stable": {
+              "frames": [
+                {
+                  "level": 2,
+                  "sample": 264448,
+                  "seconds": 5.509333333333333,
+                  "wire_sha256": "e368688ef5edf02cfc02d8d043c3d4eedbd7c4b94bc7c1c7073eef46b7160ead",
+                  "kiss_sha256": "4e209a84201fb5685a885e1430e888496063e3fb5781cbd117511bedebe8b01f",
+                  "estimated_utc": "2026-11-18T23:52:01.368986+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 2403712,
+                  "seconds": 50.077333333333335,
+                  "wire_sha256": "a53df11a5b82560ada53a51c513f68bedf2bd97290647ea3b338ae520e3b3acc",
+                  "kiss_sha256": "b1d53721a2143d16c51cb6831ea483bb8954746297e3733519cc373305717141",
+                  "estimated_utc": "2026-11-18T23:52:45.936986+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 7116288,
+                  "seconds": 148.256,
+                  "wire_sha256": "3effe50d5aaf5dcfbcceca578d8072700761d2561b9d44bba5e161bec89f4c47",
+                  "kiss_sha256": "d1cb23e7b6f55abdb908de5d1259851d8644e5ab25818463677b844740061887",
+                  "estimated_utc": "2026-11-18T23:54:24.115653+00:00"
+                },
+                {
+                  "level": 2,
+                  "sample": 8252928,
+                  "seconds": 171.936,
+                  "wire_sha256": "60d031817b1fc09bc4af3301cabc69bb5170bc4dc07f4556e07bea5d523b300a",
+                  "kiss_sha256": "4606aaf4e81dcd2a01cb02a5d59aae2206cfdb5a1c1d3a834ce0b32e1b988e51",
+                  "estimated_utc": "2026-11-18T23:54:47.795653+00:00"
+                }
+              ],
+              "gate_attempts": 59,
+              "gate_activations": 0,
+              "replay_wall_seconds": 1.7045477079999998
+            }
+          },
+          "paired": {
+            "retained": 4,
+            "lost": [],
+            "additional": []
+          }
+        }
+      ]
+    },
+    {
+      "site": "westminster",
+      "receiver": "http://sdr.hfunderground.com:8073",
+      "dial_khz": 7105.0,
+      "mode": "USB",
+      "passband_hz": [
+        250,
+        3150
+      ],
+      "kiwiclient_revision": "4eb733e6b6147f7fbeb97ced64cdac029b202d18",
+      "source_url": "https://www.varac-hamradio.com/",
+      "requested_seconds": 180,
+      "start_utc": "2026-11-18T23:46:01.990059+00:00",
+      "failure": "timed out",
+      "end_utc": "2026-11-18T23:46:07.133922+00:00",
+      "files": [],
+      "capture_id": "westminster-7105",
+      "continuity": {
+        "packets": 0,
+        "missing": null,
+        "duplicates": null,
+        "reverse_or_reset": null,
+        "overload": null,
+        "first_packet_utc": null
+      },
+      "recordings": []
+    }
+  ]
+}

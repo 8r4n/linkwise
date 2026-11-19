@@ -1,0 +1,26 @@
+{
+  "summary": {
+    "baseline": {
+      "windows": 100,
+      "seconds": 1050,
+      "crc_frames": 0,
+      "generic_kiss": 0,
+      "gate_attempts": 0
+    },
+    "gated": {
+      "windows": 100,
+      "seconds": 1050,
+      "crc_frames": 1,
+      "generic_kiss": 0,
+      "gate_attempts": 1190
+    },
+    "stable": {
+      "windows": 100,
+      "seconds": 1050,
+      "crc_frames": 0,
+      "generic_kiss": 0,
+      "gate_attempts": 1191
+    }
+  },
+  "scope": "Synthetic true pilot schedule with noise-only DATA and persistent CW; no valid DATA frame transmitted. Not a natural RF false-frame rate."
+}
