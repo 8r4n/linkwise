@@ -1,0 +1,120 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:05.015
+Can a local propagation forecast help deliver an HF message before
+its deadline?
+
+00:00:05.015 --> 00:00:11.055
+We tested five forwarding strategies. This globe replays decisions
+made by the Linkwise simulator.
+
+00:00:11.542 --> 00:00:20.031
+We ran twenty matched seeds for each combination of network size,
+traffic load, and fault. That produced twenty-seven hundred policy
+runs.
+
+00:00:20.031 --> 00:00:28.410
+Every policy saw the same scheduled receiver windows and the same
+underlying channel conditions. The calls it made determined its
+own queues and collisions.
+
+00:00:28.917 --> 00:00:36.407
+Follow message six, from Spain to Norway. At fifteen oh six UTC,
+earliest arrival calls the British relay.
+
+00:00:36.407 --> 00:00:42.293
+The relay accepts the payload. Its acknowledgment is lost, so the
+sender cannot confirm the handoff.
+
+00:00:42.792 --> 00:00:47.798
+Switch to forecast plus history at the very same time. It skips
+that opportunity.
+
+00:00:47.798 --> 00:00:55.506
+This example is the first message with different delivery outcomes
+in seed seventeen. The full comparison includes every offered
+message.
+
+00:00:56.000 --> 00:01:03.971
+At fifteen sixteen UTC, Spain calls France. This overlay uses the
+previous minute’s NOAA ionospheric grid.
+
+00:01:03.971 --> 00:01:15.729
+At the path midpoint, vertical electron content is twenty-five
+point four TEC units and the F two peak is two hundred sixty-seven
+kilometers high. These readings provide context for the simulated
+call.
+
+00:01:16.250 --> 00:01:23.874
+At fifteen forty, the British relay forwards the earliest-arrival
+copy to Norway. It reaches the destination at the end of that
+minute.
+
+00:01:23.874 --> 00:01:30.754
+On the other replay, the combined policy never completes the
+route. Message six expires at fifteen fifty-five.
+
+00:01:31.250 --> 00:01:39.549
+These are real tmux panes showing the simulator output. On the
+left, the final transfer follows earlier collisions and a lost
+acknowledgment.
+
+00:01:39.549 --> 00:01:46.823
+On the right, the last attempted call fails. Both panes were
+generated from the same scenario, traffic, and seed.
+
+00:01:47.333 --> 00:01:55.353
+Across twenty seeds, the combined policy reached seventy-two point
+five percent priority-weighted delivery in the light European
+workload.
+
+00:01:55.353 --> 00:02:03.046
+At commissioned load it fell to twenty-six point eight percent.
+Earliest arrival reached thirty-two point one percent under those
+same conditions.
+
+00:02:03.542 --> 00:02:10.506
+Could the six messages have fit? For this seed, an offline search
+found a conflict-free schedule that delivered all six.
+
+00:02:10.506 --> 00:02:20.084
+The best online result was one of six. The offline scheduler knew
+future channel outcomes; that advantage bounds what was physically
+possible in this simulated world.
+
+00:02:20.583 --> 00:02:29.113
+At one thousand nodes every policy delivered zero under
+commissioned load with open receiver windows. We tested an
+alternative with preassigned callers.
+
+00:02:29.113 --> 00:02:36.519
+This globe follows an actual simulated delivery under those fixed
+reservations. The large network uses synthetic stations.
+
+00:02:37.000 --> 00:02:43.263
+Earliest arrival delivered seven of twenty thousand offers with
+assigned callers. Open windows delivered none.
+
+00:02:43.263 --> 00:02:52.730
+Just twenty-four of the nine hundred ninety-four access stations
+had a grant in the four-hour schedule. Contention fell, but most
+stations had no opportunity to send.
+
+00:02:53.250 --> 00:03:03.139
+In a separate experiment two real Linkwise modem processes
+exchanged waveforms over a virtual cable. All five clean and all
+five noise-only trials confirmed the payload.
+
+00:03:03.139 --> 00:03:10.303
+The two-path echo and the severe return-path fade each prevented
+setup in all five trials. These are engineering stress cases.
+
+00:03:10.792 --> 00:03:19.803
+We also replayed over a thousand seconds of archived HF audio. Two
+decoders agreed on eighteen valid receptions and sixteen distinct
+frame hashes.
+
+00:03:19.803 --> 00:03:29.856
+Those recordings lack a transmitter log. The routing results are
+simulation evidence. A field delivery claim still needs matched
+two-way observations on held-out paths and dates.

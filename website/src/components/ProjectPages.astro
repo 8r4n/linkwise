@@ -30,9 +30,14 @@ const decibels = value => value > 0 ? `+${value}` : String(value).replace("-", "
     {page === "demos" && <>
       <p class="lede">Watch the modem decode audio and follow the chat and mail workflows each bench demonstrated.</p>
       <nav class="jump" aria-label="Demos">
-        <a href="#three-hf-links">Three HF links</a><a href="#waveform">Waveform</a><a href="#winlink">Winlink Express</a><a href="#chat-and-mail">Chat and mail</a>
+        <a href="#hf-routing-results">HF routing experiment</a><a href="#three-hf-links">Three HF links</a><a href="#waveform">Waveform</a><a href="#winlink">Winlink Express</a><a href="#chat-and-mail">Chat and mail</a>
         <a href="#rocky-live-usb">Rocky Live USB</a><a href="#briefing">Study briefing</a>
       </nav>
+      <section class="project-section" id="hf-routing-results">
+        <h2>HF routing experiment</h2>
+        <p>Follow a message across European gateways, then compare five routing policies in 2,700 simulation runs. With the commissioned traffic load and no injected fault, every policy missed every deadline in the 1,000-node scenario.</p>
+        <DemoVideo title="HF routing experiment" file="media/hf-routing-results.mp4" poster="media/hf-routing-results.webp" captions="media/hf-routing-results.vtt" {base} />
+      </section>
       <section class="project-section" id="three-hf-links">
         <h2>Follow an encrypted message across three HF links</h2>
         <p>Watch both tmux panes as EA1URO, F5ZFX, HB9T and LA1B relay one message over local virtual modems. Between exchanges, the globe shows the simulated RF path between each pair of published gateway locations.</p>
