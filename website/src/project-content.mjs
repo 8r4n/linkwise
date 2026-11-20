@@ -18,7 +18,7 @@ export const projectMedia = [
   ["docs/media/modem/winlink-prbs9/winlink-prbs9.mp4", "winlink-prbs9.mp4"],
   ["docs/media/modem/modem-streaming.gif", "media/modem-streaming.gif"],
   ...audioSamples.map(([name]) => [`docs/media/modem/${name}`, `media/${name}`]),
-  ...["rocky-live-usb.mp4", "rocky-mutt.mp4", "rocky-pki-mail.mp4", "rocky-interactive-mutt.mp4",
+  ...["three-hf-links.mp4", "three-hf-links.webp", "rocky-live-usb.mp4", "rocky-mutt.mp4", "rocky-pki-mail.mp4", "rocky-interactive-mutt.mp4",
     "robustness-briefing.mp4", "robustness-briefing-transcript.md", "winlink-prbs9.webp", "rocky-live-usb.webp",
     "rocky-interactive-mutt.webp", "robustness-briefing.webp"].map(name => [`docs/media/demos/${name}`, `media/${name}`]),
   ["docs/testing/figures/kiwisdr-beacon-preview-1.png", "media/beacon-range-rings.png"],
