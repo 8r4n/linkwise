@@ -229,6 +229,16 @@ fn arrival(
     table
 }
 pub fn run(s: &Scenario, policy: Policy, seed: u64, trace: bool) -> Result<ResultRow> {
+    observe(s, policy, seed, trace, |_, _, _, _, _| {})
+}
+
+pub fn observe(
+    s: &Scenario,
+    policy: Policy,
+    seed: u64,
+    trace: bool,
+    mut event: impl FnMut(u32, usize, Option<usize>, usize, &str),
+) -> Result<ResultRow> {
     s.check()?;
     let mut slots = vec![Vec::new(); s.slots as usize];
     for (i, c) in s.contacts.iter().enumerate() {
@@ -271,6 +281,7 @@ pub fn run(s: &Scenario, policy: Policy, seed: u64, trace: bool) -> Result<Resul
         }
         for (id, o) in s.offers.iter().enumerate().filter(|(_, o)| o.start == time) {
             if queues[o.source].len() == s.queue_limit {
+                event(time, id, None, o.source, "rejected");
                 result.rejected += 1;
             } else {
                 queues[o.source].push(id);
@@ -334,11 +345,25 @@ pub fn run(s: &Scenario, policy: Policy, seed: u64, trace: bool) -> Result<Resul
                 < u64::from(s.outage_percent);
             if collision || outage || (c.to != o.destination && queues[c.to].len() >= s.queue_limit)
             {
+                event(
+                    time,
+                    id,
+                    Some(i),
+                    c.from,
+                    if collision {
+                        "collision"
+                    } else if outage {
+                        "outage"
+                    } else {
+                        "queue-full"
+                    },
+                );
                 result.failed_calls += 1;
                 result.collisions += collision as u64;
                 *failures.entry((c.from, c.to, c.channel)).or_default() += 1;
                 continue;
             }
+            event(time, id, Some(i), c.from, "transfer");
             failures.remove(&(c.from, c.to, c.channel));
             if previous
                 .insert(c.from, (c.to, c.channel))

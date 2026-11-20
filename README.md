@@ -10,6 +10,8 @@ VARA HF is the interoperability target. Linkwise is a separate implementation:
 it is not a redistribution of VARA software, decompiled source, or proprietary
 assets.
 
+Explore the [offline Cesium RF globe](globe/README.md) to replay simulated network traffic, inspect HF circuits, and view archived ionospheric conditions.
+
 ## Install the modem preview
 
 Follow the installation guide for

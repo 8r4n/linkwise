@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Linkwise · RF globe</title>
+    <link rel="stylesheet" href="vendor/Widgets/widgets.css" />
+    <link rel="stylesheet" href="style.css" />
+    <script>
+      window.CESIUM_BASE_URL = "./vendor/";
+    </script>
+    <script src="vendor/Cesium.js"></script>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <i></i>Linkwise <span>/</span> <strong>RF globe</strong>
+      </div>
+      <div class="controls">
+        <label
+          >Scenario
+          <select id="scenario">
+            <option value="vara-europe">VARA HF · Europe</option>
+            <option value="vara-world">VARA HF · World directory</option>
+            <option value="six">Synthetic · North Atlantic</option>
+            <option value="global-100">Global · 100 nodes</option>
+            <option value="global-1000">Global · 1,000 nodes</option>
+          </select></label
+        ><label
+          >Policy
+          <select id="policy">
+            <option value="1">Adaptive</option>
+            <option value="0">Fixed</option>
+          </select></label
+        >
+      </div>
+    </header>
+    <main>
+      <section id="stage">
+        <div id="earth"></div>
+        <div class="overlay">
+          <span class="kicker">NETWORK REPLAY</span>
+          <h1 id="title">North Atlantic</h1>
+          <div id="sub"></div>
+        </div>
+        <div class="maptools">
+          <a class="tourLink" href="?orbital">Orbital tour</a>
+          <button id="home">Overview</button
+          ><button id="tilt">Inspect circuit ↗</button>
+        </div>
+        <div class="legend">
+          <span class="dot"></span> Station <span class="line"></span> Transfer
+          <span class="dash"></span> Failed call
+          <span class="sky"></span> Skywave
+        </div>
+      </section>
+      <aside>
+        <section>
+          <h2>Message inspector</h2>
+          <select id="message" aria-label="Message"></select>
+          <p class="state" id="state"></p>
+          <div id="route"></div>
+          <details>
+            <summary>Contact history</summary>
+            <div id="events"></div>
+          </details>
+          <p id="stationInfo"></p>
+          <label
+            ><input id="gate" type="checkbox" /> Require 90% forecast
+            reliability</label
+          >
+        </section>
+        <section>
+          <h2>HF circuit</h2>
+          <select id="circuit" aria-label="Selected circuit"></select
+          ><label class="band"
+            >Inspect frequency
+            <select id="band">
+              <option value="-1">Scheduled channel</option>
+              <option value="0">7.10 MHz</option>
+              <option value="1">5.40 MHz</option>
+              <option value="2">14.10 MHz</option>
+              <option value="3">10.12 MHz</option>
+            </select></label
+          ><label class="band"
+            >Path model
+            <select id="physics">
+              <option value="schematic">Schematic</option>
+              <option value="ray">Refracted F2 ray</option>
+            </select></label
+          >
+          <div id="metrics"></div>
+          <canvas
+            id="section"
+            width="600"
+            height="156"
+            aria-label="Schematic HF path cross-section"
+          ></canvas
+          ><small id="model"></small>
+        </section>
+        <section>
+          <h2>Ionosphere</h2>
+          <select id="layer" aria-label="Ionospheric map">
+            <option value="tec">Vertical TEC</option>
+            <option value="quality">Observation coverage</option>
+            <option value="height">F2 peak altitude</option>
+            <option value="off">Hide layer</option>
+          </select>
+          <div class="ramp"></div>
+          <div id="scale"></div>
+          <p id="weather"></p>
+          <label
+            ><input type="checkbox" id="potential" /> Scheduled contacts</label
+          >
+        </section>
+      </aside>
+    </main>
+    <footer>
+      <button id="play" aria-label="Play replay">▶ Play</button>
+      <div class="timeline">
+        <div><b id="clock"></b><span id="slot"></span></div>
+        <input
+          id="time"
+          type="range"
+          min="0"
+          step="1"
+          value="6"
+          aria-label="Replay slot"
+        />
+      </div>
+      <select id="speed" aria-label="Playback speed">
+        <option value="1">1×</option>
+        <option value="4">4×</option>
+        <option value="12">12×</option>
+      </select>
+    </footer>
+    <div id="error" role="alert" hidden></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

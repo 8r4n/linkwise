@@ -1,5 +1,6 @@
 mod link;
 mod node;
+mod replay;
 mod secure;
 mod sim;
 mod spool;
@@ -13,7 +14,7 @@ use std::{
     path::Path,
     time::Duration,
 };
-const USAGE: &str = "linkwise-network simulate six|N|global-N|scenario.json [seed] [runs]\n  scenario six|N|global-N\n  submit DB NODE DEST FILE TTL_SECONDS\n  list DB NODE | read DB NODE ID | prune DB NODE\n  send DB NODE ID LOOPBACK_ADDR | listen DB NODE LOOPBACK_ADDR\n  serve DB NODE PROFILE_JSON SECONDS (0 for continuous)\n  receive-stream DB NODE CONNECTED_DATA_ADDR";
+const USAGE: &str = "linkwise-network simulate six|N|global-N|scenario.json [seed] [runs]\n  replay six|global-N SEED [FORECAST_JSON]\n  scenario six|N|global-N\n  submit DB NODE DEST FILE TTL_SECONDS\n  list DB NODE | read DB NODE ID | prune DB NODE\n  send DB NODE ID LOOPBACK_ADDR | listen DB NODE LOOPBACK_ADDR\n  serve DB NODE PROFILE_JSON SECONDS (0 for continuous)\n  receive-stream DB NODE CONNECTED_DATA_ADDR";
 fn scenario(arg: &str) -> Result<sim::Scenario> {
     if let Some(n) = arg.strip_prefix("global-") {
         return sim::global(n.parse()?);
@@ -57,6 +58,26 @@ fn main() -> Result<()> {
     let args: Vec<_> = env::args().skip(1).collect();
     let a: Vec<_> = args.iter().map(String::as_str).collect();
     match a.as_slice() {
+        ["replay", name, seed, rest @ ..] if rest.len() <= 1 => {
+            let forecast = rest
+                .first()
+                .map(|file| -> Result<serde_json::Value> {
+                    Ok(serde_json::from_slice(&bounded(file, 4 * 1024 * 1024)?)?)
+                })
+                .transpose()?;
+            println!(
+                "{}",
+                replay::export(&scenario(name)?, name, seed.parse()?, forecast.as_ref())?
+            );
+        }
+        ["replay-events", file, seed] => {
+            let s = scenario(file)?;
+            let ids: Vec<_> = (0..s.contacts.len()).collect();
+            println!(
+                "{}",
+                serde_json::to_string(&replay::policy_runs(&s, seed.parse()?, &ids, false)?)?
+            );
+        }
         ["scenario", arg] => println!("{}", serde_json::to_string_pretty(&scenario(arg)?)?),
         ["simulate", arg, rest @ ..] if rest.len() <= 2 => {
             let s = scenario(arg)?;

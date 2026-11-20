@@ -1,0 +1,469 @@
+:root {
+  color-scheme: dark;
+  --bg: #0a141c;
+  --panel: #101e28;
+  --line: #30414d;
+  --muted: #9eb3bf;
+  --mint: #70edcb;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: #ecf2f5;
+  font:
+    15px/1.45 "Instrument Sans",
+    system-ui,
+    sans-serif;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100dvh;
+}
+header,
+footer,
+.controls,
+main,
+.brand,
+.maptools,
+.legend {
+  display: flex;
+  align-items: center;
+}
+header,
+footer {
+  padding: 14px 24px;
+  gap: 20px;
+  background: #101d26;
+  z-index: 1;
+}
+header {
+  border-bottom: 1px solid var(--line);
+  justify-content: space-between;
+}
+.brand {
+  font-size: 21px;
+  gap: 12px;
+  font-weight: 720;
+}
+.brand span {
+  color: #687d8c;
+}
+.brand strong {
+  font-weight: 450;
+}
+.brand i {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 3px solid var(--mint);
+  box-shadow: inset 5px -4px #277c79;
+}
+.controls {
+  gap: 18px;
+}
+label,
+small,
+#weather,
+#sub,
+#scale {
+  color: var(--muted);
+}
+button,
+select {
+  background: #192b37;
+  border: 1px solid #405461;
+  color: #f2f6f7;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover,
+select:hover {
+  border-color: var(--mint);
+}
+main {
+  align-items: stretch;
+  min-height: 0;
+}
+#stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: #071118;
+}
+#earth {
+  position: absolute;
+  inset: 0;
+}
+.overlay,
+.maptools,
+.legend {
+  position: absolute;
+  z-index: 1;
+}
+.overlay {
+  top: 22px;
+  left: 26px;
+  text-shadow: 0 2px 6px black;
+  pointer-events: none;
+}
+.kicker {
+  font: 11px monospace;
+  letter-spacing: 0.16em;
+  color: var(--mint);
+}
+h1 {
+  margin: 4px 0;
+  font-size: clamp(25px, 3vw, 43px);
+  line-height: 1.14;
+  font-weight: 560;
+  letter-spacing: -0.04em;
+}
+.maptools {
+  top: 24px;
+  right: 20px;
+  gap: 6px;
+}
+.maptools button,
+.legend {
+  background: #0b1925e8;
+  font-size: 13px;
+}
+.legend {
+  bottom: 38px;
+  left: 20px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+.dot,
+.line,
+.dash {
+  display: inline-block;
+}
+.dot {
+  background: white;
+  border-radius: 50%;
+  width: 7px;
+  height: 7px;
+}
+.line,
+.dash {
+  width: 20px;
+  border-top: 3px solid var(--mint);
+  margin-left: 8px;
+}
+.dash {
+  border-top: 2px dashed #ff997c;
+}
+aside {
+  width: 316px;
+  background: var(--panel);
+  overflow: auto;
+  border-left: 1px solid var(--line);
+}
+aside section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+h2 {
+  font-size: 18px;
+  letter-spacing: -0.025em;
+  margin: 0 0 10px;
+}
+aside select {
+  width: 100%;
+}
+.state {
+  color: var(--mint);
+  font-weight: 600;
+  margin: 10px 0 4px;
+}
+#route,
+#metrics,
+#weather,
+small,
+#scale {
+  font-size: 13px;
+}
+#metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0;
+}
+#metrics b {
+  display: block;
+}
+#metrics span {
+  color: var(--muted);
+  font-size: 11px;
+}
+#section {
+  width: 100%;
+  height: auto;
+  background: #0a1720;
+  border-radius: 5px;
+}
+.ramp {
+  height: 7px;
+  background: linear-gradient(90deg, #214081, #228f9f, #eed572);
+  margin: 12px 0 3px;
+}
+.timeline {
+  flex: 1;
+}
+.timeline div {
+  display: flex;
+  justify-content: space-between;
+  font: 13px monospace;
+  color: var(--muted);
+}
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--mint);
+}
+footer {
+  border-top: 1px solid var(--line);
+}
+#play {
+  min-width: 86px;
+  background: var(--mint);
+  color: #103332;
+  font-weight: bold;
+}
+#error {
+  position: fixed;
+  top: 80px;
+  left: 5%;
+  padding: 15px;
+  background: #572d24;
+  z-index: 9;
+}
+a {
+  color: var(--mint);
+}
+@media (max-width: 800px) {
+  header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .controls {
+    gap: 6px;
+    font-size: 12px;
+  }
+  main {
+    display: grid;
+    grid-template-rows: minmax(240px, 55%) 1fr;
+  }
+  aside {
+    width: 100%;
+    display: flex;
+    overflow: auto;
+    border-top: 1px solid var(--line);
+  }
+  aside section {
+    min-width: 245px;
+    flex: 1;
+  }
+  .maptools {
+    top: auto;
+    bottom: 35px;
+    right: 8px;
+  }
+  .legend {
+    display: none;
+  }
+  footer {
+    padding: 8px;
+  }
+  .overlay {
+    top: 10px;
+    left: 12px;
+  }
+}
+.sky {
+  width: 20px;
+  border-top: 2px solid #ffd282;
+  margin-left: 8px;
+}
+.band {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  margin-top: 7px;
+}
+.band select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+#stationInfo {
+  font-size: 13px;
+  color: var(--muted);
+}
+aside label {
+  font-size: 13px;
+}
+details {
+  margin: 8px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+summary {
+  cursor: pointer;
+}
+#events {
+  display: grid;
+  gap: 4px;
+  max-height: 145px;
+  overflow: auto;
+  margin: 6px 0;
+}
+#events button {
+  font: 12px monospace;
+  text-align: left;
+}
+.orbital {
+  display: block;
+  background: #01050a;
+}
+.orbital header,
+.orbital footer,
+.orbital aside,
+.orbital .overlay,
+.orbital .maptools,
+.orbital .legend {
+  display: none;
+}
+.orbital main,
+.orbital #stage {
+  display: block;
+  width: 100%;
+  height: 100dvh;
+}
+.orbital #flight {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  color: #fff;
+  text-shadow: 0 2px 12px #000;
+}
+.flightTop,
+.flightBottom,
+.flightClock,
+.flightBar {
+  position: absolute;
+}
+.flightTop {
+  top: 5%;
+  left: 4%;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+.flightTop b {
+  font-size: 19px;
+  letter-spacing: 0.22em;
+}
+.flightTop span,
+.flightClock,
+#flightRegion {
+  font:
+    12px Menlo,
+    monospace;
+  letter-spacing: 0.11em;
+}
+.flightTop span {
+  border-left: 1px solid #97b3c1;
+  padding-left: 18px;
+  color: #c9d9e3;
+}
+.flightClock {
+  right: 4%;
+  top: 5.6%;
+}
+.flightBottom {
+  bottom: 12%;
+  left: 4%;
+  padding: 14px 26px 16px 17px;
+  border-left: 2px solid #71f0da;
+  background: linear-gradient(90deg, #03101ac9, transparent);
+}
+#flightRegion {
+  color: #a9ffe9;
+}
+.flightBottom h1 {
+  font-size: clamp(36px, 4vw, 64px);
+  font-weight: 550;
+  margin: 0.12em 0;
+}
+.flightBottom p {
+  margin: 0;
+  font:
+    15px/1.5 Menlo,
+    monospace;
+  color: #e3edf5;
+}
+.flightBar {
+  bottom: 30px;
+  right: 4%;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  pointer-events: auto;
+  background: #07121bd9;
+  border-radius: 8px;
+  padding: 7px;
+}
+.flightBar input {
+  width: 140px !important;
+}
+.flightBar a {
+  font-size: 13px;
+}
+.recording .flightBar {
+  display: none;
+}
+.tourLink {
+  background: #0b1925e8;
+  padding: 7px 10px;
+  border-radius: 7px;
+  text-decoration: none;
+  font-size: 13px;
+}
+.flightCredit,
+.flightTec {
+  position: absolute;
+  right: 4%;
+  font:
+    11px Menlo,
+    monospace;
+  text-shadow: 0 1px 5px black;
+}
+.flightCredit {
+  bottom: 1.6%;
+  color: #c3cdd4;
+}
+.flightTec {
+  bottom: 14%;
+  display: none;
+  padding: 10px;
+  background: #05111eca;
+}
+.orbital[data-shot="3"] .flightTec {
+  display: block;
+}
+.flightTec div {
+  height: 5px;
+  margin: 8px 0 4px;
+  background: linear-gradient(to right, #214081, #228f9f, #eed572);
+}
+.flightTec span {
+  float: right;
+}
