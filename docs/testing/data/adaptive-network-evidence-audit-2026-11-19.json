@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-11-19",
+  "baseline_commit": "24c50964e8f1b727cc01181efab731a71667a9dd",
+  "scope": "Read-only source and historical artifact audit, not a fresh modem, network, RF or CI experiment.",
+  "fresh_checks": {
+    "offline_cargo_metadata": "passed; no dependency resolution/build/test execution",
+    "source_and_document_review": true,
+    "selected_archived_hashes": [
+      {
+        "path": "tools/soft-metric-study/results/acceptance-2026-11-18/validation2/validation-summary.json",
+        "sha256": "74339678f499f3f3cfe8fa70e7288909fdf41ab03368de7e92036ff1344278b7",
+        "matches_archived_index": true,
+        "index": "tools/soft-metric-study/results/acceptance-2026-11-18/checksums.json"
+      },
+      {
+        "path": "tools/soft-metric-study/results/acceptance-2026-11-18/validation2/validation.csv",
+        "sha256": "a5e6f75df819f93431ca7150b8d6c375ceb6835f1ada0944069d92ea0495d522",
+        "matches_archived_index": true,
+        "index": "tools/soft-metric-study/results/acceptance-2026-11-18/checksums.json"
+      },
+      {
+        "path": "tools/soft-metric-study/results/acceptance-2026-11-18/structured-negatives-holdout.json",
+        "sha256": "145016f126242e109c8f04a2599a7f1c99e6b5de9c76e1f256b055e1d9438fe3",
+        "matches_archived_index": true,
+        "index": "tools/soft-metric-study/results/acceptance-2026-11-18/checksums.json"
+      },
+      {
+        "path": "tools/soft-metric-study/results/acceptance-2026-11-18/interop-summary.json",
+        "sha256": "cf8d854edc974f1d8d57810ebcd12eb438c7607f3ece951392b6c061ae556356",
+        "matches_archived_index": true,
+        "index": "tools/soft-metric-study/results/acceptance-2026-11-18/checksums.json"
+      },
+      {
+        "path": "tools/soft-metric-study/results/kiwisdr-passive-2026-11-18/passive-summary.json",
+        "sha256": "c3887ca5176f53ae118ae2f52353a520463a18e8bd7c2631560a4d7b0dd09ce9",
+        "matches_archived_index": true,
+        "index": "tools/soft-metric-study/results/kiwisdr-passive-2026-11-18/provenance.json"
+      },
+      {
+        "path": "tools/soft-metric-study/results/kiwisdr-passive-2026-11-18/analyzer-regression.json",
+        "sha256": "c2f6a36463a04c2a132d8e4073af91bbf81f1b483cd2743da3898fce55c5bc7c",
+        "matches_archived_index": true,
+        "index": "tools/soft-metric-study/results/kiwisdr-passive-2026-11-18/provenance.json"
+      },
+      {
+        "path": "tools/soft-metric-study/results/cw-level4-2026-11-18/level4-later.csv",
+        "sha256": "91dbd4b53dfa2bf1ae756f26e3f4cfac2af5ef11055f86a3dc959dbb07e93142",
+        "matches_archived_index": true,
+        "index": "tools/soft-metric-study/results/cw-level4-2026-11-18/provenance.json"
+      }
+    ],
+    "passive_original_wavs": {
+      "source_root_reference": "tools/soft-metric-study/results/kiwisdr-passive-2026-11-18/provenance.json#source_root",
+      "files": [
+        {
+          "capture_id": "kitchener-7105",
+          "relative_path": "kitchener-7105/20261118T234716Z_7105000_usb.wav",
+          "bytes": 4321324,
+          "sha256": "ae3faf5a8bb0936c7baaaf72b2dde37c5e371d34d712e24fb114744957da5688",
+          "matches_archived_summary": true
+        },
+        {
+          "capture_id": "kitchener-7105-repeat",
+          "relative_path": "kitchener-7105-repeat/20261118T235158Z_7105000_usb.wav",
+          "bytes": 4321324,
+          "sha256": "6fb5b71dece854399fcf0ad61da2352fbf41b0e33ea2d16798999e313784a2e5",
+          "matches_archived_summary": true
+        },
+        {
+          "capture_id": "rockport-7105",
+          "relative_path": "rockport-7105/20261118T234716Z_7105000_usb.wav",
+          "bytes": 228396,
+          "sha256": "8c60fdd839e2e13e1221c7ad95b0c7b45fb99ce73773e7e813511002b7242eeb",
+          "matches_archived_summary": true
+        },
+        {
+          "capture_id": "warrenton-7105",
+          "relative_path": "warrenton-7105/20261118T234603Z_7105000_usb.wav",
+          "bytes": 4321004,
+          "sha256": "d1dd0020f97bde090a1c79d20312a4cc885c80f2356c2fbd9894edeeaaad03f4",
+          "matches_archived_summary": true
+        },
+        {
+          "capture_id": "warrenton-7105-repeat",
+          "relative_path": "warrenton-7105-repeat/20261118T235155Z_7105000_usb.wav",
+          "bytes": 4321964,
+          "sha256": "005b8d723e0b30fd9161eab5d82a906b72d959643284bcbf93c62597c5c1ad5a",
+          "matches_archived_summary": true
+        }
+      ],
+      "total_bytes": 17514012
+    },
+    "acceptance_raw_presence_only": {
+      "source_root_reference": "tools/soft-metric-study/results/acceptance-2026-11-18/environment.json",
+      "wav_count": 81,
+      "total_bytes": 212453532,
+      "full_hash_audit": false
+    }
+  },
+  "versioned_study_artifacts": 145,
+  "worktree_availability": {
+    "rust_target_present": false,
+    "downloaded_reference_fixtures_present": false
+  },
+  "historical_results_recounted": {
+    "passive_totals": {
+      "receiver_attempts": 10,
+      "recordings": 5,
+      "recorded_seconds": 729.7721376781399,
+      "complete_recordings": 4,
+      "usable_recordings": 5,
+      "usable_seconds": 729.7721376781399,
+      "baseline_frames": 12,
+      "baseline_kiss_frames": 12,
+      "baseline_gate_attempts": 0,
+      "baseline_gate_activations": 0,
+      "baseline_replay_wall_seconds": 6.436285334000001,
+      "stable_frames": 12,
+      "stable_kiss_frames": 12,
+      "stable_gate_attempts": 113,
+      "stable_gate_activations": 0,
+      "stable_replay_wall_seconds": 6.563761874000001,
+      "retained": 12,
+      "lost": 0,
+      "additional": 0
+    },
+    "acceptance_later": {
+      "selected_clips": 6,
+      "distinct_payloads": 3,
+      "csv_rows": 1278,
+      "rows_by_condition": {
+        "clean": 18,
+        "noise": 900,
+        "tone": 180,
+        "echo": 180
+      },
+      "stable_awgn_exact": 276,
+      "stable_awgn_trials": 300,
+      "cw_baseline_exact": 8,
+      "cw_stable_exact": 60,
+      "cw_trials_per_method": 60,
+      "structured_negative_summary": {
+        "baseline": {
+          "windows": 100,
+          "seconds": 1050,
+          "crc_frames": 0,
+          "generic_kiss": 0,
+          "gate_attempts": 0
+        },
+        "gated": {
+          "windows": 100,
+          "seconds": 1050,
+          "crc_frames": 1,
+          "generic_kiss": 0,
+          "gate_attempts": 1190
+        },
+        "stable": {
+          "windows": 100,
+          "seconds": 1050,
+          "crc_frames": 0,
+          "generic_kiss": 0,
+          "gate_attempts": 1191
+        }
+      }
+    },
+    "level4_later": {
+      "csv_rows": 433,
+      "rows_by_condition": {
+        "clean": 3,
+        "awgn": 60,
+        "cw": 270,
+        "noise_cw": 100
+      }
+    },
+    "ordinary_candidate_interop": [
+      {
+        "case": "linkwise-caller",
+        "result": "pass",
+        "bandwidth": 500,
+        "payload_length": 13,
+        "reply_length": 6,
+        "fault_injected": false,
+        "pace_virtual": false,
+        "measurements": {
+          "connect_seconds": 10.503605125,
+          "first delivery_seconds": 9.91278925,
+          "reverse delivery_seconds": 10.372668333999997,
+          "second delivery_seconds": 6.767224708999997,
+          "transfer_seconds": 27.491256417,
+          "disconnect_seconds": 1.8299006250000005
+        },
+        "disconnect_confirmed": [
+          true,
+          true
+        ]
+      },
+      {
+        "case": "linkwise-responder",
+        "result": "pass",
+        "bandwidth": 500,
+        "payload_length": 13,
+        "reply_length": 6,
+        "fault_injected": false,
+        "pace_virtual": false,
+        "measurements": {
+          "connect_seconds": 9.608518167000001,
+          "first delivery_seconds": 10.501770707999999,
+          "reverse delivery_seconds": 6.816527750000002,
+          "second delivery_seconds": 6.117787291999996,
+          "transfer_seconds": 24.379622458,
+          "disconnect_seconds": 5.650584500000001
+        },
+        "disconnect_confirmed": [
+          true,
+          true
+        ]
+      }
+    ]
+  },
+  "not_verified": [
+    "No compiled Rust tests, decoder replays, CI reruns, RF transmissions, or new network simulations.",
+    "Full acceptance-retest raw WAV hashes not audited.",
+    "CFAR external archive and machine-data chain not verified.",
+    "Historical mixed-wide raw fixtures absent in this worktree.",
+    "Global HF contact probability, shared-channel relay capacity, multi-hop delivery and autonomous physical PTT are unqualified."
+  ]
+}

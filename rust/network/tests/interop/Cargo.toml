@@ -1,0 +1,8 @@
+[package]
+name = "linkwise-independent-bp-check"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+[dependencies]
+hardy-bpv7 = {version = "=0.6.0", default-features = false, features = ["std"]}

@@ -164,6 +164,8 @@ def chat_stations(stack, args, options):
              for port in ports]
     for source, destination in (audio, audio[::-1]):
         threading.Thread(target=CHAT["relay"], args=(source, destination), daemon=True).start()
+    if getattr(args, "data_adapter", None):
+        ports = [args.data_adapter(stack, side, port) for side, port in zip(("left", "right"), ports)]
     return [CHAT["Chat"](stack, args.cli, call, port, flags)
             for call, port, flags in zip(CALLS, ports, options)]
 
