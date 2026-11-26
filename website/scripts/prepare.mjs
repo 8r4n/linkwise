@@ -19,6 +19,8 @@ const base = "https://8r4n.github.io/linkwise/";
 const repositorySources = repository + "/blob/main/";
 const commandLine = command => "- `" + command + "`";
 await mkdir(new URL("install/", publicDir), { recursive: true });
+await copyFile(new URL("tools/hf-live/web/github-invertocat-white.svg", root),
+  new URL("github-invertocat-white.svg", publicDir));
 for (const guide of ["windows", "macos", "ubuntu", "fedora", "winlink-quick-start", ...deploymentBuilds.map(({ id }) => id)]) {
   const source = await readFile(new URL(`docs/install/${guide}.md`, root), "utf8");
   const markdown = source

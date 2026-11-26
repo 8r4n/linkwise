@@ -28,7 +28,9 @@ const alternates = locales.map(({ code }) => ({ code, href: localized(code) }));
         <nav aria-label={t.ui.navigation}>
           {navigation.map(([path, label]) => <a aria-current={page === path ? "page" : undefined} href={base + pagePath(locale.code, path)}>{label}</a>)}
         </nav>
-        <a class="source" href={repository}>GitHub</a>
+        <a class="source" href={repository} lang="en" aria-label="Linkwise on GitHub" title="Linkwise on GitHub">
+          <img src={base + "/github-invertocat-white.svg"} alt="" width="24" height="24" />
+        </a>
         <details class="languages">
           <summary aria-label={t.ui.language}>{locale.name}</summary>
           <ul>{locales.map(({ code, name, dir }) => <li><a lang={code} dir={dir || "ltr"} hreflang={code}

@@ -24,6 +24,15 @@ p { margin: 0 0 1rem; }
 .bar a:hover, .bar a[aria-current] { color: var(--primary); }
 .bar .brand, .footer .brand { color: var(--foreground); font-weight: 750; font-size: 1.25rem; }
 .brand span { color: var(--primary); }
+.bar .source {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: var(--radius);
+}
+.bar .source:hover { background: var(--card); }
 .skip { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
 .skip:focus { width: auto; height: auto; clip-path: none; inset-inline-start: 1rem; top: 1rem; z-index: 3; background: var(--background); padding: .5rem; }
 .hero { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3.5rem; align-items: center; padding-block: clamp(3rem, 8vw, 7rem); }
