@@ -989,14 +989,19 @@ frames. These checks cover the tested recordings.\\
 Receiver robustness & Measure live frame recovery on known transmissions.
 Characterize offset, fading, interference, clipping, sample-clock error,
 false alarms, and processing latency.\\
-Reference acceptance & With stock VARA HF 4.9.1, the 11 November frozen
-build \texttt{6a4dc89e} passed one BW2300 and two BW2750 sender-recovery
-runs with 412 exact bytes, two-ended disconnect and a same-socket
-reconnect. Other runs stalled during setup or retry. The three-pass gate
-remains open.\\
-Session reliability & The frozen build passed two final-ACK-loss runs and
-one intermediate-ACK-loss run at BW500, with 406 exact bytes and two-ended
-disconnect in each pass. Setup and DATA timeouts interrupted the sequences.
+Reference acceptance & On 12 November, all four radio-free guarded DATA
+recovery cases passed three consecutive trials against stock VARA HF 4.9.1
+on \texttt{70cf5ed}. The cases covered Linkwise transmitting as caller and
+receiving as responder at both BW2300 and BW2750. Each trial observed a
+lower-rate retry and delivered 412 exact bytes without duplication. Both
+ends disconnected after the transfer and again after a same-socket reconnect
+that delivered an exact 12-byte probe.
+Repeat the matrix on a frozen release build after changes to the shared
+runtime or waveform path.\\
+Session reliability & The 11 November build \texttt{6a4dc89e} passed two
+final-ACK-loss runs and one intermediate-ACK-loss run at BW500, with 406
+exact bytes and two-ended disconnect in each pass. Setup and DATA timeouts
+interrupted the sequences.
 The earlier three-pass results apply to their recorded builds.\\
 Station safety & Qualify actual device presentation, turnaround, exclusive
 lease, permit expiry, duty limits, watchdog release and independent stop on

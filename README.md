@@ -159,6 +159,10 @@ Linkwise is in the research and foundation stage.
 - The Rust crate contains an initial stdio MCP radio-control server, a typed
   radio-control port, a `rigctld` adapter, and a non-transmitting simulator
   with in-memory frequency, mode, and power controls.
+- The optional [station profile](rust/docs/mcp-usage.md#station-inventory-and-shadow-operation)
+  imports and ranks RMS channels, journals bounded shadow attempts, and exposes
+  the results over MCP. [Station integration status](docs/architecture/station-integration-status.md)
+  tracks the remaining modem, gateway and hardware qualification.
 - Docker Compose profiles define development/simulation and radio-connected
   service stacks; Hamlib source is pinned by release and checksum.
 - The stable Rust toolchain, formatter, Clippy, rust-analyzer, and six declared

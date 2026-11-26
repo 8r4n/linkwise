@@ -17,7 +17,7 @@ mod wav_analysis;
 mod wav_synthesis;
 
 use linkwise::{
-    mcp,
+    mcp, olm,
     radio::{RadioControlPort, RigctldRadio, SimulatedRadio},
 };
 
@@ -56,6 +56,7 @@ Environment:
   LINKWISE_RADIO_BACKEND=simulated|rigctld (default: simulated)
   LINKWISE_RIGCTLD_ADDR=host:port (default: hamlib:4532)
   LINKWISE_RADIO_WRITES=true (disabled by default; requires station limits)
+  LINKWISE_OLM_CONFIG=path to station inventory or shadow profile (optional)
   LINKWISE_AUDIO_INPUT=exact device name (default: system input)
   LINKWISE_AUDIO_CHANNEL=zero-based channel (default: 0)
   LINKWISE_BW500_PROFILE=path to verified level-4 measurement JSON (optional)
@@ -188,15 +189,22 @@ async fn main() {
     match arguments {
         (None, None, None) => {
             let backend = env::var("LINKWISE_RADIO_BACKEND").unwrap_or_else(|_| "simulated".into());
+            let simulated = (backend == "simulated").then(|| Arc::new(SimulatedRadio::from_env()));
             let radio: Arc<dyn RadioControlPort> = match backend.as_str() {
-                "simulated" => Arc::new(SimulatedRadio::from_env()),
+                "simulated" => simulated.as_ref().expect("initialized simulator").clone(),
                 "rigctld" => Arc::new(RigctldRadio::from_env()),
                 other => {
                     eprintln!("unsupported LINKWISE_RADIO_BACKEND: {other}");
                     std::process::exit(2);
                 }
             };
-            if let Err(error) = mcp::serve(radio).await {
+            let station = env::var_os("LINKWISE_OLM_CONFIG").map(|path| {
+                olm::Olm::open(Path::new(&path), simulated).unwrap_or_else(|error| {
+                    eprintln!("Station initialization failed: {error}");
+                    std::process::exit(2);
+                })
+            });
+            if let Err(error) = mcp::serve_station(radio, station).await {
                 eprintln!("MCP server failed: {error}");
                 std::process::exit(1);
             }

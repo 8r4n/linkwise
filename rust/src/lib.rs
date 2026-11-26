@@ -18,6 +18,7 @@ pub mod demo;
 pub mod host;
 pub mod mcp;
 pub mod modem;
+pub mod olm;
 pub mod platform;
 pub mod radio;
 pub mod signals;

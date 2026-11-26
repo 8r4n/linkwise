@@ -692,7 +692,13 @@ a Winlink service, reserves spectrum, or authorizes transmission.
 
 \landscapeplantuml{build/diagrams/Linkwise_Propagation_Evidence_Flow}{Proposed propagation evidence flow: independent collection, normalization, persistent analysis snapshots, candidate links, MCP queries, and policy-mediated sessions.}{fig:propagation-evidence-flow}
 
-The current Rust radio-control MCP prototype is a limited implementation slice; its verified scope and remaining gaps are recorded in the lab-notes chronicle. It does not implement the complete autonomous link manager described here.
+The Rust MCP service now supports station-file imports, durable gateway
+rankings, and a shadow station lifecycle with simulated radio readback,
+bounded authorization, and recorded outcomes. The two-way modem preview
+has independent waveform and peer-to-peer test evidence. Joining these
+paths through an admitted modem session and qualifying physical transmit
+control remain release gates. The implementation status is tracked in
+\path{docs/architecture/station-integration-status.md}.
 
 \subsection{Layered software design}
 ChatGPT Agent or Codex supplies the external decision-making orchestration.
