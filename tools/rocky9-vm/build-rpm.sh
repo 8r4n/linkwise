@@ -16,8 +16,15 @@ if [[ $profile == wsl ]]; then
     target_arch=${LINKWISE_BUILD_ARCH:-$(uname -m)}
 fi
 case "$target_arch" in
-    aarch64) platform=linux/arm64 ;;
-    x86_64) platform=linux/amd64 ;;
+    aarch64)
+        platform=linux/arm64
+        image_digest=d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6
+        ;;
+    x86_64)
+        platform=linux/amd64
+        # Use the architecture-specific manifest on mixed-architecture hosts.
+        image_digest=d644d203142cd5b54ad2a83a203e1dee68af2229f8fe32f52a30c6e1d3c3a9e0
+        ;;
     *) printf 'Unsupported Rocky RPM architecture: %s\n' "$target_arch" >&2; exit 2 ;;
 esac
 if [[ $work != /* || ! -d $work ]]; then
@@ -35,7 +42,7 @@ git -C "$repo" archive "$commit" | tar -xf - -C "$source"
 printf '%s\n' "$commit" > "$work/build-revision.txt"
 signing_fixture="$work/rocky-signing-check.sh"
 cp "$here/signing-check.sh" "$signing_fixture"
-image=docker.io/library/rockylinux@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6
+image="docker.io/library/rockylinux@sha256:$image_digest"
 "$container_runtime" run --rm --interactive --platform "$platform" -v "$source:/src:Z" \
     -e "LINKWISE_RPM_FLAGS=$rpm_flags" \
     -e "LINKWISE_BUILD_IMAGE=$image" \

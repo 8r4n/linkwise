@@ -22,6 +22,9 @@ station checks and local simulations. Live Winlink message transfer and
 radio PTT remain under development. See the
 [packaging instructions](packaging/README.md) to build installers.
 
+For the Rocky Linux development image on Windows, see the
+[WSL 2 installation guide](docs/install/windows-wsl.md).
+
 ## Chat, files, and protected mail
 
 The source build includes direct BW500 terminal chat and Open B2F mail
