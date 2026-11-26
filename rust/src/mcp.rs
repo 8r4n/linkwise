@@ -537,7 +537,7 @@ impl RadioMcp {
     }
 
     #[tool(
-        description = "Consume one prepared handle and authorization, and start one asynchronous simulated session."
+        description = "Consume one prepared handle and authorization, and start an asynchronous radio-free session using the installed shadow backend."
     )]
     async fn link_start_session(
         &self,
@@ -575,7 +575,7 @@ impl RadioMcp {
     }
 
     #[tool(
-        description = "Abort an active shadow session and record release status. Repeated calls return the terminal outcome."
+        description = "Cancel an active shadow session and wait for local cleanup before returning. Repeated calls return the terminal outcome."
     )]
     async fn link_abort_session(
         &self,

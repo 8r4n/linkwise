@@ -4,6 +4,7 @@ use linkwise::{
     radio::{ControlValue, RadioControlPort, SimulatedRadio},
 };
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::{BufRead, BufReader, Write},
@@ -548,10 +549,15 @@ struct Mcp {
 
 impl Mcp {
     fn start(fixture: &Fixture) -> Self {
+        let process_temp = fixture.path("process-temp");
+        fs::create_dir_all(&process_temp).unwrap();
         let mut child = Command::new(env!("CARGO_BIN_EXE_linkwise"))
             .env("LINKWISE_RADIO_BACKEND", "simulated")
             .env("LINKWISE_OLM_CONFIG", fixture.path("station.json"))
             .env("LINKWISE_AUDIT_PATH", fixture.path("radio.jsonl"))
+            .env("TMPDIR", &process_temp)
+            .env("TEMP", &process_temp)
+            .env("TMP", &process_temp)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -606,6 +612,49 @@ impl Mcp {
         result["data"].clone()
     }
 
+    fn initialize(&mut self) {
+        let initialized = self.request(
+            "initialize",
+            json!({
+                "protocolVersion": "2025-06-18", "capabilities": {},
+                "clientInfo": { "name": "station-integration-test", "version": "1" },
+            }),
+        );
+        assert_eq!(initialized["protocolVersion"], "2025-06-18");
+        self.send(json!({"jsonrpc": "2.0", "method": "notifications/initialized"}));
+    }
+
+    fn start_attempt(&mut self, channel_id: &str) -> (Value, Value) {
+        let ranking = self.tool("link_rank_gateways", json!({}), "ok");
+        assert_eq!(ranking["decision"]["channel_id"], channel_id);
+        let prepared = self.tool(
+            "link_prepare_candidate",
+            json!({"ranking_id": ranking["ranking_id"], "channel_id": channel_id}),
+            "ok",
+        );
+        let grant = self.tool(
+            "link_request_session_authorization",
+            json!({"prepared_id": prepared["prepared_id"]}),
+            "ok",
+        );
+        let ids = json!({"prepared_id": prepared["prepared_id"], "grant_id": grant["grant_id"]});
+        let active = self.tool("link_start_session", ids.clone(), "ok");
+        assert_eq!(active["outcome"], "active");
+        (active, ids)
+    }
+
+    fn terminal_attempt(&mut self, id: &Value, limit: Duration) -> Value {
+        let deadline = Instant::now() + limit;
+        loop {
+            let attempt = self.tool("link_get_session", json!({"attempt_id": id}), "ok");
+            if attempt["outcome"] != "active" {
+                return attempt;
+            }
+            assert!(Instant::now() < deadline, "shadow attempt did not finish");
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+
     fn close(&mut self) {
         drop(self.child.stdin.take());
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -625,6 +674,11 @@ impl Mcp {
 
 impl Drop for Mcp {
     fn drop(&mut self) {
+        drop(self.child.stdin.take());
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while matches!(self.child.try_wait(), Ok(None)) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -634,15 +688,7 @@ impl Drop for Mcp {
 fn stdio_mcp_runs_a_shadow_session_with_radio_controls_gated() {
     let fixture = Fixture::new(json!({ (ALPHA): simulated_result(150, true) }));
     let mut mcp = Mcp::start(&fixture);
-    let initialized = mcp.request(
-        "initialize",
-        json!({
-            "protocolVersion": "2025-06-18", "capabilities": {},
-            "clientInfo": { "name": "station-integration-test", "version": "1" },
-        }),
-    );
-    assert_eq!(initialized["protocolVersion"], "2025-06-18");
-    mcp.send(json!({"jsonrpc": "2.0", "method": "notifications/initialized"}));
+    mcp.initialize();
     let listing = mcp.request("tools/list", json!({}));
     assert!(
         listing["tools"]
@@ -686,24 +732,111 @@ fn stdio_mcp_runs_a_shadow_session_with_radio_controls_gated() {
         true
     );
 
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let final_attempt = loop {
-        let attempt = mcp.tool(
-            "link_get_session",
-            json!({"attempt_id": active["attempt_id"]}),
-            "ok",
-        );
-        if attempt["outcome"] != "active" {
-            break attempt;
-        }
-        assert!(Instant::now() < deadline, "shadow attempt did not finish");
-        thread::sleep(Duration::from_millis(10));
-    };
+    let final_attempt = mcp.terminal_attempt(&active["attempt_id"], Duration::from_secs(5));
     assert_eq!(final_attempt["outcome"], "completed");
     assert_eq!(final_attempt["client_transfer"], true);
     assert!(final_attempt["cms_accepted"].is_null());
     let metrics = mcp.tool("link_get_metrics", json!({"window_seconds": 60}), "ok");
     assert_eq!(metrics["attempted"], 1);
+    assert_eq!(metrics["client_transfer_confirmed"], 1);
+    mcp.close();
+}
+
+#[test]
+#[ignore = "requires LINKWISE_BW500_PROFILE pointing to the reference waveform profile"]
+fn managed_virtual_bw500_mcp_reaps_aborted_pair_and_verifies_both_transfers() {
+    let waveform = std::env::var_os("LINKWISE_BW500_PROFILE")
+        .expect("provide LINKWISE_BW500_PROFILE for the managed waveform test");
+    let waveform = fs::canonicalize(waveform).unwrap();
+    let profile_digest = format!("{:x}", Sha256::digest(fs::read(&waveform).unwrap()));
+    let fixture = Fixture::new(json!({}));
+    let mut config: Value =
+        serde_json::from_slice(&fs::read(fixture.path("station.json")).unwrap()).unwrap();
+    config["shadow"] = json!({
+        "virtual_bw500": {
+            "modem_path": env!("CARGO_BIN_EXE_linkwise-modemd"),
+            "waveform_profile": waveform,
+            "local_call": "W1AW",
+        },
+        "prepare_seconds": 15,
+        "grant_seconds": 8,
+        "session_seconds": 120,
+        "cooldown_seconds": 120,
+        "switch_cost_bp": 200,
+    });
+    fixture.write("station.json", &config);
+
+    let mut mcp = Mcp::start(&fixture);
+    let process_temp = fixture.path("process-temp");
+    let private_directory_exists = || fs::read_dir(&process_temp).unwrap().next().is_some();
+    mcp.initialize();
+    let (aborting, ids) = mcp.start_attempt(ALPHA);
+    assert_eq!(aborting["execution"], "virtual_bw500");
+    assert!(aborting["virtual_proof"].is_null());
+    assert_eq!(
+        mcp.tool("link_start_session", ids, "ok")["attempt_id"],
+        aborting["attempt_id"]
+    );
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let status = mcp.tool("link_get_status", json!({}), "ok");
+        assert_eq!(status["active_attempt_id"], aborting["attempt_id"]);
+        if status["virtual_phase"] == "connected" {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "managed modem pair did not connect: {status}"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(private_directory_exists());
+    let abort_args = json!({"attempt_id": aborting["attempt_id"]});
+    let connected = mcp.tool("link_get_session", abort_args.clone(), "ok");
+    assert_eq!(connected["outcome"], "active");
+    assert_eq!(connected["modem_connected"], true);
+    let aborted = mcp.tool("link_abort_session", abort_args.clone(), "ok");
+    assert_eq!(aborted["outcome"], "aborted", "{aborted}");
+    assert_eq!(aborted["modem_connected"], true);
+    assert_eq!(aborted["virtual_cleanup_confirmed"], true);
+    assert_eq!(aborted["release_confirmed"], true);
+    assert!(aborted["virtual_proof"].is_null());
+    assert!(!private_directory_exists());
+    assert_eq!(mcp.tool("link_abort_session", abort_args, "ok"), aborted);
+
+    let (active, ids) = mcp.start_attempt(BETA);
+    assert_ne!(active["attempt_id"], aborted["attempt_id"]);
+    let finished = mcp.terminal_attempt(&active["attempt_id"], Duration::from_secs(125));
+    assert_eq!(finished["outcome"], "completed", "{finished}");
+    for field in [
+        "simulated",
+        "modem_connected",
+        "client_transfer",
+        "virtual_cleanup_confirmed",
+        "release_confirmed",
+    ] {
+        assert_eq!(finished[field], true, "{field}: {finished}");
+    }
+    assert!(finished["cms_accepted"].is_null());
+    assert!(finished["recipient_delivered"].is_null());
+    assert_eq!(
+        finished["virtual_proof"],
+        json!({
+            "caller_to_listener": {
+                "bytes": 23,
+                "sha256": "4f812c6d72171e6c110a653c17b6b89fd315cdadcfd1453d8c34fdf51d29705b",
+            },
+            "listener_to_caller": {
+                "bytes": 26,
+                "sha256": "4a78d83d7ca293654f047b461f02e6f475dbfb0066b146358f94cf5ee2fee7e6",
+            },
+            "waveform_profile_sha256": profile_digest,
+        })
+    );
+    assert!(!private_directory_exists());
+    assert_eq!(mcp.tool("link_start_session", ids, "ok"), finished);
+    let metrics = mcp.tool("link_get_metrics", json!({"window_seconds": 300}), "ok");
+    assert_eq!(metrics["attempted"], 2);
     assert_eq!(metrics["client_transfer_confirmed"], 1);
     mcp.close();
 }
@@ -722,6 +855,19 @@ fn edit_journal_event(fixture: &Fixture, kind: &str, edit: impl FnOnce(&mut Valu
         }
     }
     panic!("missing {kind} journal event");
+}
+
+#[tokio::test]
+async fn shutdown_denies_new_preparations() {
+    let fixture = Fixture::new(json!({}));
+    let olm = fixture.open();
+    let (ranking, _) = rank(&olm).await;
+    olm.shutdown().await.unwrap();
+    assert!(olm.status().await.closing);
+    assert!(matches!(
+        olm.prepare(ranking, ALPHA).await,
+        Err(Error::Denied("station service is closing"))
+    ));
 }
 
 #[tokio::test]

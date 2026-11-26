@@ -694,10 +694,10 @@ a Winlink service, reserves spectrum, or authorizes transmission.
 
 The Rust MCP service now supports station-file imports, durable gateway
 rankings, and a shadow station lifecycle with simulated radio readback,
-bounded authorization, and recorded outcomes. The two-way modem preview
-has independent waveform and peer-to-peer test evidence. Joining these
-paths through an admitted modem session and qualifying physical transmit
-control remain release gates. The implementation status is tracked in
+bounded authorization, and recorded outcomes. A managed radio-free BW500
+profile binds a station attempt to two waveform modems and a real B2F
+peer exchange. The native radio path, physical transmit control, and
+Winlink gateway qualification remain release gates. The implementation status is tracked in
 \path{docs/architecture/station-integration-status.md}.
 
 \subsection{Layered software design}

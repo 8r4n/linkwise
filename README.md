@@ -161,8 +161,9 @@ Linkwise is in the research and foundation stage.
   with in-memory frequency, mode, and power controls.
 - The optional [station profile](rust/docs/mcp-usage.md#station-inventory-and-shadow-operation)
   imports and ranks RMS channels, journals bounded shadow attempts, and exposes
-  the results over MCP. [Station integration status](docs/architecture/station-integration-status.md)
-  tracks the remaining modem, gateway and hardware qualification.
+  the results over MCP. It can run a managed BW500 attachment exchange
+  between two isolated modem processes. [Station integration status](docs/architecture/station-integration-status.md)
+  tracks gateway and hardware qualification.
 - Docker Compose profiles define development/simulation and radio-connected
   service stacks; Hamlib source is pinned by release and checksum.
 - The stable Rust toolchain, formatter, Clippy, rust-analyzer, and six declared

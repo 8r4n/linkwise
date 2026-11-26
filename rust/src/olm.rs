@@ -2,6 +2,7 @@
 
 mod inventory;
 mod journal;
+mod virtual_bench;
 
 use crate::radio::{
     ControlValue, PttAction, PttRequest, RadioControlPort, RadioError, SimulatedRadio,
@@ -18,13 +19,15 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::{Mutex, oneshot},
+    sync::{Mutex, watch},
     task::JoinHandle,
     time::Instant,
 };
 use uuid::Uuid;
 
 pub use inventory::{Channel, Forecast, InventorySummary};
+pub use virtual_bench::{AttachmentProof, VirtualPhase, VirtualProof};
+use virtual_bench::{CLEANUP_GRACE, VirtualBench, VirtualProgress};
 
 const RANKER: &str = "voacap-prior-v1";
 const PAGE_LIMIT: usize = 100;
@@ -118,6 +121,14 @@ pub enum Outcome {
     ReleaseUnconfirmed,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Execution {
+    #[default]
+    ScriptedShadow,
+    VirtualBw500,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Attempt {
     pub attempt_id: Uuid,
@@ -130,12 +141,20 @@ pub struct Attempt {
     pub ended_at: Option<DateTime<Utc>>,
     pub outcome: Outcome,
     pub simulated: bool,
+    #[serde(default)]
+    pub execution: Execution,
     pub scenario_id: String,
     pub modem_connected: Option<bool>,
     pub client_transfer: Option<bool>,
     pub cms_accepted: Option<bool>,
     pub recipient_delivered: Option<bool>,
     pub release_confirmed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub virtual_proof: Option<VirtualProof>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub virtual_cleanup_confirmed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostic: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -163,9 +182,12 @@ pub struct GatewayChannels {
 pub struct StationStatus {
     pub profile_id: String,
     pub shadow: bool,
+    pub execution: Option<Execution>,
     pub inhibited: bool,
+    pub closing: bool,
     pub prepared: Option<Preparation>,
     pub active_attempt_id: Option<Uuid>,
+    pub virtual_phase: Option<VirtualPhase>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -243,7 +265,9 @@ struct Prepared {
 
 struct Active {
     id: Uuid,
-    _cancel: oneshot::Sender<()>,
+    cancel: watch::Sender<bool>,
+    done: watch::Receiver<Option<std::result::Result<(), String>>>,
+    virtual_progress: Option<Arc<VirtualProgress>>,
 }
 
 #[derive(Default)]
@@ -256,6 +280,7 @@ struct State {
     prepared: Option<Prepared>,
     active: Option<Active>,
     inhibited: bool,
+    closing: bool,
 }
 
 struct Local {
@@ -272,8 +297,46 @@ pub struct Olm {
 
 struct Shadow {
     radio: Arc<SimulatedRadio>,
-    scenario: Scenario,
+    backend: ShadowBackend,
     scenario_id: String,
+}
+
+enum ShadowBackend {
+    Scripted(Scenario),
+    Virtual(VirtualBench),
+}
+
+impl ShadowBackend {
+    fn execution(&self) -> Execution {
+        match self {
+            Self::Scripted(_) => Execution::ScriptedShadow,
+            Self::Virtual(_) => Execution::VirtualBw500,
+        }
+    }
+}
+
+struct Completion {
+    outcome: Outcome,
+    modem_connected: Option<bool>,
+    client_transfer: Option<bool>,
+    release_confirmed: bool,
+    virtual_proof: Option<VirtualProof>,
+    virtual_cleanup_confirmed: Option<bool>,
+    diagnostic: Option<String>,
+}
+
+impl Completion {
+    fn scripted(outcome: Outcome, scenario: Option<ScenarioResult>) -> Self {
+        Self {
+            outcome,
+            modem_connected: scenario.map(|s| s.modem_connected),
+            client_transfer: scenario.map(|s| s.client_transfer),
+            release_confirmed: scenario.is_none_or(|s| s.release_confirmed),
+            virtual_proof: None,
+            virtual_cleanup_confirmed: None,
+            diagnostic: None,
+        }
+    }
 }
 
 impl Olm {
@@ -287,11 +350,26 @@ impl Olm {
                 let radio = simulated.ok_or(Error::Denied(
                     "shadow execution requires the simulated radio backend",
                 ))?;
-                let scenario = Scenario::load(&cfg.scenario_path)?;
-                let scenario_id = fingerprint(&scenario)?;
+                let (backend, scenario_id) = if let Some(path) = &cfg.scenario_path {
+                    let scenario = Scenario::load(path)?;
+                    let scenario_id = fingerprint(&scenario)?;
+                    (ShadowBackend::Scripted(scenario), scenario_id)
+                } else {
+                    let settings = cfg
+                        .virtual_bw500
+                        .as_ref()
+                        .expect("validated shadow backend");
+                    let bench = VirtualBench::open(settings)?;
+                    let scenario_id = fingerprint(&(
+                        "managed-virtual-bw500-v1",
+                        &settings.local_call,
+                        bench.profile_sha256(),
+                    ))?;
+                    (ShadowBackend::Virtual(bench), scenario_id)
+                };
                 Ok::<_, Error>(Shadow {
                     radio,
-                    scenario,
+                    backend,
                     scenario_id,
                 })
             })
@@ -501,13 +579,23 @@ impl Olm {
         StationStatus {
             profile_id: self.profile_id.clone(),
             shadow: self.is_shadow(),
+            execution: self
+                .shadow
+                .as_ref()
+                .map(|shadow| shadow.backend.execution()),
             inhibited: state.inhibited,
+            closing: state.closing,
             prepared: state
                 .prepared
                 .as_ref()
                 .filter(|p| Instant::now() < p.deadline)
                 .map(|p| p.view.clone()),
             active_attempt_id: state.active.as_ref().map(|a| a.id),
+            virtual_phase: state
+                .active
+                .as_ref()
+                .and_then(|a| a.virtual_progress.as_ref())
+                .map(|progress| progress.phase()),
         }
     }
 
@@ -527,7 +615,11 @@ impl Olm {
                 refresh_error: state.refresh_error.clone(),
                 evaluated_at: now,
             },
-            |snapshot| snapshot.summary(&self.config, now, state.refresh_error.clone()),
+            |snapshot| {
+                snapshot.summary(&self.config, now, state.refresh_error.clone(), |channel| {
+                    self.supports_channel(channel)
+                })
+            },
         )
     }
 
@@ -635,6 +727,9 @@ impl Olm {
                 now,
                 state.refresh_error.is_some(),
             );
+            if !self.supports_channel(channel) {
+                reasons.push("managed_bw500_peer_unsupported");
+            }
             if cooled.contains(&id) {
                 reasons.push("previous_attempt_in_cooldown");
             }
@@ -716,6 +811,9 @@ impl Olm {
             .expect("configured shadow profile");
         let mut local = self.local.lock().await;
         let now = Utc::now();
+        if local.state.closing {
+            return Err(Error::Denied("station service is closing"));
+        }
         if local.state.active.is_some()
             || local
                 .state
@@ -830,6 +928,9 @@ impl Olm {
             .iter()
             .find(|c| c.id() == channel_id)
             .ok_or(Error::Denied("channel has disappeared from the inventory"))?;
+        if !self.supports_channel(channel) {
+            return Err(Error::Denied("managed BW500 cannot attach this peer"));
+        }
         if !exclusions(
             channel,
             snapshot,
@@ -856,6 +957,13 @@ impl Olm {
         Ok(channel)
     }
 
+    fn supports_channel(&self, channel: &Channel) -> bool {
+        match self.shadow.as_ref().map(|shadow| &shadow.backend) {
+            Some(ShadowBackend::Virtual(bench)) => bench.supports_peer(&channel.gateway),
+            _ => true,
+        }
+    }
+
     async fn verify_prepared<'a>(
         &self,
         state: &'a State,
@@ -876,8 +984,8 @@ impl Olm {
             .ok_or(Error::Denied(
                 "prepared handle is missing, consumed, or expired",
             ))?;
-        if state.inhibited || state.active.is_some() {
-            return Err(Error::Denied("station is busy or inhibited"));
+        if state.closing || state.inhibited || state.active.is_some() {
+            return Err(Error::Denied("station is busy, inhibited, or closing"));
         }
         self.verify_candidate(state, now, &prepared.snapshot_id, &prepared.view.channel_id)?;
         let readback = radio.state().await?;
@@ -962,11 +1070,6 @@ impl Olm {
             ));
         }
         let shadow = self.shadow.as_ref().expect("verified shadow configuration");
-        let simulated = shadow
-            .scenario
-            .channels
-            .get(&prepared.view.channel_id)
-            .copied();
         let cfg = self
             .config
             .shadow
@@ -989,12 +1092,16 @@ impl Olm {
             ended_at: None,
             outcome: Outcome::Active,
             simulated: true,
+            execution: shadow.backend.execution(),
             scenario_id: shadow.scenario_id.clone(),
             modem_connected: None,
             client_transfer: None,
             cms_accepted: None,
             recipient_delivered: None,
             release_confirmed: None,
+            virtual_proof: None,
+            virtual_cleanup_confirmed: None,
+            diagnostic: None,
         };
         local.journal.append(
             &self.profile_id,
@@ -1005,10 +1112,15 @@ impl Olm {
                 attempt: attempt.clone(),
             },
         )?;
-        let (cancel, canceled) = oneshot::channel();
+        let (cancel, canceled) = watch::channel(false);
+        let (complete, done) = watch::channel(None);
+        let virtual_progress = (attempt.execution == Execution::VirtualBw500)
+            .then(|| Arc::new(VirtualProgress::default()));
         local.state.active = Some(Active {
             id: attempt.attempt_id,
-            _cancel: cancel,
+            cancel,
+            done,
+            virtual_progress: virtual_progress.clone(),
         });
         local.state.prepared = None;
         local
@@ -1021,34 +1133,105 @@ impl Olm {
             .insert(attempt.attempt_id, attempt.clone());
         let limit = Duration::from_secs(cfg.session_seconds.into());
         let service = self.clone();
-        let id = attempt.attempt_id;
+        let operation = attempt.clone();
         let started = Instant::now();
         tokio::spawn(async move {
-            let duration = simulated.map_or(limit, |result| {
-                Duration::from_millis(result.duration_ms.into())
-            });
-            let outcome = if simulated.is_none() || duration >= limit {
-                None
-            } else {
-                simulated
-            };
-            tokio::select! {
-                biased;
-                _ = canceled => {},
-                _ = tokio::time::sleep_until(started + duration.min(limit)) => {
-                    let _ = service.finish(id, outcome, Outcome::TimedOut).await;
+            let mut cleanup_cancel = canceled.clone();
+            let run = service.run(
+                &operation,
+                started,
+                limit,
+                canceled,
+                virtual_progress.as_deref(),
+            );
+            tokio::pin!(run);
+            let result = if operation.execution == Execution::VirtualBw500 {
+                tokio::select! {
+                    biased;
+                    result = &mut run => result,
+                    _ = cleanup_deadline(started + limit, &mut cleanup_cancel) => {
+                        let diagnostic = "managed modem cleanup exceeded its grace period";
+                        service.inhibit_for_cleanup(operation.attempt_id, diagnostic).await;
+                        let _ = complete.send(Some(Err(diagnostic.into())));
+                        run.await
+                    }
                 }
-            }
+            } else {
+                run.await
+            };
+            let finished = service
+                .finish(operation.attempt_id, result)
+                .await
+                .map(|_| ())
+                .map_err(|error| error.to_string());
+            let _ = complete.send(Some(finished));
         });
         Ok(attempt)
     }
 
-    async fn finish(
+    async fn inhibit_for_cleanup(&self, id: Uuid, diagnostic: &str) {
+        let mut local = self.local.lock().await;
+        local.state.inhibited = true;
+        if let Some(attempt) = local.state.attempts.get_mut(&id) {
+            attempt.diagnostic = Some(diagnostic.into());
+        }
+    }
+
+    async fn run(
         &self,
-        id: Uuid,
-        simulated: Option<ScenarioResult>,
-        fallback: Outcome,
-    ) -> Result<Attempt> {
+        attempt: &Attempt,
+        started: Instant,
+        limit: Duration,
+        mut canceled: watch::Receiver<bool>,
+        virtual_progress: Option<&VirtualProgress>,
+    ) -> Completion {
+        let shadow = self.shadow.as_ref().expect("admitted shadow session");
+        match &shadow.backend {
+            ShadowBackend::Scripted(scenario) => {
+                let scripted = scenario.channels.get(&attempt.channel_id).copied();
+                let duration =
+                    scripted.map_or(limit, |s| Duration::from_millis(s.duration_ms.into()));
+                let completed = match scripted.filter(|_| duration < limit) {
+                    Some(s) => Completion::scripted(
+                        if s.client_transfer {
+                            Outcome::Completed
+                        } else {
+                            Outcome::Failed
+                        },
+                        Some(s),
+                    ),
+                    None => Completion::scripted(Outcome::TimedOut, None),
+                };
+                tokio::select! {
+                    biased;
+                    _ = canceled.wait_for(|cancel| *cancel) => Completion::scripted(Outcome::Aborted, None),
+                    _ = tokio::time::sleep_until(started + duration.min(limit)) => completed,
+                }
+            }
+            ShadowBackend::Virtual(bench) => {
+                let report = bench
+                    .run(
+                        attempt.attempt_id,
+                        &attempt.gateway,
+                        started + limit,
+                        canceled,
+                        virtual_progress.expect("managed virtual progress"),
+                    )
+                    .await;
+                Completion {
+                    outcome: report.outcome,
+                    modem_connected: report.modem_connected.then_some(true),
+                    client_transfer: report.proof.is_some().then_some(true),
+                    release_confirmed: report.cleanup_confirmed,
+                    virtual_proof: report.proof,
+                    virtual_cleanup_confirmed: Some(report.cleanup_confirmed),
+                    diagnostic: report.diagnostic,
+                }
+            }
+        }
+    }
+
+    async fn finish(&self, id: Uuid, completion: Completion) -> Result<Attempt> {
         // Release is independent of journal completion. The shadow adapter never keys a device.
         let radio = &self
             .shadow
@@ -1065,7 +1248,7 @@ impl Olm {
             })
             .await
             .is_ok_and(|release| release.release_confirmed)
-            && simulated.is_none_or(|s| s.release_confirmed);
+            && completion.release_confirmed;
         let mut local = self.local.lock().await;
         let mut attempt = local
             .state
@@ -1083,24 +1266,26 @@ impl Olm {
         }
         attempt.ended_at = Some(Utc::now());
         attempt.release_confirmed = Some(released);
-        attempt.modem_connected = simulated.map(|s| s.modem_connected);
-        attempt.client_transfer = simulated.map(|s| s.client_transfer);
+        attempt.modem_connected = completion.modem_connected;
+        attempt.client_transfer = completion.client_transfer;
+        attempt.virtual_proof = completion.virtual_proof;
+        attempt.virtual_cleanup_confirmed = completion.virtual_cleanup_confirmed;
+        attempt.diagnostic = completion.diagnostic.or(attempt.diagnostic);
         attempt.outcome = if !released {
             Outcome::ReleaseUnconfirmed
-        } else if let Some(s) = simulated {
-            if s.client_transfer {
-                Outcome::Completed
-            } else {
-                Outcome::Failed
-            }
         } else {
-            fallback
+            completion.outcome
         };
         let result = local.journal.append(
             &self.profile_id,
             attempt.ended_at.expect("terminal attempt time"),
             Event::Attempt(attempt.clone()),
         );
+        if let Err(error) = &result {
+            attempt.diagnostic = Some(format!(
+                "terminal operation could not be journaled: {error}"
+            ));
+        }
         local.state.inhibited |= !released || result.is_err();
         local.state.active = None;
         local.state.attempts.insert(id, attempt.clone());
@@ -1109,12 +1294,40 @@ impl Olm {
     }
 
     pub async fn abort(&self, attempt_id: Uuid) -> Result<Attempt> {
-        self.finish(attempt_id, None, Outcome::Aborted).await
+        let mut done = {
+            let local = self.local.lock().await;
+            let Some(active) = local
+                .state
+                .active
+                .as_ref()
+                .filter(|active| active.id == attempt_id)
+            else {
+                return local
+                    .state
+                    .attempts
+                    .get(&attempt_id)
+                    .cloned()
+                    .ok_or(Error::Invalid("unknown attempt ID"));
+            };
+            let _ = active.cancel.send(true);
+            active.done.clone()
+        };
+        let result = {
+            let result = done.wait_for(Option::is_some).await.map_err(|_| {
+                io::Error::other("station operation ended before recording cleanup")
+            })?;
+            (*result).clone()
+        };
+        if let Some(Err(error)) = result {
+            return Err(io::Error::other(error).into());
+        }
+        self.attempt(attempt_id).await
     }
 
     pub async fn shutdown(&self) -> Result<()> {
         let active = {
             let mut local = self.local.lock().await;
+            local.state.closing = true;
             local.state.prepared = None;
             local.state.active.as_ref().map(|active| active.id)
         };
@@ -1125,14 +1338,24 @@ impl Olm {
     }
 
     pub async fn attempt(&self, id: Uuid) -> Result<Attempt> {
-        self.local
-            .lock()
-            .await
+        let local = self.local.lock().await;
+        let mut attempt = local
             .state
             .attempts
             .get(&id)
             .cloned()
-            .ok_or(Error::Invalid("unknown attempt ID"))
+            .ok_or(Error::Invalid("unknown attempt ID"))?;
+        if local
+            .state
+            .active
+            .as_ref()
+            .filter(|active| active.id == id)
+            .and_then(|active| active.virtual_progress.as_ref())
+            .is_some_and(|progress| progress.was_connected())
+        {
+            attempt.modem_connected = Some(true);
+        }
+        Ok(attempt)
     }
 
     pub async fn history(&self, from: DateTime<Utc>, limit: usize) -> Vec<Attempt> {
@@ -1184,4 +1407,12 @@ impl Olm {
 
 fn cooling(ended: DateTime<Utc>, now: DateTime<Utc>, seconds: u32) -> bool {
     now - ended < TimeDelta::seconds(seconds.into())
+}
+
+async fn cleanup_deadline(deadline: Instant, canceled: &mut watch::Receiver<bool>) {
+    tokio::select! {
+        _ = canceled.wait_for(|cancel| *cancel) => {},
+        _ = tokio::time::sleep_until(deadline) => {},
+    }
+    tokio::time::sleep(CLEANUP_GRACE).await;
 }

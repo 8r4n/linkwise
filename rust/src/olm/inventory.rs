@@ -38,12 +38,23 @@ pub(super) struct DialRange {
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ShadowConfig {
-    pub scenario_path: PathBuf,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scenario_path: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub virtual_bw500: Option<VirtualBenchConfig>,
     pub prepare_seconds: u32,
     pub grant_seconds: u32,
     pub session_seconds: u32,
     pub cooldown_seconds: u32,
     pub switch_cost_bp: u16,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct VirtualBenchConfig {
+    pub modem_path: PathBuf,
+    pub waveform_profile: PathBuf,
+    pub local_call: String,
 }
 
 impl Config {
@@ -80,7 +91,14 @@ impl Config {
             {
                 return Err(Error::Invalid("invalid shadow session policy"));
             }
-            shadow.scenario_path = directory.join(&shadow.scenario_path);
+            match (&mut shadow.scenario_path, &mut shadow.virtual_bw500) {
+                (Some(path), None) => *path = directory.join(&*path),
+                (None, Some(bench)) => {
+                    bench.modem_path = directory.join(&bench.modem_path);
+                    bench.waveform_profile = directory.join(&bench.waveform_profile);
+                }
+                _ => return Err(Error::Invalid("select one shadow execution backend")),
+            }
         }
         Ok(config)
     }
@@ -216,6 +234,7 @@ impl Snapshot {
         config: &Config,
         now: DateTime<Utc>,
         refresh_error: Option<String>,
+        supports: impl Fn(&Channel) -> bool,
     ) -> InventorySummary {
         let mut stations = BTreeSet::new();
         let mut fresh_stations = BTreeSet::new();
@@ -225,7 +244,9 @@ impl Snapshot {
             if fresh_report(channel, config, now) {
                 fresh_stations.insert(channel.gateway.as_str());
             }
-            if exclusions(channel, self, config, now, refresh_error.is_some()).is_empty() {
+            if supports(channel)
+                && exclusions(channel, self, config, now, refresh_error.is_some()).is_empty()
+            {
                 eligible_channels += 1;
             }
         }

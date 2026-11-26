@@ -195,8 +195,8 @@ control.
 With `shadow: null`, the station serves inventory and rankings. To exercise
 session operations, leave `LINKWISE_RADIO_BACKEND` at `simulated` and supply the
 `shadow` block. The shadow station owns all simulated tuning and keeps RF
-power at zero. It reports scenario outcomes without opening an audio device
-or contacting a gateway.
+power at zero. It can use scripted outcomes or run two virtual BW500 modems
+with a private B2F attachment fixture.
 
 The inventory is a version 1 JSON object with `source`, RFC 3339 `as_of`,
 `complete`, and `channels`. Each channel supplies `gateway`, `protocol`,
@@ -248,7 +248,31 @@ For the example inventory, `scenario.json` is as follows.
 }
 ```
 
-An omitted scenario channel times out. To supply forecasts, set
+An omitted scenario channel times out. For the managed virtual BW500 backend,
+replace `scenario_path` with the following field in the `shadow` block. Point
+`modem_path` at the trusted local build of `linkwise-modemd` and use the pinned
+profile returned by `python3 tools/fetch-modem-profile.py`.
+
+```json
+"virtual_bw500": {
+  "modem_path": "/path/to/linkwise-modemd",
+  "waveform_profile": "/path/to/bw500-level4.json",
+  "local_call": "N0CALL"
+}
+```
+
+The managed backend requires a distinct BW500-compatible peer callsign in the
+inventory. It starts two one-shot modem processes on ephemeral loopback ports.
+The station associates all command, DATA, and virtual audio sockets before
+starting the P2P exchange. A completed result includes both fixture attachment
+hashes and the waveform profile hash. The receipt and release fields describe
+the loopback session and simulated station. CMS and recipient status remain
+unknown. `link_get_status` reports attachment, peer connection, and cleanup
+progress. The session budget bounds the exchange. Abort and timeout allow a
+five-second cleanup grace period. If cleanup is still unconfirmed, the station
+reports a fault and inhibits new preparations.
+
+To supply forecasts, set
 `forecast_path` to a version 1 object with a `forecasts` array. Each record
 has `channel_id`, `model` (`VOACAP`), `model_revision`, `inputs_id`,
 `issued_at`, `valid_from`, `valid_until`, and `reliability_bp` (0–10,000).
@@ -266,7 +290,7 @@ without a forecast has unknown utility and falls back to report recency.
    `prepared_id`. A new inventory snapshot or changed radio revision
    invalidates preparation.
 4. Call `link_start_session` with `prepared_id` and `grant_id`. The tool
-   returns an `attempt_id` before the simulated result is available. A retry
+   returns an `attempt_id` before the terminal result is available. A retry
    with the same pair returns the original attempt, including after restart.
 5. Read `link_get_status`, `link_get_session`, `link_get_history`, or
    `link_get_metrics`. Use `link_abort_session` to cancel the current attempt.
@@ -276,5 +300,11 @@ without a forecast has unknown utility and falls back to report recency.
 
 Run the station regression on generated fixtures with
 `cargo test --locked --manifest-path rust/Cargo.toml --test olm_station`.
+Run the managed waveform case with the pinned profile.
+
+```sh
+LINKWISE_BW500_PROFILE=$(python3 tools/fetch-modem-profile.py) \
+  cargo test --locked --manifest-path rust/Cargo.toml --test olm_station managed_virtual_bw500 -- --ignored
+```
 See the [station integration status](../../docs/architecture/station-integration-status.md)
 for the actual modem, live RMS/CMS, and hardware acceptance gates.
