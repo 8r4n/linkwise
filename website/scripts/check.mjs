@@ -49,6 +49,7 @@ const hfPage = await readFile(hfEntry, "utf8").catch(error => {
 });
 if (hfPage) {
   assert.match(hfPage, /data-mode="browser"/);
+  assert.ok(hfPage.includes(`href="${repository}">GitHub</a>`));
   const wasm = await WebAssembly.compile(await readFile(dist + "/hf-simulation/bw500_browser.wasm"));
   const names = WebAssembly.Module.exports(wasm).map(({ name }) => name);
   for (const name of ["memory", "lw_encode_len", "lw_decode", "lw_propagate", "lw_set_mode", "lw_payload_capacity"]) {

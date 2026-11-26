@@ -17,14 +17,26 @@ body { margin: 0; min-width: 280px; }
 [hidden] { display: none !important; }
 button, select { font: inherit; }
 button, select { color: inherit; }
-button:focus-visible, select:focus-visible, .map-jump:focus-visible {
+button:focus-visible, select:focus-visible, .map-jump:focus-visible, .repository-link:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 3px;
 }
 
 .page { width: min(1440px, calc(100% - 64px)); margin-inline: auto; }
 .masthead { border-bottom: 1px solid var(--border); background: #0d1924; }
-.masthead-inner { display: flex; justify-content: space-between; align-items: center; min-height: 59px; }
+.masthead-inner { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; min-height: 59px; }
+.masthead-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.repository-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 6px;
+  color: inherit;
+  font-size: .875rem;
+  font-weight: 650;
+  text-underline-offset: .2em;
+}
+.repository-link:hover { color: var(--teal); }
 .wordmark { display: flex; align-items: center; gap: 10px; font-size: 1rem; font-weight: 750; letter-spacing: .015em; }
 .brand-mark {
   width: 22px;
