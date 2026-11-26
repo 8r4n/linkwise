@@ -50,8 +50,9 @@ def verify_checksum(package):
 
 
 def validate_rocky_bw500(package, profile):
-    if package.suffix != ".rpm" or platform.system() != "Linux" or platform.machine() != "aarch64":
-        raise RuntimeError("--rocky-bw500-profile requires the Rocky Linux 9 ARM64 server RPM")
+    arch = platform.machine()
+    if package.suffix != ".rpm" or platform.system() != "Linux" or arch not in {"aarch64", "x86_64"}:
+        raise RuntimeError("--rocky-bw500-profile requires an ARM64 or x86-64 Rocky Linux 9 server RPM")
     release = {}
     for line in Path("/etc/os-release").read_text(encoding="utf-8").splitlines():
         key, separator, value = line.partition("=")
@@ -60,8 +61,8 @@ def validate_rocky_bw500(package, profile):
     if release.get("ID") != "rocky" or release.get("VERSION_ID", "").split(".")[0] != "9":
         raise RuntimeError("--rocky-bw500-profile requires a Rocky Linux 9 test environment")
     metadata = run("rpm", "-qp", "--queryformat", "%{NAME}\t%{RELEASE}\t%{ARCH}", package, capture=True)
-    if metadata != f"{PACKAGE}\t1.rockymail\taarch64":
-        raise RuntimeError("--rocky-bw500-profile requires linkwise-modem release 1.rockymail.aarch64")
+    if metadata != f"{PACKAGE}\t1.rockymail\t{arch}":
+        raise RuntimeError(f"--rocky-bw500-profile requires linkwise-modem release 1.rockymail.{arch}")
     profile = profile.resolve(strict=True)
     if not profile.is_file():
         raise RuntimeError("The BW500 waveform profile must be a file")
@@ -85,7 +86,7 @@ def smoke_rocky_bw500(cli, modem, profile):
 
     try:
         report = run(
-            "cargo", "test", "--locked", "--release", "--target", "aarch64-unknown-linux-gnu",
+            "cargo", "test", "--locked", "--release", "--target", f"{platform.machine()}-unknown-linux-gnu",
             "--features", "audio-device,rocky-mail-tls",
             "--manifest-path", Path(__file__).resolve().parents[1] / "rust/Cargo.toml",
             "--test", "olm_station", MANAGED_BW500_TEST, "--", "--ignored", "--exact",
@@ -202,7 +203,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("package", type=Path)
     parser.add_argument("--rocky-bw500-profile", type=Path,
-                        help="test the installed Rocky Linux 9 ARM64 server RPM over managed virtual BW500")
+                        help="test the installed Rocky Linux 9 server RPM over managed virtual BW500")
     args = parser.parse_args()
     package = args.package.resolve()
     version = re.fullmatch(r"linkwise-modem[-_](\d+\.\d+\.\d+)[-_].+", package.name)

@@ -758,10 +758,13 @@ fn managed_test_binaries() -> (PathBuf, PathBuf) {
         (Some(cli), Some(modem)) => {
             let (cli, modem) = (PathBuf::from(cli), PathBuf::from(modem));
             assert!(
-                cfg!(all(target_os = "linux", target_arch = "aarch64"))
+                cfg!(all(
+                    target_os = "linux",
+                    any(target_arch = "aarch64", target_arch = "x86_64")
+                ))
                     && cli == Path::new("/usr/bin/linkwise")
                     && modem == Path::new("/usr/bin/linkwise-modemd"),
-                "installed overrides require /usr/bin/linkwise and /usr/bin/linkwise-modemd on Linux ARM64"
+                "installed overrides require /usr/bin/linkwise and /usr/bin/linkwise-modemd on ARM64 or x86-64 Linux"
             );
             assert!(
                 cli.is_file() && modem.is_file(),
