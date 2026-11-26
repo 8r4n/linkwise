@@ -8,6 +8,8 @@ import { manuals } from "../../docs/i18n/manuals.mjs";
 import { varacGuide } from "../../docs/i18n/varac.mjs";
 import { websiteLabels } from "../../docs/i18n/website-upgrade.mjs";
 import { audioSamples, deploymentBuilds, projectMedia, supportLinks } from "../src/project-content.mjs";
+import { MISSION_CATALOG } from "../../tools/hf-live/web/learning-data.mjs";
+import { TRAINING_ARCHIVE } from "../../tools/hf-live/web/training-scenarios.mjs";
 
 const sha = "b".repeat(64);
 const dist = process.argv[2] ?? "dist";
@@ -72,22 +74,33 @@ if (hfPage) {
   for (const asset of [
     "browser-worker.js", "data/path-inputs.mjs", "data/stations.mjs",
     "github-invertocat-white.svg", "vendor/Cesium.js", "vendor/sigplot.js",
+    "learning-ui.mjs", "learning-state.mjs", "learning-data.mjs", "learning.css", "training-scenarios.mjs",
   ]) {
     assert.ok((await stat(dist + "/hf-simulation/" + asset)).size > 0, asset);
+  }
+  for (const name of Object.keys(TRAINING_ARCHIVE)) {
+    const asset = "training-data/v1/" + name;
+    assert.deepEqual(await readFile(dist + "/hf-simulation/" + asset),
+      await readFile(new URL("../../tools/hf-live/web/" + asset, import.meta.url)), asset);
   }
   const demos = await readFile(dist + "/demos/index.html", "utf8");
   assert.ok(demos.includes('href="/linkwise/hf-simulation/"'));
   execFileSync(process.execPath, ["--test", "../tools/hf-live/test_station_messaging.mjs",
     "../tools/hf-live/test_radio_policy.mjs"], { stdio: "inherit" });
+  execFileSync(process.execPath, ["../tools/hf-live/test_training_scenarios.mjs", dist + "/hf-simulation"],
+    { stdio: "inherit" });
 }
+
+execFileSync(process.execPath, ["--test", "../tools/hf-live/test_learning.mjs"], { stdio: "inherit" });
 
 async function checkHtml(path, code, dir) {
   const html = await readFile(dist + path + "index.html", "utf8");
   assert.ok(html.includes('<html lang="' + code + '" dir="' + dir + '">'), path);
   assert.ok(html.includes('rel="canonical" href="' + origin + path + '"'), path);
-  assert.ok(html.includes("<h1>"), path);
+  assert.match(html, /<h1(?:\s|>)/, path);
   assert.ok(html.includes(`href="${repository}" lang="en" aria-label="Linkwise on GitHub"`), path);
   assert.ok(html.includes(`<img src="/linkwise/${iconName}" alt=""`), path);
+  assert.ok(html.includes('href="/linkwise' + pagePath(code, "learn") + '"'), path);
   for (const { code: alternate } of locales) {
     assert.ok(html.includes('rel="alternate" hreflang="' + alternate + '"'), path + alternate);
   }
@@ -183,6 +196,14 @@ for (const { code, dir = "ltr" } of locales) {
       for (const [name] of audioSamples) assert.ok(html.includes(`/linkwise/media/${name}`), path);
       assert.ok(html.includes("/linkwise/media/robustness-briefing-transcript.md"), path);
     }
+    if (page === "learn") {
+      assert.ok(html.includes("data-learning-progress") && html.includes("data-learning-badge"), path);
+      const simulator = hfPage ? "/linkwise/hf-simulation/" : origin + "/hf-simulation/";
+      for (const id of Object.keys(MISSION_CATALOG)) {
+        assert.ok(html.includes(`data-learning-mission="${id}"`), path + id);
+        assert.ok(html.includes(`href="${simulator}?mission=${id}"`), path + id);
+      }
+    }
     if (page === "research") {
       for (const anchor of ["acquisition", "interference", "beacons"]) assert.ok(html.includes(`id="${anchor}"`), path);
       for (const name of ["modem-robustness-test-plan.pdf", "lab-notes.pdf", "beacon-range-rings.png", "beacon-frame-fields.png"]) {
@@ -216,7 +237,7 @@ for (const { code, dir = "ltr" } of locales) {
   const guide = await readFile(dist + "/guides/" + code + ".md", "utf8");
   assert.ok(guide.includes(t.guide.title) && guide.includes("linkwise qsl card"));
   const agents = await readFile(dist + pagePath(code) + "llms.txt", "utf8");
-  for (const page of ["capabilities", "demos", "research"]) {
+  for (const page of ["capabilities", "demos", "learn", "research"]) {
     assert.ok(agents.includes(origin + pagePath(code, page)), code + " " + page);
   }
   assert.ok(agents.includes(origin + pagePath(code, "varac")), code + " VarAC");

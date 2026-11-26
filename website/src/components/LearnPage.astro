@@ -1,0 +1,137 @@
+---
+import { existsSync } from "node:fs";
+import { BADGE_NAME } from "../../../tools/hf-live/web/learning-data.mjs";
+import { learningDescription, learningLayers, learningMissions } from "../learning.mjs";
+
+const { locale, t, title, base } = Astro.props;
+const simulatorPath = base + "/hf-simulation/";
+const browserHF = existsSync("public/hf-simulation/bw500_browser.wasm");
+const simulatorHref = browserHF ? simulatorPath : new URL(simulatorPath, Astro.site).href;
+---
+<article class="wrap section learn-page">
+  <h1>{title}</h1>
+  {locale.code !== "en" && <p class="lede">{t.ui.fallback}</p>}
+  <div lang="en" dir="ltr">
+    <p class="lede">{learningDescription}</p>
+    <p class="learning-scope">Runs in your browser with simulated radio links and sample messages.</p>
+
+    <section class="learning-missions" aria-labelledby="learning-missions-heading">
+      <div class="mission-heading">
+        <h2 id="learning-missions-heading">Choose a mission</h2>
+        <p data-learning-progress role="status">0 of {learningMissions.length} completed on this browser</p>
+      </div>
+      <ul class="cards mission-grid" role="list">
+        {learningMissions.map(({ id, title, description, prerequisite }) => <li>
+          <a class="card mission-link" data-learning-mission={id}
+            href={simulatorHref + "?mission=" + id} aria-labelledby={"mission-title-" + id}
+            aria-describedby={"mission-description-" + id + " mission-status-" + id + (prerequisite ? " mission-requirement-" + id : "")}>
+            <h3 id={"mission-title-" + id}>{title}</h3>
+            <span class="mission-arrow" aria-hidden="true">→</span>
+            <p id={"mission-description-" + id}>{description}</p>
+            {prerequisite && <span class="mission-requirement" id={"mission-requirement-" + id}
+              data-learning-mission-requirement>Complete “{prerequisite}” first.</span>}
+            <span class="mission-status" id={"mission-status-" + id} data-learning-mission-status hidden></span>
+          </a>
+        </li>)}
+      </ul>
+      <p class="learning-badge" data-learning-badge hidden><strong>{BADGE_NAME} badge earned.</strong> You completed all four missions in this browser.</p>
+    </section>
+
+    <section class="learning-layers" aria-labelledby="learning-layers-heading">
+      <h2 id="learning-layers-heading">How Linkwise fits together</h2>
+      <dl class="layer-grid">
+        {learningLayers.map(({ title, description }) => <div>
+          <dt>{title}</dt>
+          <dd>{description}</dd>
+        </div>)}
+      </dl>
+    </section>
+  </div>
+</article>
+
+<script>
+  import {
+    hasBadge, isMissionComplete, isMissionUnlocked, readProgress, PROGRESS_STORAGE_KEY, PROGRESS_EVENT,
+  } from "../../../tools/hf-live/web/learning-state.mjs";
+
+  const summary = document.querySelector("[data-learning-progress]");
+  const badge = document.querySelector("[data-learning-badge]");
+  const missionLinks = Array.from(document.querySelectorAll("[data-learning-mission]"));
+
+  function updateProgress() {
+    const progress = readProgress();
+
+    let count = 0;
+    for (const mission of missionLinks) {
+      const id = mission.dataset.learningMission;
+      const done = isMissionComplete(progress, id);
+      const requirement = mission.querySelector("[data-learning-mission-requirement]");
+      if (requirement) {
+        const unlocked = isMissionUnlocked(progress, id);
+        requirement.hidden = unlocked;
+        mission.setAttribute("aria-describedby", `mission-description-${id} mission-status-${id}${unlocked ? "" : " " + requirement.id}`);
+      }
+      const status = mission.querySelector("[data-learning-mission-status]");
+      status.textContent = done ? "Completed" : "";
+      status.hidden = !done;
+      if (done) count += 1;
+    }
+
+    summary.textContent = `${count} of ${missionLinks.length} completed on this browser`;
+    badge.hidden = !hasBadge(progress);
+  }
+
+  updateProgress();
+  window.addEventListener(PROGRESS_EVENT, updateProgress);
+  window.addEventListener("pageshow", updateProgress);
+  window.addEventListener("storage", event => {
+    if (event.key === null || event.key === PROGRESS_STORAGE_KEY) {
+      updateProgress();
+    }
+  });
+</script>
+
+<style>
+  .learning-scope, .mission-heading p, .layer-grid dd { color: var(--muted); }
+  .learning-missions, .learning-layers { margin-block-start: clamp(2rem, 5vw, 3.5rem); }
+  .mission-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .55rem 1rem; }
+  .mission-heading h2, .mission-heading p { margin: 0; }
+  .mission-grid { list-style: none; padding: 0; }
+  .mission-link {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .55rem 1rem;
+    align-content: start;
+    height: 100%;
+    color: var(--foreground);
+    text-decoration: none;
+  }
+  .mission-link h3 { font-size: clamp(1.2rem, 2vw, 1.5rem); margin: 0; }
+  .mission-link p { grid-column: 1 / -1; margin: 0; }
+  .mission-arrow { color: var(--primary); font-size: 1.25rem; line-height: 1; }
+  .mission-link:hover { border-color: var(--primary); }
+  .mission-link:hover h3, .mission-link:focus-visible h3 { text-decoration: underline; text-underline-offset: .18em; }
+  .mission-status, .mission-requirement { grid-column: 1 / -1; font-size: .9rem; }
+  .mission-requirement { color: var(--muted); }
+  .mission-status { color: var(--primary); font-weight: 650; }
+  .learning-badge {
+    padding: .75rem 1.1rem;
+    color: var(--primary);
+    background: var(--card);
+    border-inline-start: 3px solid var(--primary);
+    border-radius: var(--radius);
+  }
+  .layer-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem 1.65rem;
+    margin: 1.3rem 0 0;
+  }
+  .layer-grid > div { border-block-start: 1px solid var(--border); padding-block-start: .8rem; }
+  .layer-grid dt { font-weight: 700; }
+  .layer-grid dd { margin: .25rem 0 0; }
+  @media (max-width: 720px) {
+    .layer-grid { grid-template-columns: minmax(0, 1fr); }
+    .mission-link { padding: 1rem; }
+  }
+</style>

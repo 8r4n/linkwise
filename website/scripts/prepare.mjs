@@ -56,7 +56,7 @@ for (const { code } of locales) {
     link(t.guide.title, guide),
     link(t.guide.start, guide + "#start"),
     link(t.nav.winlink, base + pagePath(code, "winlink").slice(1)),
-    ...["capabilities", "demos", "research"].map(page => link(project[page], base + pagePath(code, page).slice(1))),
+    ...["capabilities", "demos", "learn", "research"].map(page => link(project[page], base + pagePath(code, page).slice(1))),
     link(t.nav.docs, base + pagePath(code, "docs").slice(1)), "",
     "## " + varac.title, "", varac.lede, "", varac.setup, "", varac.bench, varac.scope, "",
     link(varac.title, base + pagePath(code, "varac").slice(1)),

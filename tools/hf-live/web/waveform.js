@@ -130,7 +130,7 @@ function projectRf(capture, centerHz) {
     mode: usb ? "USB" : "DSB", spectrum, waterfall, ceiling };
 }
 
-export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, requestCapture }) {
+export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, requestCapture, onCapture }) {
   const field = (name) => document.getElementById(`waveform-${name}`);
   const panel = document.getElementById("waveform");
   const stationLabel = field("station");
@@ -511,6 +511,7 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
     updateFrequencyControls(spectrum.get_view());
     spectrum.checkresize();
     waterfall.checkresize();
+    onCapture?.({ attempt: capture.attempt, stage: capture.stage });
   }
 
   function showWindowCount() {
@@ -702,8 +703,8 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
     refreshPending = null;
   }
 
-  async function refresh(force = false, animate = true) {
-    if (!following || !station || !window.sigplot?.Plot) return;
+  async function refresh(force = false, animate = true, exact = null) {
+    if ((!following && exact === null) || !station || !window.sigplot?.Plot) return;
     if (request) {
       refreshPending = [Boolean(refreshPending?.[0]) || force, Boolean(refreshPending?.[1]) || animate];
       return;
@@ -713,7 +714,7 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
     request = controller;
     try {
       const response = await requestCapture(current, {
-        stage: "tx", after: force ? null : pair?.id, signal: controller.signal,
+        stage: "tx", attempt: exact, after: force ? null : pair?.id, signal: controller.signal,
       });
       if (request !== controller) return;
       if (response.status === 204) {
@@ -722,11 +723,11 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
       }
       if (response.status === 404) {
         clearCapture();
-        setStatus("No transmitted burst captured yet.");
+        setStatus(exact === null ? "No transmitted burst captured yet." : `TX capture unavailable for attempt #${exact}.`);
         return;
       }
       if (!response.ok) throw Error(`HTTP ${response.status}`);
-      const next = readStage(await response.json(), current, "tx");
+      const next = readStage(await response.json(), current, "tx", exact);
       if (request !== controller) return;
       const diagnosis = sameAttempt(next.attempt, lastOutcome) ? lastOutcome : next.diagnosis;
       if (pair && sameAttempt(next.attempt, pair.tx.attempt)) {
@@ -791,8 +792,8 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
     if (stage === "rx") void loadReceiver();
   }
 
-  function select(id, force = false) {
-    if (id === station) {
+  function select(id, force = false, exact = null) {
+    if (id === station && exact === null) {
       if (force && following) void refresh(true, false);
       if (force && !following && shownStage === "rx") void loadReceiver();
       return;
@@ -800,7 +801,7 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
     cancelLatest();
     station = id;
     shownStage = "tx";
-    following = true;
+    following = exact === null;
     lastOutcome = null;
     panel.toggleAttribute("data-selected", Boolean(station));
     clearCapture();
@@ -815,7 +816,12 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
       return;
     }
     setStatus("Loading the latest transmission…");
-    void refresh(false, false);
+    void refresh(exact !== null, false, exact);
+  }
+
+  function inspect(id, attemptId) {
+    select(id, false, String(attemptId));
+    showView("signal");
   }
 
   field("tx").addEventListener("click", () => switchStage("tx"));
@@ -870,5 +876,5 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
     }
     drawSignal();
   });
-  return { select, notify };
+  return { select, notify, inspect };
 }

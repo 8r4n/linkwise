@@ -2,9 +2,9 @@ name: Linkwise website
 on:
   push:
     branches: [main]
-    paths: ['website/**', 'docs/**', 'rust/docs/**', 'rust/README.md', 'README.md', 'lab-notes/**', 'packaging/**', 'reference/**', 'tools/**/*.md', '.github/workflows/website.yml']
+    paths: ['website/**', 'docs/**', 'rust/docs/**', 'rust/README.md', 'README.md', 'lab-notes/**', 'packaging/**', 'reference/**', 'tools/**/*.md', 'tools/hf-live/web/**', 'tools/hf-live/test_*.mjs', '.github/workflows/website.yml']
   pull_request:
-    paths: ['website/**', 'docs/**', 'rust/docs/**', 'rust/README.md', 'README.md', 'lab-notes/**', 'packaging/**', 'reference/**', 'tools/**/*.md', '.github/workflows/website.yml']
+    paths: ['website/**', 'docs/**', 'rust/docs/**', 'rust/README.md', 'README.md', 'lab-notes/**', 'packaging/**', 'reference/**', 'tools/**/*.md', 'tools/hf-live/web/**', 'tools/hf-live/test_*.mjs', '.github/workflows/website.yml']
   release:
     types: [published]
   schedule:

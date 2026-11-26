@@ -1,4 +1,4 @@
-export function createBrowserTransport(receive, bandwidth) {
+export function createBrowserTransport(receive, bandwidth, { scenarioId } = {}) {
   const worker = new Worker(new URL("./browser-worker.js", import.meta.url), { type: "module" });
   const pending = new Map();
   let nextId = 0;
@@ -36,7 +36,7 @@ export function createBrowserTransport(receive, bandwidth) {
   const requested = new URL(location.href).searchParams.get("seed");
   const seed = requested !== null && /^\d{1,10}$/.test(requested) && Number(requested) <= 0xffffffff
     ? Number(requested) : crypto.getRandomValues(new Uint32Array(1))[0];
-  worker.postMessage({ type: "start", seed, bandwidth });
+  worker.postMessage({ type: "start", seed, bandwidth, scenarioId });
 
   return {
     requestCapture(station, { signal, stage, attempt, after }) {

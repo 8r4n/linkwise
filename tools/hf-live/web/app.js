@@ -1,6 +1,7 @@
 import { createWaveformPanel } from "./waveform.js";
 import { createBrowserTransport } from "./browser-transport.js";
 import { createStationConsole } from "./station-console.js";
+import { createLearning } from "./learning-ui.mjs";
 
 const $ = (id) => document.getElementById(id);
 const traffic = $("traffic");
@@ -32,13 +33,27 @@ const vendor = new URL("./vendor/", import.meta.url);
 const modeControl = $("browser-mode");
 const runControl = $("browser-run");
 let browserTransport = null;
-const waveform = createWaveformPanel({ bandName, bandFrequencyHz, stationName, requestCapture });
-const stationConsole = inBrowser ? createStationConsole({
-  send: request => {
-    if (!browserTransport) throw Error("The browser simulation is starting.");
-    return browserTransport.sendMessage(request);
+const waveform = createWaveformPanel({
+  bandName, bandFrequencyHz, stationName, requestCapture,
+  onCapture: capture => learning?.onCapture(capture),
+});
+const stationConsole = inBrowser ? createStationConsole({ send: sendMessage }) : null;
+const learning = inBrowser ? createLearning({
+  id: new URL(location.href).searchParams.get("mission"),
+  launch: bandwidth => { void startBrowserMode(bandwidth); },
+  send: sendMessage,
+  viewBurst: (station, attempt) => {
+    stationFilter.value = station;
+    renderTraffic();
+    waveform.inspect(station, attempt);
   },
+  stationName,
 }) : null;
+
+function sendMessage(request) {
+  if (!browserTransport) throw Error("The browser simulation is starting.");
+  return browserTransport.sendMessage(request);
+}
 
 function requestCapture(station, options) {
   if (inBrowser) {
@@ -254,6 +269,7 @@ function readSnapshot(value) {
   text($("seed"), value.seed == null ? "Seed —" : `Seed ${value.seed}`);
   applyStatus(value);
   synchronized = true;
+  learning?.onSnapshot(value);
   globe?.setStations();
   renderStatus();
   renderTraffic();
@@ -289,8 +305,8 @@ function eventHandler(handler) {
   };
 }
 
-async function startBrowserMode() {
-  const bandwidth = Number(modeControl.value);
+async function startBrowserMode(bandwidth = Number(modeControl.value)) {
+  modeControl.value = String(bandwidth);
   const previous = browserTransport;
   browserTransport = null;
   modeControl.disabled = true;
@@ -318,37 +334,44 @@ async function startBrowserMode() {
       try {
         if (kind === "station-message") {
           stationConsole.receive(value);
+          learning?.onMessage(value);
           return;
         }
         if (kind === "station-radio") {
           stationConsole.receiveRadio(value);
+          learning?.onRadio(value);
           return;
         }
         transport = "open";
-        if (kind === "status" && value.error) synchronized = true;
+        if (kind === "status" && value.error) {
+          synchronized = true;
+          learning?.onError(value.error);
+        }
         handlers[kind]?.(value);
         renderStatus();
       } catch (problem) {
         setNotice(`Unable to read the browser simulation. ${problem.message}`);
       }
-    }, bandwidth);
+    }, bandwidth, { scenarioId: learning?.scenarioId ?? undefined });
   } catch (problem) {
     transport = "open";
     synchronized = true;
     applyStatus({ running: false, error: problem.message });
+    learning?.onError(problem.message);
     renderStatus();
   } finally {
-    modeControl.disabled = false;
+    modeControl.disabled = Boolean(learning);
   }
 }
 
 function connect() {
   if (inBrowser) {
     text($("simulation-description"), "This browser runs the station network and Linkwise modems while this page is open.");
+    $("browser-learning").hidden = false;
     $("browser-controls").hidden = false;
     runControl.addEventListener("click", () => browserTransport?.setRunning(!running));
     modeControl.addEventListener("change", () => { void startBrowserMode(); });
-    void startBrowserMode();
+    void startBrowserMode(learning?.initialBandwidth);
     return;
   }
   if (!window.EventSource) {

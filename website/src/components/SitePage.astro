@@ -3,6 +3,8 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Button from "./Button.astro";
 import VisualGuide from "./VisualGuide.astro";
 import ProjectPages from "./ProjectPages.astro";
+import LearnPage from "./LearnPage.astro";
+import { learningDescription } from "../learning.mjs";
 import { publishedRelease, repository, targets } from "../releases.mjs";
 import { deploymentBuilds, supportLinks } from "../project-content.mjs";
 import { loadMessages, pagePath } from "../../../docs/i18n/locales.mjs";
@@ -21,7 +23,8 @@ const link = (page) => base + pagePath(locale.code, page);
 const release = ["", "downloads", "mail"].includes(page) ? await publishedRelease() : null;
 const downloadable = release?.status === "available";
 const isProjectPage = ["capabilities", "demos", "research"].includes(page);
-const meta = page === "varac" ? varac : page ? t[page] : t.home;
+const learn = { title: locale.code === "en" ? "Learn Linkwise" : project.learn, lede: learningDescription };
+const meta = page === "varac" ? varac : page === "learn" ? learn : page ? t[page] : t.home;
 const title = page === "" ? varac.siteTitle : isProjectPage ? project[page] : meta.title;
 const description = page === "" || isProjectPage ? project.overview : meta.lede || t.downloads.verify;
 const chatBench = base + "/reference/" + locale.code + "/docs/testing/varac-chat.md/";
@@ -51,6 +54,7 @@ const software = page === "" ? {
 
 ---
 <BaseLayout {title} {description} {locale} {page} {t} {software}>
+  {page === "learn" && <LearnPage {locale} {t} {title} {base} />}
   {page === "" && <>
     <section class="hero wrap">
       <div><h1>{t.home.title}</h1><p class="lede">{project.overview}</p>
