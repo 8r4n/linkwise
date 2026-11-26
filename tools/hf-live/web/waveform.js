@@ -1,3 +1,5 @@
+import { antennaReadout } from "./antenna-console.mjs";
+
 const format = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
 const rfFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 6, useGrouping: false });
 const HZ_PER_MHZ = 1_000_000;
@@ -130,7 +132,7 @@ function projectRf(capture, centerHz) {
     mode: usb ? "USB" : "DSB", spectrum, waterfall, ceiling };
 }
 
-export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, requestCapture, onCapture }) {
+export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, requestCapture, antennaName, onCapture, lockLevels }) {
   const field = (name) => document.getElementById(`waveform-${name}`);
   const panel = document.getElementById("waveform");
   const stationLabel = field("station");
@@ -331,6 +333,7 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
   }
 
   function displayCeiling() {
+    if (lockLevels) return DEFAULT_CEILING_DBFS;
     // Receiver sums can exceed full scale without clipping. Both captures of a
     // burst use the same upper bound, including any higher receiver peak.
     const peak = Math.max(pair?.tx.analysis?.ceiling ?? 0, pair?.rx?.analysis?.ceiling ?? 0);
@@ -542,7 +545,7 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
     finishPlayback();
     const parts = [`To ${stationName(String(attempt.target))}`, bandName(String(attempt.band)), `M${attempt.message_id}`];
     if (attempt.waveform_mode) parts.push(attempt.waveform_mode);
-    if (Number.isFinite(attempt.power_w)) parts.push(`${format.format(attempt.power_w)} W`);
+    if (!attempt.antenna && Number.isFinite(attempt.power_w)) parts.push(`${format.format(attempt.power_w)} W`);
     const started = attempt.started_at_s ?? attempt.simulated_at_s;
     if (Number.isFinite(started)) parts.push(`${format.format(started)} s sim time`);
     field("route").textContent = parts.join(" · ");
@@ -616,6 +619,22 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
     decoded.dataset.decode = status ?? "pending";
     const outcome = { delivered: "Delivered", failed: "Failed", pending: "Pending" }[status] ?? "Pending";
     if (decoded.textContent !== outcome) decoded.textContent = outcome;
+
+    const budget = antennaReadout(pair.diagnosis.antenna ?? pair.tx.attempt.antenna, antennaName);
+    field("antenna").hidden = !budget;
+    if (budget) {
+      const power = value => Number.isFinite(value) ? `${format.format(value)} W` : "—";
+      const endpoint = value => [value?.label,
+        Number.isFinite(value?.headingDeg) ? `${format.format(value.headingDeg)}° true` : null,
+        Number.isFinite(value?.gainDb) ? `${format.format(value.gainDb)} dBi toward path` : null,
+        Number.isFinite(value?.feedlineLossDb) && value.feedlineLossDb > 0
+          ? `${format.format(value.feedlineLossDb)} dB feedline loss` : null,
+      ].filter(Boolean).join(" · ") || "—";
+      field("conducted").textContent = power(budget.conductedW);
+      field("eirp").textContent = power(budget.eirpW);
+      field("tx-antenna").textContent = endpoint(budget.tx);
+      field("rx-antenna").textContent = endpoint(budget.rx);
+    }
 
     const effects = [];
     if (Array.isArray(interferers) && interferers.length) {
@@ -748,8 +767,13 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
       const range = !restarted && sameGrid(pair?.tx.analysis, next.analysis) ? pair.range : null;
       if (!range) cursorMHz = null;
       pair = { id: String(next.attempt.id), tx: next, rx: null, diagnosis, range, rxStatus: "loading", retries: 0 };
-      renderComparison();
-      showCapture(next, animate);
+      if (shownStage === "rx") {
+        renderStage();
+        void loadReceiver();
+      } else {
+        renderComparison();
+        showCapture(next, animate);
+      }
     } catch {
       if (request === controller) {
         setStatus(capture ? "Waveform refresh failed. Showing the last capture." : "Unable to load the latest waveform.", true);
@@ -792,7 +816,7 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
     if (stage === "rx") void loadReceiver();
   }
 
-  function select(id, force = false, exact = null) {
+  function select(id, force = false, exact = null, stage = "tx") {
     if (id === station && exact === null) {
       if (force && following) void refresh(true, false);
       if (force && !following && shownStage === "rx") void loadReceiver();
@@ -800,7 +824,7 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
     }
     cancelLatest();
     station = id;
-    shownStage = "tx";
+    shownStage = stage;
     following = exact === null;
     lastOutcome = null;
     panel.toggleAttribute("data-selected", Boolean(station));
@@ -815,12 +839,12 @@ export function createWaveformPanel({ bandName, bandFrequencyHz, stationName, re
       setStatus("The local SigPlot bundle is unavailable.", true);
       return;
     }
-    setStatus("Loading the latest transmission…");
+    setStatus(exact === null ? "Loading the latest transmission…" : `Loading attempt #${exact}…`);
     void refresh(exact !== null, false, exact);
   }
 
-  function inspect(id, attemptId) {
-    select(id, false, String(attemptId));
+  function inspect(id, attemptId, stage = "tx") {
+    select(id, false, String(attemptId), stage);
     showView("signal");
   }
 

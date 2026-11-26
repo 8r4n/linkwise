@@ -1,6 +1,7 @@
 ---
 import { existsSync } from "node:fs";
-import { BADGE_NAME } from "../../../tools/hf-live/web/learning-data.mjs";
+import { LAB_EXERCISES, LAB_PREREQUISITE } from "../../../tools/hf-live/web/antenna-lab-state.mjs";
+import { BADGE_NAME, MISSION_CATALOG } from "../../../tools/hf-live/web/learning-data.mjs";
 import { learningDescription, learningLayers, learningMissions } from "../learning.mjs";
 
 const { locale, t, title, base } = Astro.props;
@@ -37,6 +38,21 @@ const simulatorHref = browserHF ? simulatorPath : new URL(simulatorPath, Astro.s
       <p class="learning-badge" data-learning-badge hidden><strong>{BADGE_NAME} badge earned.</strong> You completed all four missions in this browser.</p>
     </section>
 
+    <section class="learning-missions" aria-labelledby="antenna-lab-heading">
+      <div class="mission-heading">
+        <h2 id="antenna-lab-heading">Antenna Lab</h2>
+        <p data-antenna-lab-progress role="status">0 of {LAB_EXERCISES.length} exercises completed on this browser</p>
+      </div>
+      <a class="card mission-link antenna-lab-link" data-antenna-lab-launch href={simulatorHref + "?lab=antenna"}
+        aria-labelledby="antenna-lab-link-title" aria-describedby="antenna-lab-link-body antenna-lab-prerequisite">
+        <h3 id="antenna-lab-link-title">Open Antenna Lab</h3>
+        <span class="mission-arrow" aria-hidden="true">→</span>
+        <p id="antenna-lab-link-body">Compare a dipole and a steered Yagi at equal transmit power. Then switch between two receive ports. Compare radiated power, received signals, and decode results from the simulated bursts.</p>
+        <span class="mission-requirement" id="antenna-lab-prerequisite" data-antenna-lab-prerequisite>Complete “{MISSION_CATALOG[LAB_PREREQUISITE].title}” first.</span>
+      </a>
+      <p class="antenna-network-link"><a href={simulatorHref + "?antennas=1"}>Explore antenna patterns across the network</a> in free simulation.</p>
+    </section>
+
     <section class="learning-layers" aria-labelledby="learning-layers-heading">
       <h2 id="learning-layers-heading">How Linkwise fits together</h2>
       <dl class="layer-grid">
@@ -54,6 +70,13 @@ const simulatorHref = browserHF ? simulatorPath : new URL(simulatorPath, Astro.s
     hasBadge, isMissionComplete, isMissionUnlocked, readProgress, PROGRESS_STORAGE_KEY, PROGRESS_EVENT,
   } from "../../../tools/hf-live/web/learning-state.mjs";
 
+  import {
+    LAB_EXERCISES, LAB_PREREQUISITE, LAB_PROGRESS_EVENT, LAB_PROGRESS_KEY, readLabProgress,
+  } from "../../../tools/hf-live/web/antenna-lab-state.mjs";
+
+  const labSummary = document.querySelector("[data-antenna-lab-progress]");
+  const labLink = document.querySelector("[data-antenna-lab-launch]");
+  const labRequirement = document.querySelector("[data-antenna-lab-prerequisite]");
   const summary = document.querySelector("[data-learning-progress]");
   const badge = document.querySelector("[data-learning-badge]");
   const missionLinks = Array.from(document.querySelectorAll("[data-learning-mission]"));
@@ -79,13 +102,21 @@ const simulatorHref = browserHF ? simulatorPath : new URL(simulatorPath, Astro.s
 
     summary.textContent = `${count} of ${missionLinks.length} completed on this browser`;
     badge.hidden = !hasBadge(progress);
+
+    const unlocked = isMissionComplete(progress, LAB_PREREQUISITE);
+    const completed = readLabProgress().completed;
+    const exercises = LAB_EXERCISES.filter(id => completed[id]).length;
+    labSummary.textContent = `${exercises} of ${LAB_EXERCISES.length} exercises completed on this browser`;
+    labRequirement.hidden = unlocked;
+    labLink.setAttribute("aria-describedby", unlocked ? "antenna-lab-link-body" : "antenna-lab-link-body antenna-lab-prerequisite");
   }
 
   updateProgress();
   window.addEventListener(PROGRESS_EVENT, updateProgress);
+  window.addEventListener(LAB_PROGRESS_EVENT, updateProgress);
   window.addEventListener("pageshow", updateProgress);
   window.addEventListener("storage", event => {
-    if (event.key === null || event.key === PROGRESS_STORAGE_KEY) {
+    if (event.key === null || event.key === PROGRESS_STORAGE_KEY || event.key === LAB_PROGRESS_KEY) {
       updateProgress();
     }
   });
@@ -97,6 +128,8 @@ const simulatorHref = browserHF ? simulatorPath : new URL(simulatorPath, Astro.s
   .mission-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .55rem 1rem; }
   .mission-heading h2, .mission-heading p { margin: 0; }
   .mission-grid { list-style: none; padding: 0; }
+  .antenna-lab-link { margin-block-start: 1.3rem; max-width: 43rem; }
+  .antenna-network-link { margin-block-start: .85rem; color: var(--muted); }
   .mission-link {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

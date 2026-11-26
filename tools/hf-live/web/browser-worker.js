@@ -4,6 +4,8 @@ import { readBytes, sha256 } from "./data/weather-inputs.mjs";
 import { createStationMessaging } from "./station-messaging.js";
 import { chooseRadioTuning } from "./radio-policy.js";
 import { getTrainingScenario, TRAINING_ARCHIVE } from "./training-scenarios.mjs";
+import { loadAntennaCatalog, pathGeometry } from "./antenna-model.mjs";
+import { AntennaRuntime, ANTENNA_LAB, ANTENNA_LAB_ARCHIVE } from "./antenna-runtime.mjs";
 
 const TICK_MS = 100;
 const MAX_QUEUE = 6;
@@ -18,6 +20,7 @@ const RADIO_HISTORY = 512;
 const REFERENCE_WATTS = 100;
 const PROFILE = "ITU-R F.1487 mid-latitude moderate";
 const CHANNEL_MODEL = "watterson-moderate";
+const LAB_PAYLOAD = Uint8Array.of(0, 0, 0, 1, 22, 38, 1, 0, 1);
 
 function random(seed) {
   return () => {
@@ -68,9 +71,28 @@ function magnitudeRatio(signal, impairment) {
   return roundDb(10 * Math.log10(Math.max(signal, floor) / Math.max(impairment, floor)));
 }
 
+function defaultAntennaConfigs(stations, seed, overrides) {
+  const byStation = new Map((Array.isArray(overrides) ? overrides.slice(0, stations.length) : [])
+    .filter(value => value && typeof value.station === "string").map(value => [value.station, value]));
+  const transmit = ["t2fd", "dipole-hf", "vertical-hf", "t2fd", "dipole-hf", "vertical-hf", "yagi-20m"];
+  const receive = ["t2fd", "dipole-hf", "active-loop", "beverage", "vertical-hf", "tci-530"];
+  return stations.map(({ id: station }, index) => {
+    const txPort = transmit[(index + seed % transmit.length) % transmit.length];
+    return {
+      station, txPort, rxPort: receive[hash(seed, "receive antenna", station) % receive.length],
+      azimuth: hash(seed, "mount azimuth", station) % 360,
+      fixedAzimuth: hash(seed, "installed antenna azimuth", station) % 360, autoAim: txPort === "yagi-20m",
+      ...byStation.get(station),
+    };
+  });
+}
+
 async function loadTrainingInputs(scenario, signal) {
-  const directory = new URL(`./training-data/v${scenario.version}/`, import.meta.url);
-  const records = await Promise.all(Object.entries(TRAINING_ARCHIVE).map(async ([file, digest]) => {
+  const antennaLab = scenario.id === ANTENNA_LAB.id;
+  const archiveFiles = antennaLab ? ANTENNA_LAB_ARCHIVE : TRAINING_ARCHIVE;
+  const version = antennaLab ? `antenna-v${scenario.fixtureVersion}` : `v${scenario.version}`;
+  const directory = new URL(`./training-data/${version}/`, import.meta.url);
+  const records = await Promise.all(Object.entries(archiveFiles).map(async ([file, digest]) => {
     const bytes = await readBytes(new URL(file, directory), 128000, { signal });
     if (await sha256(bytes) !== digest) throw Error("The training archive did not match its published checksum.");
     return [new URL(file.replace(/\.gz$/, ""), directory).href, { bytes, gzip: file.endsWith(".gz") }];
@@ -84,19 +106,25 @@ async function loadTrainingInputs(scenario, signal) {
   } });
   const now = Date.parse(scenario.startUtc);
   const { forecast, weather } = inputs.status(now);
-  if (forecast?.status !== "current" || forecast.rows !== 6 || weather.mode !== "live") {
+  if (forecast?.status !== "current" || forecast.rows !== (antennaLab ? 3 : 6) || weather.mode !== "live") {
     throw Error("The fixed forecast or NOAA input for this lesson is unavailable.");
   }
   return inputs;
 }
 
 class Simulation {
-  constructor(modem, inputs, seed, bandwidth, emit, scenario) {
+  constructor(modem, inputs, seed, bandwidth, emit, scenario, catalog, antennaConfigs) {
     this.modem = modem;
     this.inputs = inputs;
     this.stations = inputs.stations;
     this.bands = inputs.bands;
     this.scenario = scenario;
+    this.antennaLab = scenario?.id === ANTENNA_LAB.id;
+    this.antennas = catalog ? new AntennaRuntime(catalog, this.stations,
+      this.antennaLab ? [] : defaultAntennaConfigs(this.stations, seed, antennaConfigs)) : null;
+    this.trial = null;
+    this.antennaTime = 0;
+    this.antennaCommands = new Map();
     this.scenarioTime = scenario ? Date.parse(scenario.startUtc) : null;
     this.seed = seed;
     this.bandwidth = bandwidth;
@@ -158,6 +186,9 @@ class Simulation {
   }
 
   snapshot() {
+    const source = this.stations.find(station => station.id === ANTENNA_LAB.source);
+    const target = this.stations.find(station => station.id === ANTENNA_LAB.target);
+    const geometry = this.antennaLab ? pathGeometry(source, target) : null;
     return {
       stations: this.stations,
       bands: this.bands,
@@ -168,6 +199,8 @@ class Simulation {
       bandwidth_hz: this.bandwidth,
       channel_model: CHANNEL_MODEL,
       sample_rate_hz: this.modem.rate,
+      ...(this.antennas ? { antennas: this.antennas.snapshot() } : {}),
+      ...(geometry ? { antennaLab: { ...ANTENNA_LAB, txBearingDeg: geometry.tx_bearing_deg, rxBearingDeg: geometry.rx_bearing_deg } } : {}),
       ...this.status(),
     };
   }
@@ -206,11 +239,17 @@ class Simulation {
       frequencyMHz: this.bands.find(band => band.id === attempt.band)?.frequency_mhz,
       powerW: attempt.power_w, retry: attempt.retry, state, predictedSnrDb: attempt.snr_db,
       measuredSinrDb: attempt.measured_sinr_db,
+      ...(attempt.antenna ? { antenna: attempt.antenna } : {}),
       transmittedSamples: transmittedSamples ?? pending?.transmittedSamples ?? 0,
     });
   }
 
   sendMessage(request) {
+    if (this.antennaLab) {
+      this.stationMessage({ id: request?.id, from: request?.from, to: request?.to, kind: request?.kind,
+        state: "failed", error: "Use the Antenna Lab trial controls." });
+      return;
+    }
     if (this.scenario && (request?.from !== this.scenario.source || request?.to !== this.scenario.target)) {
       this.stationMessage({ id: request?.id, from: request?.from, to: request?.to, kind: request?.kind,
                             state: "failed", error: "Use the preset station pair for this lesson." });
@@ -270,24 +309,130 @@ class Simulation {
     });
   }
 
+  setAntenna(command) {
+    const station = typeof command?.station === "string" ? command.station : "";
+    if (!this.antennas || this.antennaLab) {
+      this.emit("station-antenna", { station, error: "Antenna controls are unavailable in this run." });
+      return;
+    }
+    const index = this.antennas.stationIds.get(station);
+    if (index === undefined) {
+      this.emit("station-antenna", { station, error: "Unknown station." });
+      return;
+    }
+    const next = { ...this.antennaCommands.get(index), ...command };
+    const error = this.antennas.validate(next);
+    if (error) {
+      this.emit("station-antenna", { ...this.antennas.summary(index), error });
+      return;
+    }
+    if (this.stationBusy(index)) {
+      this.antennaCommands.set(index, next);
+      const state = this.antennas.summary(index);
+      this.emit("station-antenna", {
+        ...state, state: "queued", targetTxPort: next.txPort ?? state.targetTxPort,
+        targetRxPort: next.rxPort ?? state.targetRxPort, targetAzimuth: next.azimuth ?? state.targetAzimuth,
+      });
+      return;
+    }
+    this.antennaCommands.delete(index);
+    this.emit("station-antenna", this.antennas.configure(next, this.elapsed));
+  }
+
+  stationBusy(index) {
+    return [...this.active.values()].some(({ message }) => message.source === index || message.target === index);
+  }
+
+  applyAntennaCommands() {
+    for (const [index, command] of this.antennaCommands) {
+      if (this.stationBusy(index)) continue;
+      this.antennaCommands.delete(index);
+      this.emit("station-antenna", this.antennas.configure(command, this.elapsed));
+    }
+  }
+
+  historyKey(source, target, band) {
+    const route = `${source}:${target}:${band}`;
+    return this.antennas
+      ? `${route}:${this.antennas.station(source).revision}:${this.antennas.station(target).revision}` : route;
+  }
+
+  runAntennaTrial(request) {
+    const id = typeof request?.id === "string" && request.id.length <= 80 ? request.id : "";
+    const reject = error => this.emit("antenna-trial", { id, state: "error", error });
+    if (!this.antennaLab || !this.antennas) return reject("Open the Antenna Lab to run a matched trial.");
+    if (!id || this.trial) return reject("Wait for the current trial to finish.");
+    if (!this.running) return reject("Resume the simulation before running a trial.");
+    const { source: txStation, target: rxStation, band, powerW } = ANTENNA_LAB;
+    const source = this.antennas.stationIds.get(txStation);
+    const target = this.antennas.stationIds.get(rxStation);
+    const geometry = pathGeometry(this.stations[source], this.stations[target]);
+    const tx = { profile_id: request.txPort ?? "yagi-20m", heading_deg: request.txAzimuth ?? geometry.tx_bearing_deg };
+    const rx = { profile_id: request.rxPort ?? "yagi-20m", heading_deg: request.rxAzimuth ?? geometry.rx_bearing_deg };
+    if ([tx, rx].some(endpoint => !Number.isFinite(endpoint.heading_deg) || endpoint.heading_deg < 0 || endpoint.heading_deg > 360)
+        || !this.antennas.budget(source, target, band, powerW, tx, rx)) {
+      return reject("Choose compatible 20 m antenna ports and valid azimuths.");
+    }
+    const match = {
+      fixtureVersion: ANTENNA_LAB.fixtureVersion, seed: ANTENNA_LAB.seed, band, powerW, startedAtS: 0,
+      payloadId: ANTENNA_LAB.payloadId, source: txStation, target: rxStation, startUtc: ANTENNA_LAB.startUtc,
+    };
+    this.trial = { id, match, comparisonKey: JSON.stringify(match), source, target };
+    this.emit("station-antenna", this.antennas.configure({
+      station: txStation, txPort: tx.profile_id, azimuth: tx.heading_deg,
+    }, this.antennaTime));
+    this.emit("station-antenna", this.antennas.configure({
+      station: rxStation, rxPort: rx.profile_id, azimuth: rx.heading_deg,
+    }, this.antennaTime));
+    this.sendTrial("rotating");
+  }
+
+  sendTrial(state, attempt = null) {
+    const { id, match, comparisonKey } = this.trial;
+    this.emit("antenna-trial", { id, state, match, comparisonKey, ...(attempt ? { attemptId: attempt.id, attempt } : {}) });
+  }
+
+  advanceTrial() {
+    if (!this.trial) return;
+    this.antennaTime += TICK_MS / 1000;
+    this.antennas.advance(this.antennaTime, value => this.emit("station-antenna", value));
+    const { source, target } = this.trial;
+    if (this.trial.started) {
+      this.elapsed = this.tick++ * TICK_MS / 1000;
+      this.complete();
+      if (this.tick % (1000 / TICK_MS) === 0 || !this.trial) this.emit("status", this.status());
+    } else if (this.antennas.station(source).state === "ready" && this.antennas.station(target).state === "ready") {
+      this.elapsed = this.tick = 0;
+      const message = { id: ++this.counts.generated, source, target, payload: LAB_PAYLOAD, retry: 0, trial: true };
+      const band = this.bands.findIndex(value => value.id === ANTENNA_LAB.band);
+      this.trial.started = true;
+      this.sendTrial("transmitting", this.openBurst(message, band, null, this.scenarioTime));
+    }
+  }
+
   chooseTuning(message, available, using, now) {
     const { source, target, retry, lastBand, lastPowerW } = message;
     return chooseRadioTuning({
-      candidates: this.bands.map(({ id }, band) => ({
-        band: id,
-        snrDb: this.path(source, target, band, this.elapsed, now).snrDb,
-        busy: using[band] > 0 || !available.includes(band),
-        availableInS: Math.max(0, ...[...this.active.values()]
-          .filter(pair => pair.transmission.band === band).map(pair => pair.end - this.elapsed)),
-        history: this.radioHistory.get(`${source}:${target}:${id}`),
-      })),
+      candidates: this.bands.flatMap(({ id }, band) => {
+        const antennaPlan = this.antennas?.plan(source, target, id, retry);
+        if (this.antennas && !antennaPlan) return [];
+        return [{
+          band: id,
+          snrDb: this.path(source, target, band, this.elapsed, now).snrDb + (antennaPlan?.gainDb ?? 0),
+          busy: using[band] > 0 || !available.includes(band),
+          availableInS: Math.max(0, ...[...this.active.values()]
+            .filter(pair => pair.transmission.band === band).map(pair => pair.end - this.elapsed)),
+          history: this.radioHistory.get(this.historyKey(source, target, id)),
+          antennaPlan,
+        }];
+      }),
       lastBand, lastPowerW, retry, referenceWatts: REFERENCE_WATTS,
       elapsedS: this.elapsed, deadlineS: message.deadline,
     });
   }
 
   recordTuning(message, tuning, delivered, measuredSinr) {
-    const key = `${message.source}:${message.target}:${tuning.band}`;
+    const key = this.historyKey(message.source, message.target, tuning.band);
     const previous = this.radioHistory.get(key);
     this.radioHistory.delete(key);
     this.radioHistory.set(key, {
@@ -405,6 +550,24 @@ class Simulation {
 
     for (const message of pending) {
       const { source, target } = message;
+      if (this.antennas && (this.antennas.station(source).state !== "ready" || this.antennas.station(target).state !== "ready")) {
+        if (message.payload) this.radio(message, "waiting", { reason: "Waiting for both antenna systems to settle." });
+        continue;
+      }
+      const plans = this.antennas ? new Map(this.bands.flatMap(({ id }, index) => {
+        const plan = this.antennas.plan(source, target, id, message.retry);
+        return plan ? [[index, plan]] : [];
+      })) : null;
+      if (plans?.size === 0) {
+        this.queues[source].shift();
+        this.counts.dropped++;
+        if (message.payload) {
+          this.radio(message, "failed", { reason: "These antenna ports have no common supported band." });
+          this.settleFrame(message, null);
+        }
+        if (message === overdue) reserving = false;
+        continue;
+      }
       // Let already-airborne calls finish while an overdue user frame listens.
       // Only new background calls yield the reserved band and stations.
       let eligible = available;
@@ -412,6 +575,7 @@ class Simulation {
         if ([source, target].some(station => station === overdue.source || station === overdue.target)) continue;
         eligible = available.filter(band => this.bands[band].id !== overdue.listenBand);
       }
+      if (plans) eligible = eligible.filter(band => plans.has(band));
       if (!eligible.length || busy.has(source) || busy.has(target)) {
         if (message.payload) this.radio(message, "waiting", {
           band: message === overdue ? overdue.listenBand : undefined,
@@ -435,7 +599,7 @@ class Simulation {
       } else {
         for (const [index, band] of eligible.entries()) {
           const score = (this.successesByBand[source][band] + 1) / (this.attemptsByBand[source][band] + 2)
-            + this.policyRandom() * .4;
+            + this.policyRandom() * .4 + (plans?.get(band)?.gainDb ?? 0) / 20;
           if (score > best) {
             best = score;
             chosen = index;
@@ -443,6 +607,13 @@ class Simulation {
         }
       }
       const band = eligible[chosen];
+      if (plans && !this.antennas.prepare(source, target, plans.get(band), this.elapsed, value => this.emit("station-antenna", value))) {
+        busy.add(source).add(target);
+        if (message.payload) this.radio(message, "waiting", {
+          band: this.bands[band].id, reason: "Aiming or switching the antenna systems.",
+        });
+        continue;
+      }
       available.splice(available.indexOf(band), 1);
       if (message === overdue) reserving = false;
       using[band]++;
@@ -451,40 +622,58 @@ class Simulation {
       this.queues[source].shift();
       this.counts.retried += Number(message.retry > 0);
       this.attemptsByBand[source][band]++;
-      const { snrDb, details } = this.path(source, target, band, this.elapsed, now);
-      const gainDb = tuning?.powerGainDb ?? 0;
-      const id = ++this.counts.attempted;
-      const payload = message.payload ?? payloadFor(message);
-      const tx = this.modem.encode(payload);
-      const airtime = tx.length / this.modem.rate;
-      const transmission = {
-        id, source, band, now, payload, started: this.elapsed,
-        power: this.modem.power(tx), gainDb, seed: hash(this.seed, id, source),
-      };
-      const attempt = {
-        id, message_id: message.id, source: this.stations[source].id, target: this.stations[target].id,
-        band: this.bands[band].id, state: "active", decode_status: "pending", retry: message.retry,
-        simulated_at_s: this.elapsed, started_at_s: this.elapsed, snr_db: roundDb(Math.max(-100, Math.min(100, snrDb + gainDb))),
-        airtime_s: airtime, payload_bytes: payload.length, channel_model: CHANNEL_MODEL, interference: "none",
-        waveform_mode: `BW${this.bandwidth}`,
-      };
-      if (tuning) {
-        attempt.power_w = tuning.powerW;
-        attempt.power_gain_db = gainDb;
-      }
-      if (details) attempt.space_weather = details;
-      const pair = { attempt, message, transmission, tuning, end: this.elapsed + airtime, overlaps: [], routes: null };
-      for (const other of this.active.values()) {
-        if (other.transmission.band !== band) continue;
-        pair.overlaps.push(other.transmission);
-        other.overlaps.push(transmission);
-      }
-      this.retain(pair, tx);
-      this.active.set(id, pair);
-      if (tuning) this.recordMessageAttempt(message, attempt, "transmitting", tx.length);
-      this.notify(attempt);
-      if (tuning) this.radio(message, "transmitting", tuning, { attempt_id: id });
+      this.openBurst(message, band, tuning, now);
     }
+  }
+
+  openBurst(message, band, tuning, now) {
+    const { source, target } = message;
+    const { snrDb, details } = this.path(source, target, band, this.elapsed, now);
+    const powerW = message.trial ? ANTENNA_LAB.powerW : tuning?.powerW ?? REFERENCE_WATTS;
+    const gainDb = message.trial ? 10 * Math.log10(powerW / REFERENCE_WATTS) : tuning?.powerGainDb ?? 0;
+    const txAntenna = this.antennas?.endpoint(source, "tx");
+    const rxAntenna = this.antennas?.endpoint(target, "rx");
+    const budget = this.antennas?.budget(source, target, this.bands[band].id, powerW, txAntenna, rxAntenna);
+    const combinedGain = gainDb + (budget?.netGainDb ?? 0);
+    const antenna = budget ? {
+      ...budget, referenceSnrDb: roundDb(snrDb), powerGainDb: roundDb(gainDb),
+      predictedSnrDb: roundDb(snrDb + combinedGain),
+    } : null;
+    const id = ++this.counts.attempted;
+    const payload = message.payload ?? payloadFor(message);
+    const tx = this.modem.encode(payload);
+    const airtime = tx.length / this.modem.rate;
+    const transmission = {
+      id, source, band, now, payload, started: this.elapsed, txAntenna,
+      power: this.modem.power(tx), gainDb,
+      seed: message.trial ? hash(this.seed, "antenna lab RF noise") : hash(this.seed, id, source),
+    };
+    const attempt = {
+      id, message_id: message.id, source: this.stations[source].id, target: this.stations[target].id,
+      band: this.bands[band].id, state: "active", decode_status: "pending", retry: message.retry,
+      simulated_at_s: this.elapsed, started_at_s: this.elapsed, snr_db: roundDb(Math.max(-100, Math.min(100, snrDb + combinedGain))),
+      airtime_s: airtime, payload_bytes: payload.length, channel_model: CHANNEL_MODEL, interference: "none",
+      waveform_mode: `BW${this.bandwidth}`,
+    };
+    if (tuning || antenna) {
+      attempt.power_w = powerW;
+      attempt.power_gain_db = gainDb;
+    }
+    if (antenna) attempt.antenna = antenna;
+    if (details) attempt.space_weather = details;
+    const pair = { attempt, message, transmission, tuning, rxAntenna, baseSnrDb: snrDb,
+      combinedGain, end: this.elapsed + airtime, overlaps: [], routes: null };
+    for (const other of this.active.values()) {
+      if (other.transmission.band !== band) continue;
+      pair.overlaps.push(other.transmission);
+      other.overlaps.push(transmission);
+    }
+    this.retain(pair, tx);
+    this.active.set(id, pair);
+    if (tuning) this.recordMessageAttempt(message, attempt, "transmitting", tx.length);
+    this.notify(attempt);
+    if (tuning) this.radio(message, "transmitting", tuning, { attempt_id: id, antenna });
+    return attempt;
   }
 
   propagate(transmission, target, snr, noise) {
@@ -497,11 +686,15 @@ class Simulation {
 
   receive(pair) {
     const { transmission, message, attempt } = pair;
-    const { signal, noise, signalPower, noisePower } = this.propagate(transmission, message.target, attempt.snr_db, true);
+    const directional = Boolean(attempt.antenna);
+    const noiseSnr = directional ? pair.baseSnrDb : attempt.snr_db;
+    const { signal, noise, signalPower, noisePower } = this.propagate(transmission, message.target, noiseSnr, true);
     const interference = new Float32Array(signal.length);
-    const txPowerGain = 10 ** (transmission.gainDb / 10);
-    const amplitudeGain = Math.sqrt(txPowerGain);
-    const noiseReference = transmission.power * txPowerGain * 10 ** (-attempt.snr_db / 10);
+    const signalGain = 10 ** (pair.combinedGain / 10);
+    const noiseGain = directional ? 1 : signalGain;
+    const amplitudeGain = Math.sqrt(signalGain);
+    const noiseAmplitude = Math.sqrt(noiseGain);
+    const noiseReference = transmission.power * noiseGain * 10 ** (-Math.max(-100, Math.min(100, noiseSnr)) / 10);
     const rate = this.modem.rate;
     for (const [index, other] of pair.overlaps.entries()) {
       const { signal: incoming } = this.propagate(other, message.target, pair.routes[index], false);
@@ -514,16 +707,19 @@ class Simulation {
     }
     const interferencePower = pair.overlaps.length ? this.modem.power(interference) : 0;
     const rx = signal;
-    // The propagator normalizes noise to the encoded frame. Scaling both its
-    // output vectors back to the tuned amplitude preserves receiver noise.
+    // The antenna correction scales the wanted signal against unchanged
+    // reference noise. Old neutral runs keep their existing normalization.
     for (let sample = 0; sample < rx.length; sample++) {
-      rx[sample] = (rx[sample] + noise[sample]) * amplitudeGain + interference[sample];
+      rx[sample] = directional
+        ? rx[sample] * amplitudeGain + noise[sample] * noiseAmplitude + interference[sample]
+        : (rx[sample] + noise[sample]) * amplitudeGain + interference[sample];
     }
     this.writePcm(transmission.id, { ...this.pcm.get(transmission.id), rx });
     return {
       rx,
-      snr: magnitudeRatio(signalPower, noisePower),
-      sinr: magnitudeRatio(signalPower * txPowerGain, noisePower * txPowerGain + interferencePower),
+      snr: directional ? magnitudeRatio(signalPower * signalGain, noisePower * noiseGain)
+        : magnitudeRatio(signalPower, noisePower),
+      sinr: magnitudeRatio(signalPower * signalGain, noisePower * noiseGain + interferencePower),
     };
   }
 
@@ -531,8 +727,12 @@ class Simulation {
     for (const [id, pair] of this.active) {
       if (pair.end > this.elapsed) continue;
       const { message, transmission, tuning } = pair;
-      pair.routes = pair.overlaps.map(other =>
-        this.path(other.source, message.target, other.band, other.started, other.now).snrDb + other.gainDb);
+      pair.routes = pair.overlaps.map(other => {
+        const gain = other.txAntenna && pair.rxAntenna
+          ? this.antennas.budget(other.source, message.target, this.bands[other.band].id,
+            REFERENCE_WATTS, other.txAntenna, pair.rxAntenna)?.netGainDb ?? 0 : 0;
+        return this.path(other.source, message.target, other.band, other.started, other.now).snrDb + other.gainDb + gain;
+      });
       const { rx, snr, sinr } = this.receive(pair);
       const decoded = this.modem.decode(rx, transmission.payload);
       const delivered = decoded !== null;
@@ -542,6 +742,7 @@ class Simulation {
         message.lastPowerW = tuning.powerW;
         this.radio(message, delivered ? "delivered" : "failed", tuning, {
           attempt_id: id, measured_snr_db: snr, measured_sinr_db: sinr,
+          ...(pair.attempt.antenna ? { antenna: pair.attempt.antenna } : {}),
         });
       }
       this.active.delete(id);
@@ -553,7 +754,9 @@ class Simulation {
       } else {
         this.counts.failed++;
         const queue = this.queues[message.source];
-        if (message.payload && message.retry < MAX_USER_RETRIES) {
+        if (message.trial) {
+          this.counts.dropped++;
+        } else if (message.payload && message.retry < MAX_USER_RETRIES) {
           message.retry++;
           message.ready = this.elapsed + 1.5 + this.policyRandom() * 3.5;
           message.deadline = message.ready + 10;
@@ -578,15 +781,25 @@ class Simulation {
       this.recent.unshift(pair.attempt);
       if (this.recent.length > RECENT_EVENTS) this.recent.pop();
       this.notify(pair.attempt);
+      if (message.trial) {
+        this.sendTrial(state, pair.attempt);
+        this.trial = null;
+      }
     }
   }
 
   advance() {
+    if (this.antennaLab) {
+      this.advanceTrial();
+      return;
+    }
     // The training clock advances only with an actual queued or active frame.
     // Operator interactions and cryptography scheduling cannot move the RF epoch.
     if (this.scenario && !this.userFrames.size) return;
     this.elapsed = this.tick * TICK_MS / 1000;
+    this.antennas?.advance(this.elapsed, value => this.emit("station-antenna", value));
     this.complete();
+    this.applyAntennaCommands();
     if (!this.scenario) this.generate();
     this.start();
     if (this.tick % (1000 / TICK_MS) === 0) this.emit("status", this.status());
@@ -627,7 +840,7 @@ function fail(error) {
 function pump() {
   try {
     simulation.advance();
-    const rate = simulation.userFrames.size ? simulation.scenario?.playbackRate ?? 1 : 1;
+    const rate = simulation.userFrames.size || simulation.trial ? simulation.scenario?.playbackRate ?? 1 : 1;
     nextTick = Math.max(nextTick + TICK_MS / rate, performance.now() - 200);
     timer = setTimeout(pump, Math.max(0, nextTick - performance.now()));
   } catch (error) {
@@ -647,15 +860,19 @@ self.addEventListener("message", async ({ data }) => {
       return;
     } else if (data.type === "start") {
       if (simulation) return;
-      const scenario = getTrainingScenario(data.scenarioId);
+      const antennaLab = data.scenarioId === ANTENNA_LAB.id;
+      const scenario = antennaLab ? ANTENNA_LAB : getTrainingScenario(data.scenarioId);
       if (data.scenarioId != null && !scenario) throw Error("This training scenario is unavailable.");
-      const [modem, inputs] = await Promise.all([
+      if (antennaLab && data.bandwidth !== 500) throw Error("The Antenna Lab requires BW500.");
+      const [modem, inputs, antennaCatalog] = await Promise.all([
         loadModem(data.bandwidth),
         scenario ? loadTrainingInputs(scenario, lifecycle.signal)
           : loadPathInputs(new URL("./data/", import.meta.url), { signal: lifecycle.signal }),
+        antennaLab || (!scenario && data.antennas) ? loadAntennaCatalog({ signal: lifecycle.signal }) : null,
       ]);
       if (closed) return;
-      simulation = new Simulation(modem, inputs, scenario?.seed ?? (data.seed >>> 0), data.bandwidth, send, scenario);
+      simulation = new Simulation(modem, inputs, scenario?.seed ?? (data.seed >>> 0),
+        data.bandwidth, send, scenario, antennaCatalog, data.antennaConfigs);
       send("snapshot", simulation.snapshot());
       nextTick = performance.now();
       pump();
@@ -672,6 +889,10 @@ self.addEventListener("message", async ({ data }) => {
       self.postMessage({ type: "capture", id: data.id, status, value }, transfer);
     } else if (data.type === "send-message" && simulation) {
       await simulation.sendMessage(data.request);
+    } else if (data.type === "set-antenna" && simulation) {
+      simulation.setAntenna(data.command);
+    } else if (data.type === "antenna-trial" && simulation) {
+      simulation.runAntennaTrial(data.request);
     }
   } catch (error) {
     // A capture is optional, so an unavailable waveform should not take down

@@ -36,6 +36,7 @@ for (const filename of await readdir(web)) {
   if (/\.(?:m?js|css|svg)$/.test(filename)) await copyFile(join(web, filename), join(page, filename));
 }
 await cp(join(web, "training-data"), join(page, "training-data"), { recursive: true });
+await copyFile(join(source, "antenna-profiles.json"), join(page, "antenna-profiles.json"));
 const html = await readFile(join(web, "index.html"), "utf8");
 const start = '<html lang="en">';
 if (!html.includes(start)) throw new Error("HF dashboard HTML is missing its browser mode entry point");
