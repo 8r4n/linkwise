@@ -27,16 +27,13 @@ button:focus-visible, select:focus-visible, .map-jump:focus-visible, .repository
 .masthead-inner { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; min-height: 59px; }
 .masthead-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .repository-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding-inline: 6px;
-  color: inherit;
-  font-size: .875rem;
-  font-weight: 650;
-  text-underline-offset: .2em;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 7px;
 }
-.repository-link:hover { color: var(--teal); }
+.repository-link:hover { background: var(--surface); }
 .wordmark { display: flex; align-items: center; gap: 10px; font-size: 1rem; font-weight: 750; letter-spacing: .015em; }
 .brand-mark {
   width: 22px;

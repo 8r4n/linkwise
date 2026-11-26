@@ -49,7 +49,8 @@ const hfPage = await readFile(hfEntry, "utf8").catch(error => {
 });
 if (hfPage) {
   assert.match(hfPage, /data-mode="browser"/);
-  assert.ok(hfPage.includes(`href="${repository}">GitHub</a>`));
+  assert.ok(hfPage.includes(`href="${repository}" aria-label="Linkwise on GitHub"`));
+  assert.match(hfPage, /<img src="\.\/github-invertocat-white\.svg" alt="" /);
   const wasm = await WebAssembly.compile(await readFile(dist + "/hf-simulation/bw500_browser.wasm"));
   const names = WebAssembly.Module.exports(wasm).map(({ name }) => name);
   for (const name of ["memory", "lw_encode_len", "lw_decode", "lw_propagate", "lw_set_mode", "lw_payload_capacity"]) {
@@ -65,7 +66,10 @@ if (hfPage) {
     assert.equal(modem.lw_decode(count), 1);
     assert.deepEqual(new Uint8Array(modem.memory.buffer, modem.lw_payload_ptr(), payload.length), payload);
   }
-  for (const asset of ["browser-worker.js", "data/path-inputs.mjs", "data/stations.mjs", "vendor/Cesium.js", "vendor/sigplot.js"]) {
+  for (const asset of [
+    "browser-worker.js", "data/path-inputs.mjs", "data/stations.mjs",
+    "github-invertocat-white.svg", "vendor/Cesium.js", "vendor/sigplot.js",
+  ]) {
     assert.ok((await stat(dist + "/hf-simulation/" + asset)).size > 0, asset);
   }
   const demos = await readFile(dist + "/demos/index.html", "utf8");

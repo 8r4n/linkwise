@@ -33,7 +33,7 @@ for (const [from, to] of [
 
 const web = join(source, "web");
 for (const filename of await readdir(web)) {
-  if (/\.(?:m?js|css)$/.test(filename)) await copyFile(join(web, filename), join(page, filename));
+  if (/\.(?:m?js|css|svg)$/.test(filename)) await copyFile(join(web, filename), join(page, filename));
 }
 const html = await readFile(join(web, "index.html"), "utf8");
 const start = '<html lang="en">';
