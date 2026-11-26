@@ -42,6 +42,9 @@ assert.ok(issueTemplate.includes("label: Steps to reproduce"));
 const xml = await readFile(dist + "/sitemap.xml", "utf8");
 const reference = catalog().flatMap(({ paths }) => paths);
 const origin = "https://8r4n.github.io/linkwise";
+const iconName = "github-invertocat-white.svg";
+assert.deepEqual(await readFile(dist + "/" + iconName),
+  await readFile(new URL("../../tools/hf-live/web/" + iconName, import.meta.url)));
 
 const hfEntry = dist + "/hf-simulation/index.html";
 const hfPage = await readFile(hfEntry, "utf8").catch(error => {
@@ -83,6 +86,8 @@ async function checkHtml(path, code, dir) {
   assert.ok(html.includes('<html lang="' + code + '" dir="' + dir + '">'), path);
   assert.ok(html.includes('rel="canonical" href="' + origin + path + '"'), path);
   assert.ok(html.includes("<h1>"), path);
+  assert.ok(html.includes(`href="${repository}" lang="en" aria-label="Linkwise on GitHub"`), path);
+  assert.ok(html.includes(`<img src="/linkwise/${iconName}" alt=""`), path);
   for (const { code: alternate } of locales) {
     assert.ok(html.includes('rel="alternate" hreflang="' + alternate + '"'), path + alternate);
   }
