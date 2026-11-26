@@ -81,38 +81,63 @@ impl Listener {
         notices: mpsc::Receiver<Vec<u8>>,
         received: mpsc::Receiver<Vec<u8>>,
     ) -> io::Result<()> {
-        let (control, data) = self.accept_pair().await?;
-        let (channel, result) = {
-            let control = read_ahead(control, |stream| {
-                control_stream(stream, port, notices, Some(WRITE_TIMEOUT), true)
-            });
-            let data = read_ahead(data, |stream| {
-                data_stream(stream, port, received, Some(WRITE_TIMEOUT))
-            });
-            tokio::pin!(control, data);
-            loop {
-                tokio::select! {
-                    biased;
-                    result = &mut control => break (Channel::Control, result),
-                    result = &mut data => break (Channel::Data, result),
-                    socket = self.control.accept() => {
-                        if let Err(error) = socket { break (Channel::Control, Err(error)); }
-                    }
-                    socket = self.data.accept() => {
-                        if let Err(error) = socket { break (Channel::Data, Err(error)); }
-                    }
-                }
-            }
-        };
-        // Both stream futures and sockets have been dropped. No write on a
-        // stalled connection can delay ownership cleanup.
-        port.closed(channel).await;
-        port.closed(match channel {
-            Channel::Control => Channel::Data,
-            Channel::Data => Channel::Control,
-        })
-        .await;
-        result
+        let pair = self.accept_pair().await?;
+        serve_pair_inner(pair, port, notices, received, Some(self)).await
+    }
+}
+
+/// Serve a single pair of already associated loopback streams. The caller
+/// owns the authentication and must stop accepting replacement sockets.
+pub async fn serve_pair(
+    control: TcpStream,
+    data: TcpStream,
+    port: &dyn ModemPort,
+    notices: mpsc::Receiver<Vec<u8>>,
+    received: mpsc::Receiver<Vec<u8>>,
+) -> io::Result<()> {
+    if !control.peer_addr()?.ip().is_loopback() || !data.peer_addr()?.ip().is_loopback() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "associated command and data peers must be loopback",
+        ));
+    }
+    serve_pair_inner((control, data), port, notices, received, None).await
+}
+
+async fn serve_pair_inner(
+    (control, data): (TcpStream, TcpStream),
+    port: &dyn ModemPort,
+    notices: mpsc::Receiver<Vec<u8>>,
+    received: mpsc::Receiver<Vec<u8>>,
+    listener: Option<&Listener>,
+) -> io::Result<()> {
+    let (channel, result) = tokio::select! {
+        biased;
+        result = read_ahead(control, |stream| {
+            control_stream(stream, port, notices, Some(WRITE_TIMEOUT), true)
+        }) => (Channel::Control, result),
+        result = read_ahead(data, |stream| {
+            data_stream(stream, port, received, Some(WRITE_TIMEOUT))
+        }) => (Channel::Data, result),
+        result = reject_duplicates(listener.map(|l| &l.control)) => (Channel::Control, result),
+        result = reject_duplicates(listener.map(|l| &l.data)) => (Channel::Data, result),
+    };
+    // Both stream futures and sockets were dropped before ownership cleanup.
+    port.closed(channel).await;
+    port.closed(match channel {
+        Channel::Control => Channel::Data,
+        Channel::Data => Channel::Control,
+    })
+    .await;
+    result
+}
+
+async fn reject_duplicates(listener: Option<&TcpListener>) -> io::Result<()> {
+    let Some(listener) = listener else {
+        return std::future::pending().await;
+    };
+    loop {
+        drop(listener.accept().await?);
     }
 }
 

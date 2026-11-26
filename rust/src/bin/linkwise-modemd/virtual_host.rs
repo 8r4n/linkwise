@@ -1,10 +1,18 @@
 //! Two-way modem host over native audio or an isolated 48 kHz waveform cable.
-use std::{io, net::SocketAddr, time::Duration};
+use std::{
+    io::{self, Read, Write},
+    net::SocketAddr,
+    path::Path,
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use linkwise::{
     api::Command,
-    host::{Channel, ModemPort, Reply, tcp::Listener},
+    host::{
+        Channel, ModemPort, Reply,
+        tcp::{Listener, serve_pair},
+    },
     modem::{
         audio_handshake::{Action, AudioHandshake},
         bw500,
@@ -17,6 +25,7 @@ use linkwise::{
         wide_level4,
     },
 };
+use sha2::{Digest, Sha256};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -35,6 +44,8 @@ const MAX_PAYLOAD: usize = 4096;
 const MAX_RECEIVE: usize = 4096;
 const HOST_BATCH_WINDOW: Duration = Duration::from_millis(100);
 const FIRST_RESPONDER_POLL_WAIT: Duration = Duration::from_millis(1600);
+const CAPABILITY_SIZE: usize = 65;
+const PREFIX_TIMEOUT: Duration = Duration::from_secs(1);
 
 enum Request {
     Command(Command, oneshot::Sender<Reply>),
@@ -44,6 +55,18 @@ enum Request {
 enum HostAction {
     Establish(Action),
     Disconnect,
+}
+
+enum HostAttachment<'a> {
+    Legacy(&'a mut Listener),
+    Managed { control: TcpStream, data: TcpStream },
+}
+
+#[derive(PartialEq, Eq)]
+enum Admission {
+    Legacy,
+    Available,
+    Consumed,
 }
 
 struct Port {
@@ -176,6 +199,7 @@ struct Engine<'a> {
     local: &'a str,
     log_sessions: bool,
     mode: &'a Mode,
+    admission: Admission,
     wide_lead: Option<wide_level4::Lead>,
     wide_level3: Option<wide_level4::LowerWaveform>,
     wide_level2: Option<wide_level4::RobustWaveform>,
@@ -210,10 +234,17 @@ struct Engine<'a> {
 }
 
 impl Engine<'_> {
+    fn consume_admission(&mut self) {
+        if self.admission == Admission::Available {
+            self.admission = Admission::Consumed;
+        }
+    }
+
     fn reset(&mut self) -> io::Result<()> {
         if self.session.is_some() {
             self.session_log("Modem session closed");
         }
+        self.listen &= self.admission != Admission::Consumed;
         self.handshake = self.mode.handshake(self.local, self.listen)?;
         self.wide_lead = None;
         self.wide_rate = 4;
@@ -382,7 +413,7 @@ impl Engine<'_> {
             Command::Bw2750 if self.mode.bandwidth() == Bandwidth::Hz2750 => Reply::Ok,
             Command::CompressionOff | Command::Public(false) | Command::Cwid(false) => Reply::Ok,
             Command::P2pSession | Command::ClearTxBuffer if idle => Reply::Ok,
-            Command::Listen(on) if idle => {
+            Command::Listen(on) if idle && (!on || self.admission != Admission::Consumed) => {
                 self.listen = on;
                 self.reset()?;
                 Reply::Ok
@@ -390,7 +421,7 @@ impl Engine<'_> {
             Command::Connect {
                 source,
                 destination,
-            } if idle && source == self.local => {
+            } if idle && source == self.local && self.admission != Admission::Consumed => {
                 action = self
                     .handshake
                     .handle(
@@ -401,6 +432,7 @@ impl Engine<'_> {
                     )
                     .map(HostAction::Establish);
                 if action.is_some() {
+                    self.consume_admission();
                     Reply::Ok
                 } else {
                     Reply::Wrong
@@ -727,6 +759,7 @@ impl Engine<'_> {
                     start..range.end as usize,
                 );
                 if action.is_some() {
+                    self.consume_admission();
                     self.establish(action, cable).await?;
                     return Ok(());
                 }
@@ -1695,6 +1728,90 @@ pub async fn serve(args: &[String], wide: bool) -> Result<(), Box<dyn std::error
     .await
 }
 
+pub(super) async fn serve_managed(call: &str, profile: &Path) -> io::Result<()> {
+    let capability = {
+        let mut prefix = [0; CAPABILITY_SIZE];
+        io::stdin().lock().read_exact(&mut prefix)?;
+        let (newline, digits) = prefix.split_last().expect("fixed-size capability");
+        if *newline != b'\n' || !digits.iter().all(u8::is_ascii_hexdigit) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "managed modem capability must be 64 hexadecimal digits and a newline",
+            ));
+        }
+        Sha256::digest(prefix).into()
+    };
+    let local = normalize_callsign(call)?;
+    let profile = super::setup::read_text(profile, 128 * 1024).map_err(io::Error::other)?;
+    let waveform = Box::new(Waveform::from_json(&profile).map_err(io::Error::other)?);
+    let mode = Mode::Bw500 { profile, waveform };
+    let loopback = SocketAddr::from(([127, 0, 0, 1], 0));
+    let (control, data, audio) = tokio::try_join!(
+        TcpListener::bind(loopback),
+        TcpListener::bind(loopback),
+        TcpListener::bind(loopback)
+    )?;
+    {
+        let mut ready = io::stdout().lock();
+        writeln!(
+            ready,
+            "{}",
+            serde_json::json!({
+                "control_port": control.local_addr()?.port(),
+                "data_port": data.local_addr()?.port(),
+                "audio_port": audio.local_addr()?.port(),
+            })
+        )?;
+        ready.flush()?;
+    }
+
+    let (command, bytes, cable) = timeout(IO_TIMEOUT, async {
+        tokio::try_join!(
+            accept_managed(&control, &capability),
+            accept_managed(&data, &capability),
+            accept_managed(&audio, &capability)
+        )
+    })
+    .await
+    .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "managed modem attachment expired"))??;
+    drop((control, data, audio));
+
+    let (_stop, mut stopped) = tokio::sync::watch::channel(false);
+    serve_audio(
+        HostAttachment::Managed {
+            control: command,
+            data: bytes,
+        },
+        &local,
+        &mode,
+        Audio::Virtual(Cable::new(cable)),
+        false,
+        &mut stopped,
+    )
+    .await
+}
+
+async fn accept_managed(listener: &TcpListener, capability: &[u8; 32]) -> io::Result<TcpStream> {
+    loop {
+        let (mut stream, _) = listener.accept().await?;
+        let mut prefix = [0; CAPABILITY_SIZE];
+        if !matches!(
+            timeout(PREFIX_TIMEOUT, stream.read_exact(&mut prefix)).await,
+            Ok(Ok(_))
+        ) {
+            continue;
+        }
+        let digest = Sha256::digest(prefix);
+        let difference = digest
+            .iter()
+            .zip(capability)
+            .fold(0, |bits, (actual, expected)| bits | (actual ^ expected));
+        if difference == 0 {
+            return Ok(stream);
+        }
+    }
+}
+
 #[cfg(all(windows, feature = "audio-device"))]
 pub(super) async fn serve_winlink_test(
     call: &str,
@@ -1746,7 +1863,7 @@ async fn serve_mode(
             super::windows_service::log_event("Waveform peer attached", false);
         }
         let result = serve_audio(
-            &mut listener,
+            HostAttachment::Legacy(&mut listener),
             &local,
             &mode,
             Audio::Virtual(Cable::new(stream)),
@@ -1782,13 +1899,24 @@ fn normalize_callsign(call: &str) -> io::Result<String> {
 }
 
 async fn serve_audio(
-    listener: &mut Listener,
+    attachment: HostAttachment<'_>,
     local: &str,
     mode: &Mode,
     mut audio: Audio,
     _service: bool,
     stop: &mut tokio::sync::watch::Receiver<bool>,
 ) -> io::Result<()> {
+    let admission = match (&attachment, &audio) {
+        (HostAttachment::Legacy(_), _) => Admission::Legacy,
+        (HostAttachment::Managed { .. }, Audio::Virtual(_)) => Admission::Available,
+        #[cfg(feature = "audio-device")]
+        (HostAttachment::Managed { .. }, Audio::Native(_)) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "managed modem requires a virtual waveform cable",
+            ));
+        }
+    };
     let (send, host) = mpsc::channel(8);
     let (abort, aborts) = mpsc::channel(1);
     let (notices, control_rx) = mpsc::channel(8);
@@ -1808,6 +1936,7 @@ async fn serve_audio(
         local,
         log_sessions,
         mode,
+        admission,
         wide_lead: None,
         wide_level3: wide_level4::LowerWaveform::new_level3(mode.bandwidth()),
         wide_level2: wide_level4::RobustWaveform::new_level2(mode.bandwidth()),
@@ -1845,7 +1974,12 @@ async fn serve_audio(
         // Drop the engine and its in-flight playback before returning. A
         // forced stop must not queue a protocol disconnect on the audio route.
         _ = stop.wait_for(|stopping| *stopping) => return Ok(()),
-        result = listener.serve_one(&port, control_rx, data_rx) => result,
+        result = async {
+            match attachment {
+                HostAttachment::Legacy(listener) => listener.serve_one(&port, control_rx, data_rx).await,
+                HostAttachment::Managed { control, data } => serve_pair(control, data, &port, control_rx, data_rx).await,
+            }
+        } => result,
         result = run(engine, &mut audio, host, aborts) => result,
     };
     #[cfg(feature = "audio-device")]
@@ -1910,7 +2044,7 @@ pub(super) async fn serve_native(
                     "READY=1\nSTATUS=BW{bandwidth} audio ready (external PTT)"
                 ));
                 match serve_audio(
-                    &mut listener,
+                    HostAttachment::Legacy(&mut listener),
                     &local,
                     &mode,
                     Audio::Native(Box::new(audio)),
@@ -2028,6 +2162,37 @@ mod tests {
     use tokio::{net::TcpSocket, sync::watch};
 
     #[tokio::test]
+    async fn managed_attachment_discards_wrong_capability_and_preserves_wire_bytes() {
+        timeout(Duration::from_secs(3), async {
+            let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
+                .await
+                .unwrap();
+            let address = listener.local_addr().unwrap();
+            let mut prefix = [b'a'; CAPABILITY_SIZE];
+            prefix[CAPABILITY_SIZE - 1] = b'\n';
+            let capability = Sha256::digest(prefix).into();
+            let server = async {
+                let mut stream = accept_managed(&listener, &capability).await.unwrap();
+                let mut command = [0; 8];
+                stream.read_exact(&mut command).await.unwrap();
+                assert_eq!(&command, b"VERSION\r");
+            };
+            let client = async {
+                let mut wrong = TcpStream::connect(address).await.unwrap();
+                wrong.write_all(&[b'f'; CAPABILITY_SIZE]).await.unwrap();
+                assert_eq!(wrong.read(&mut [0]).await.unwrap(), 0);
+                let mut accepted = TcpStream::connect(address).await.unwrap();
+                let mut wire = prefix.to_vec();
+                wire.extend_from_slice(b"VERSION\r");
+                accepted.write_all(&wire).await.unwrap();
+            };
+            tokio::join!(server, client);
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
     async fn abort_cancels_a_blocked_waveform_write() {
         timeout(Duration::from_secs(2), async {
             let loopback = SocketAddr::from(([127, 0, 0, 1], 0));
@@ -2063,7 +2228,7 @@ mod tests {
                     waveform: Box::new(wide_level4::Waveform::new(bandwidth).unwrap()),
                 };
                 serve_audio(
-                    &mut host,
+                    HostAttachment::Legacy(&mut host),
                     "W1AW",
                     &mode,
                     Audio::Virtual(Cable::new(bridge)),
