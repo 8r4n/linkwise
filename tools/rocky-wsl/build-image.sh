@@ -80,7 +80,7 @@ cp -L /etc/resolv.conf "$root/etc/resolv.conf"
 install -d -m 1777 "$root/tmp"
 install -m 0644 "$rpm" "$root/tmp/$rpm"
 chroot "$root" /usr/bin/dnf -y --setopt=tsflags= --setopt=localpkg_gpgcheck=0 install "/tmp/$rpm"
-chroot "$root" /usr/bin/dnf clean all
+rm -rf "$root/var/cache/dnf"
 rm -f "$root/tmp/$rpm" "$root/etc/resolv.conf"
 rm -f "$root"/var/log/dnf*.log "$root/var/log/hawkey.log"
 
