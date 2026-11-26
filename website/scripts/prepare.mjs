@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -86,11 +87,6 @@ for (const { code } of locales) {
   ];
   await writeFile(new URL("llms.txt", target), overview.join("\n") + "\n");
 }
-await writeFile(new URL("sitemap.xml", publicDir), `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${locales.flatMap(({ code }) => pages.map(page => pagePath(code, page).slice(1))).map(path => `  <url><loc>${base}${path}</loc></url>`).join("\n")}
-</urlset>
-`);
 const documents = catalog().flatMap(({ paths }) => paths);
 for (const { code } of locales) {
   for (const source of documents) {
@@ -127,3 +123,14 @@ if (process.env.GITHUB_ACTIONS === "true") {
   execFileSync(process.execPath, [fileURLToPath(new URL("prepare-hf.mjs", import.meta.url))],
     { stdio: "inherit", env });
 }
+
+const sitemapPaths = new Set(locales.flatMap(({ code }) => pages.map(page => pagePath(code, page).slice(1))));
+sitemapPaths.add("research/antenna-gain/");
+if (["index.html", "bw500_browser.wasm"].every(file => existsSync(new URL(`hf-simulation/${file}`, publicDir)))) {
+  sitemapPaths.add("hf-simulation/");
+}
+await writeFile(new URL("sitemap.xml", publicDir), `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${Array.from(sitemapPaths, path => `  <url><loc>${base}${path}</loc></url>`).join("\n")}
+</urlset>
+`);

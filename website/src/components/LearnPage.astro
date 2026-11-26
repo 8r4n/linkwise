@@ -1,13 +1,9 @@
 ---
-import { existsSync } from "node:fs";
 import { LAB_EXERCISES, LAB_PREREQUISITE } from "../../../tools/hf-live/web/antenna-lab-state.mjs";
 import { BADGE_NAME, MISSION_CATALOG } from "../../../tools/hf-live/web/learning-data.mjs";
 import { learningDescription, learningLayers, learningMissions } from "../learning.mjs";
 
-const { locale, t, title, base } = Astro.props;
-const simulatorPath = base + "/hf-simulation/";
-const browserHF = existsSync("public/hf-simulation/bw500_browser.wasm");
-const simulatorHref = browserHF ? simulatorPath : new URL(simulatorPath, Astro.site).href;
+const { locale, t, title, base, simulatorHref } = Astro.props;
 ---
 <article class="wrap section learn-page">
   <h1>{title}</h1>
@@ -15,6 +11,7 @@ const simulatorHref = browserHF ? simulatorPath : new URL(simulatorPath, Astro.s
   <div lang="en" dir="ltr">
     <p class="lede">{learningDescription}</p>
     <p class="learning-scope">Runs in your browser with simulated radio links and sample messages.</p>
+    <p><a href={simulatorHref}>Open the HF propagation and antenna simulator</a> to explore the network.</p>
 
     <section class="learning-missions" aria-labelledby="learning-missions-heading">
       <div class="mission-heading">
@@ -51,6 +48,7 @@ const simulatorHref = browserHF ? simulatorPath : new URL(simulatorPath, Astro.s
         <span class="mission-requirement" id="antenna-lab-prerequisite" data-antenna-lab-prerequisite>Complete “{MISSION_CATALOG[LAB_PREREQUISITE].title}” first.</span>
       </a>
       <p class="antenna-network-link"><a href={simulatorHref + "?antennas=1"}>Explore antenna patterns across the network</a> in free simulation.</p>
+      <p class="antenna-network-link"><a href={base + "/research/antenna-gain/"} hreflang="en">Read the matched 20 m antenna gain test</a>.</p>
     </section>
 
     <section class="learning-layers" aria-labelledby="learning-layers-heading">

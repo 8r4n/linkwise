@@ -1,4 +1,5 @@
 ---
+import { existsSync } from "node:fs";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Button from "./Button.astro";
 import VisualGuide from "./VisualGuide.astro";
@@ -20,13 +21,29 @@ const varac = varacGuide(locale.code);
 const visual = page === "varac" ? visualGuide(locale.code) : null;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const link = (page) => base + pagePath(locale.code, page);
+const simulatorPath = base + "/hf-simulation/";
+const browserHF = ["index.html", "bw500_browser.wasm"].every(file => existsSync("public/hf-simulation/" + file));
+const simulatorHref = browserHF
+  ? simulatorPath : new URL(simulatorPath, Astro.site).href;
 const release = ["", "downloads", "mail"].includes(page) ? await publishedRelease() : null;
 const downloadable = release?.status === "available";
 const isProjectPage = ["capabilities", "demos", "research"].includes(page);
-const learn = { title: locale.code === "en" ? "Learn Linkwise" : project.learn, lede: learningDescription };
+const learn = { title: locale.code === "en" ? "Learn HF radio with Linkwise" : project.learn, lede: learningDescription };
 const meta = page === "varac" ? varac : page === "learn" ? learn : page ? t[page] : t.home;
-const title = page === "" ? varac.siteTitle : isProjectPage ? project[page] : meta.title;
-const description = page === "" || isProjectPage ? project.overview : meta.lede || t.downloads.verify;
+const englishSeo = {
+  "": {
+    title: "Linkwise HF Modem | Open-Source Amateur Radio",
+    description: "Explore Linkwise, an open-source Rust HF modem for amateur radio. See tested BW500 chat and Winlink workflows, read the guides, and run the browser simulator.",
+  },
+  demos: {
+    title: "HF Modem and Propagation Demos | Linkwise",
+    description: "Watch BW500 frames decode, follow VarAC chat and Winlink mail demos, and explore HF propagation and antenna patterns on an interactive globe.",
+  },
+  learn: { title: "Learn HF Radio With Linkwise | Hands-On Missions", description: learningDescription },
+};
+const seo = locale.code === "en" ? englishSeo[page] : undefined;
+const title = seo?.title ?? (page === "" ? varac.siteTitle : isProjectPage ? project[page] : meta.title);
+const description = seo?.description ?? (page === "" || isProjectPage ? project.overview : meta.lede || t.downloads.verify);
 const chatBench = base + "/reference/" + locale.code + "/docs/testing/varac-chat.md/";
 const manuals = ["linkwise.1", "linkwise-station.5", "linkwise-modemd.8"];
 const translations = page === "docs" ? catalog() : [];
@@ -54,7 +71,7 @@ const software = page === "" ? {
 
 ---
 <BaseLayout {title} {description} {locale} {page} {t} {software}>
-  {page === "learn" && <LearnPage {locale} {t} {title} {base} />}
+  {page === "learn" && <LearnPage {locale} {t} title={learn.title} {base} {simulatorHref} />}
   {page === "" && <>
     <section class="hero wrap">
       <div><h1>{t.home.title}</h1><p class="lede">{project.overview}</p>
@@ -78,7 +95,8 @@ const software = page === "" ? {
         <article class="card"><h3><a href={link("varac")}>{varac.title}</a></h3><p>{varac.lede}</p></article>
         <article class="card"><h3>{t.guide.title}</h3><p>{t.home.guideLede}</p><a href={link("guide")}>{t.nav.guide}</a></article>
       </div>
-      <p class="media-links"><a href={link("capabilities") + "#station"}>{project.capabilities}</a></p>
+      <p class="media-links"><a href={link("capabilities") + "#station"}>{project.capabilities}</a>
+        <a href={simulatorHref} lang="en" hreflang="en">Open the HF propagation and antenna simulator</a></p>
     </section>
   </>}
   {page === "downloads" && release && <div class="wrap section">
@@ -175,7 +193,7 @@ const software = page === "" ? {
       })}</ul>
     </section>)}
   </article>}
-  {isProjectPage && <ProjectPages {page} {locale} {t} {project} {base} {link} />}
+  {isProjectPage && <ProjectPages {page} {locale} {t} {project} {base} {link} {simulatorHref} />}
 </BaseLayout>
 <script>
   const hint = document.querySelector<HTMLElement>("#platform-suggestion");
