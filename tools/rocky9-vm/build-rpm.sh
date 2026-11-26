@@ -26,7 +26,7 @@ git -C "$repo" archive "$commit" | tar -xf - -C "$source"
 printf '%s\n' "$commit" > "$work/build-revision.txt"
 signing_fixture="$work/rocky-signing-check.sh"
 cp "$here/signing-check.sh" "$signing_fixture"
-image=rockylinux@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6
+image=docker.io/library/rockylinux@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6
 "$container_runtime" run --rm --interactive --platform linux/arm64 -v "$source:/src:Z" \
     -e "LINKWISE_RPM_FLAGS=$rpm_flags" \
     -e "LINKWISE_BUILD_IMAGE=$image" \
