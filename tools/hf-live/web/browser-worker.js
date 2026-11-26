@@ -1,7 +1,9 @@
 import { analyze, loadModem } from "./browser-dsp.js";
 import { loadPathInputs } from "./data/path-inputs.mjs";
+import { readBytes, sha256 } from "./data/weather-inputs.mjs";
 import { createStationMessaging } from "./station-messaging.js";
 import { chooseRadioTuning } from "./radio-policy.js";
+import { getTrainingScenario, TRAINING_ARCHIVE } from "./training-scenarios.mjs";
 
 const TICK_MS = 100;
 const MAX_QUEUE = 6;
@@ -66,15 +68,39 @@ function magnitudeRatio(signal, impairment) {
   return roundDb(10 * Math.log10(Math.max(signal, floor) / Math.max(impairment, floor)));
 }
 
+async function loadTrainingInputs(scenario, signal) {
+  const directory = new URL(`./training-data/v${scenario.version}/`, import.meta.url);
+  const records = await Promise.all(Object.entries(TRAINING_ARCHIVE).map(async ([file, digest]) => {
+    const bytes = await readBytes(new URL(file, directory), 128000, { signal });
+    if (await sha256(bytes) !== digest) throw Error("The training archive did not match its published checksum.");
+    return [new URL(file.replace(/\.gz$/, ""), directory).href, { bytes, gzip: file.endsWith(".gz") }];
+  }));
+  const archive = new Map(records);
+  const inputs = await loadPathInputs(directory, { signal, refresh: false, fetcher: async url => {
+    const file = archive.get(url.href);
+    if (!file) return new Response("", { status: 404 });
+    const body = new Blob([file.bytes]).stream();
+    return new Response(file.gzip ? body.pipeThrough(new DecompressionStream("gzip")) : body);
+  } });
+  const now = Date.parse(scenario.startUtc);
+  const { forecast, weather } = inputs.status(now);
+  if (forecast?.status !== "current" || forecast.rows !== 6 || weather.mode !== "live") {
+    throw Error("The fixed forecast or NOAA input for this lesson is unavailable.");
+  }
+  return inputs;
+}
+
 class Simulation {
-  constructor(modem, inputs, seed, bandwidth, emit) {
+  constructor(modem, inputs, seed, bandwidth, emit, scenario) {
     this.modem = modem;
     this.inputs = inputs;
     this.stations = inputs.stations;
     this.bands = inputs.bands;
+    this.scenario = scenario;
+    this.scenarioTime = scenario ? Date.parse(scenario.startUtc) : null;
     this.seed = seed;
     this.bandwidth = bandwidth;
-    this.forecastWatts = inputs.status().forecast?.assumptions?.tx_power_w ?? REFERENCE_WATTS;
+    this.forecastWatts = inputs.status(this.scenarioTime ?? undefined).forecast?.assumptions?.tx_power_w ?? REFERENCE_WATTS;
     this.emit = emit;
     this.running = true;
     this.elapsed = 0;
@@ -95,12 +121,17 @@ class Simulation {
     this.successesByBand = this.stations.map(() => this.bands.map(() => 0));
     this.counts = { generated: 0, attempted: 0, delivered: 0, failed: 0, retried: 0, dropped: 0, aborted: 0, overlapped: 0 };
     this.userFrames = new Set();
+    this.messageAttempts = new Map();
     this.radioHistory = new Map();
     this.messaging = createStationMessaging({
-      emit: value => this.emit("station-message", value),
+      emit: value => this.stationMessage(value),
       sendFrame: (source, target, payload, metadata) => this.sendUserFrame(source, target, payload, metadata),
       frameBytes: modem.payloadCapacity,
     });
+  }
+
+  now() {
+    return this.scenarioTime === null ? Date.now() : this.scenarioTime + Math.round(this.elapsed * 1000);
   }
 
   stats() {
@@ -112,6 +143,7 @@ class Simulation {
   }
 
   status() {
+    const { forecast, weather } = this.inputs.status(this.now());
     return {
       running: this.running,
       error: null,
@@ -119,7 +151,9 @@ class Simulation {
       stats: this.stats(),
       medium: "shared",
       interference: "none",
-      ...this.inputs.status(),
+      forecast,
+      weather: this.scenario ? { ...weather, origin: "archive" } : weather,
+      scenario: this.scenario,
     };
   }
 
@@ -140,6 +174,49 @@ class Simulation {
 
   notify(attempt) {
     this.emit("attempt", { attempt, stats: this.stats(), elapsed_s: this.elapsed });
+  }
+
+  stationMessage(value) {
+    const attempts = Array.from(this.messageAttempts.get(value.id)?.values() ?? []);
+    const terminal = value.state === "delivered" || value.state === "failed";
+    const samples = attempts.reduce((total, row) => total + row.transmittedSamples, 0);
+    this.emit("station-message", {
+      ...value,
+      radioEvidence: {
+        scenarioId: this.scenario?.id ?? null, scenarioVersion: this.scenario?.version ?? null,
+        bandwidthHz: this.bandwidth, frameCount: new Set(attempts.map(row => row.frameNumber)).size,
+        airtimeS: samples / this.modem.rate, retries: attempts.filter(row => row.retry > 0).length,
+        outcome: terminal ? value.state : "pending",
+        attempts: attempts.map(({ transmittedSamples, ...row }) => ({
+          ...row, airtimeS: transmittedSamples / this.modem.rate,
+        })),
+      },
+    });
+    if (terminal) this.messageAttempts.delete(value.id);
+  }
+
+  recordMessageAttempt(message, attempt, state, transmittedSamples) {
+    const { id, frameNumber } = message.metadata ?? {};
+    if (typeof id !== "string" || !Number.isInteger(frameNumber)) return;
+    if (!this.messageAttempts.has(id)) this.messageAttempts.set(id, new Map());
+    const entries = this.messageAttempts.get(id);
+    const pending = entries.get(attempt.id);
+    entries.set(attempt.id, {
+      attemptId: attempt.id, frameNumber, band: attempt.band,
+      frequencyMHz: this.bands.find(band => band.id === attempt.band)?.frequency_mhz,
+      powerW: attempt.power_w, retry: attempt.retry, state, predictedSnrDb: attempt.snr_db,
+      measuredSinrDb: attempt.measured_sinr_db,
+      transmittedSamples: transmittedSamples ?? pending?.transmittedSamples ?? 0,
+    });
+  }
+
+  sendMessage(request) {
+    if (this.scenario && (request?.from !== this.scenario.source || request?.to !== this.scenario.target)) {
+      this.stationMessage({ id: request?.id, from: request?.from, to: request?.to, kind: request?.kind,
+                            state: "failed", error: "Use the preset station pair for this lesson." });
+      return;
+    }
+    return this.messaging.send(request);
   }
 
   sendUserFrame(sourceId, targetId, payload, metadata) {
@@ -225,6 +302,15 @@ class Simulation {
 
   close() {
     this.running = false;
+    for (const pair of this.active.values()) {
+      if (pair.tuning) {
+        const samples = Math.min(
+          Math.round(pair.attempt.airtime_s * this.modem.rate),
+          Math.round((this.elapsed - pair.transmission.started) * this.modem.rate),
+        );
+        this.recordMessageAttempt(pair.message, pair.attempt, "aborted", samples);
+      }
+    }
     for (const message of this.userFrames) this.settleFrame(message, null);
     this.messaging.close();
   }
@@ -310,7 +396,7 @@ class Simulation {
     const overdue = queued.filter(message => message.payload && message.deadline <= this.elapsed)
       .sort((a, b) => a.deadline - b.deadline || a.id - b.id)[0];
     if (overdue && overdue.listenBand == null) {
-      overdue.listenBand = this.chooseTuning(overdue, available, using, Date.now()).band;
+      overdue.listenBand = this.chooseTuning(overdue, available, using, this.now()).band;
     }
     let reserving = Boolean(overdue);
     const pending = queued.filter(message => message.ready <= this.elapsed || message === overdue)
@@ -335,7 +421,7 @@ class Simulation {
       }
       let chosen = 0;
       let best = -Infinity;
-      const now = Date.now();
+      const now = this.now();
       let tuning;
       if (message.payload) {
         tuning = this.chooseTuning(message, eligible, using, now);
@@ -395,6 +481,7 @@ class Simulation {
       }
       this.retain(pair, tx);
       this.active.set(id, pair);
+      if (tuning) this.recordMessageAttempt(message, attempt, "transmitting", tx.length);
       this.notify(attempt);
       if (tuning) this.radio(message, "transmitting", tuning, { attempt_id: id });
     }
@@ -487,6 +574,7 @@ class Simulation {
         state, decode_status: state, simulated_at_s: this.elapsed, profile: PROFILE,
         measured_snr_db: snr, measured_sinr_db: sinr, interferers: pair.overlaps.map(other => other.id),
       };
+      if (tuning) this.recordMessageAttempt(message, pair.attempt, state);
       this.recent.unshift(pair.attempt);
       if (this.recent.length > RECENT_EVENTS) this.recent.pop();
       this.notify(pair.attempt);
@@ -494,9 +582,12 @@ class Simulation {
   }
 
   advance() {
+    // The training clock advances only with an actual queued or active frame.
+    // Operator interactions and cryptography scheduling cannot move the RF epoch.
+    if (this.scenario && !this.userFrames.size) return;
     this.elapsed = this.tick * TICK_MS / 1000;
     this.complete();
-    this.generate();
+    if (!this.scenario) this.generate();
     this.start();
     if (this.tick % (1000 / TICK_MS) === 0) this.emit("status", this.status());
     this.tick++;
@@ -536,7 +627,8 @@ function fail(error) {
 function pump() {
   try {
     simulation.advance();
-    nextTick = Math.max(nextTick + TICK_MS, performance.now() - 200);
+    const rate = simulation.userFrames.size ? simulation.scenario?.playbackRate ?? 1 : 1;
+    nextTick = Math.max(nextTick + TICK_MS / rate, performance.now() - 200);
     timer = setTimeout(pump, Math.max(0, nextTick - performance.now()));
   } catch (error) {
     fail(error);
@@ -555,12 +647,15 @@ self.addEventListener("message", async ({ data }) => {
       return;
     } else if (data.type === "start") {
       if (simulation) return;
+      const scenario = getTrainingScenario(data.scenarioId);
+      if (data.scenarioId != null && !scenario) throw Error("This training scenario is unavailable.");
       const [modem, inputs] = await Promise.all([
         loadModem(data.bandwidth),
-        loadPathInputs(new URL("./data/", import.meta.url), { signal: lifecycle.signal }),
+        scenario ? loadTrainingInputs(scenario, lifecycle.signal)
+          : loadPathInputs(new URL("./data/", import.meta.url), { signal: lifecycle.signal }),
       ]);
       if (closed) return;
-      simulation = new Simulation(modem, inputs, data.seed >>> 0, data.bandwidth, send);
+      simulation = new Simulation(modem, inputs, scenario?.seed ?? (data.seed >>> 0), data.bandwidth, send, scenario);
       send("snapshot", simulation.snapshot());
       nextTick = performance.now();
       pump();
@@ -576,7 +671,7 @@ self.addEventListener("message", async ({ data }) => {
       const { status, value, transfer = [] } = simulation?.capture(data) ?? { status: 503 };
       self.postMessage({ type: "capture", id: data.id, status, value }, transfer);
     } else if (data.type === "send-message" && simulation) {
-      await simulation.messaging.send(data.request);
+      await simulation.sendMessage(data.request);
     }
   } catch (error) {
     // A capture is optional, so an unavailable waveform should not take down

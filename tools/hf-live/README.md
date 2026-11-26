@@ -1,5 +1,12 @@
 # Live HF station simulator
 
+The GitHub Pages [Learn page](https://8r4n.github.io/linkwise/learn/) links to
+four browser-local missions. Learners compare TX and RX, deliver an
+authenticated message, diagnose a weak link, and compare BW500 with BW2300.
+Training runs use bundled channel inputs and a fixed simulation clock.
+The Missions panel saves progress in the browser and offers a reset for
+another practice run.
+
 Run autonomous stations on three shared simulated HF channels and watch their
 packet attempts on a live Cesium globe. The default run starts 24 synthetic
 stations. A station generates its own traffic, chooses an available band using

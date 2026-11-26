@@ -25,7 +25,7 @@ export const locales = [
   { code: "ru", name: "Русский" },
   { code: "de", name: "Deutsch" },
 ];
-export const pages = ["", "downloads", "mail", "winlink", "varac", "guide", "docs", "capabilities", "demos", "research"];
+export const pages = ["", "downloads", "mail", "winlink", "varac", "guide", "docs", "capabilities", "demos", "learn", "research"];
 export const groups = {
   nav: ["downloads", "mail", "winlink", "guide", "docs"],
   ui: ["skip", "navigation", "language", "agents", "source", "english", "fallback", "translation", "manuals"],

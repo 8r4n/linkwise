@@ -42,6 +42,7 @@ const browserHF = existsSync("public/hf-simulation/bw500_browser.wasm");
     </>}
     {page === "demos" && <>
       <p class="lede">Watch the modem decode audio and follow the chat and mail workflows each bench demonstrated.</p>
+      <p class="media-links"><a href={link("learn")}>Try the guided HF missions</a></p>
       <nav class="jump" aria-label="Demos">
         {browserHF && <a href="#browser-hf">Browser HF simulation</a>}
         <a href="#hf-routing-results">HF routing experiment</a><a href="#three-hf-links">Three HF links</a><a href="#waveform">Waveform</a><a href="#winlink">Winlink Express</a><a href="#chat-and-mail">Chat and mail</a>

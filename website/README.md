@@ -36,6 +36,10 @@ next clear turn on one band while current traffic finishes. Marginal paths
 and interference can exhaust the retry budget. This is a frame-level
 simulation with browser-local mail delivery.
 
+The site’s **Learn** page links to four guided missions. Training uses preset
+simulated links and messages. Mission progress and the HF Operator badge are
+stored in the browser.
+
 The Pages build prepares the assets automatically. For local development,
 install the Rust WASM target and prepare the page before running Astro.
 
@@ -65,7 +69,7 @@ build and demo links. The downloads and setup pages link directly to GitHub's
 release notes, bug report form, and open issue list. Support requests stay with
 the repository.
 
-The capabilities, demos, and research pages use the shared locale navigation.
+The capabilities, demos, Learn, and research pages use the shared locale navigation.
 Detailed technical content is provided in English. Update the evidence and
 media inventory in `src/project-content.mjs` and the linked research sources
 when refreshing the site. Render the two beacon thumbnails from the current

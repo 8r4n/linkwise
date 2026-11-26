@@ -1,0 +1,85 @@
+.learning-panel {
+  margin-bottom: 16px;
+  padding: clamp(12px, 2vw, 20px);
+}
+#station-console[data-learning-locked] { display: none !important; }
+.learning-panel > * + * { margin-top: 12px; }
+.learning-heading,
+.learning-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.learning-heading { justify-content: space-between; }
+.learning-heading h2 { font-size: 1.25rem; }
+.learning-panel :is(p, dt, label) { line-height: 1.45; }
+#learning-progress, #learning-route, #learning-storage, .learning-panel dt {
+  color: var(--muted);
+  font-size: .85rem;
+}
+#learning-status:empty, #learning-evidence:empty { display: none; }
+#learning-status { color: var(--teal); }
+.learning-badge {
+  padding: 4px 10px;
+  border: 1px solid var(--teal);
+  border-radius: 999px;
+  color: var(--teal);
+  font-size: .83rem;
+  font-weight: 700;
+}
+.learning-link, .learning-panel button, .learning-panel summary {
+  min-height: 44px;
+  padding: .5rem .75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--teal);
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.learning-link { display: inline-flex; align-items: center; }
+#browser-learning { margin-top: 8px; }
+.learning-link:hover, .learning-panel :is(button, summary):hover { border-color: var(--teal); }
+.learning-panel button:disabled { cursor: default; opacity: .6; }
+.learning-link:focus-visible, .learning-panel :is(a, summary):focus-visible,
+.learning-panel label:focus-within, #learning-progress:focus {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+}
+.learning-panel footer { align-items: flex-start; }
+.learning-panel details p { max-width: 32ch; margin-block: 8px; color: var(--muted); }
+.learning-panel summary { padding-block: .6rem; }
+#learning-prerequisite a { color: var(--teal); }
+.learning-trials {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.learning-trial {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.learning-trial dl { margin: 0; }
+.learning-trial dl > div { margin-block: .3rem; }
+.learning-trial dd { margin: 0; }
+.learning-panel fieldset {
+  min-inline-size: 0;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+}
+.learning-panel legend { margin-block-end: 6px; padding: 0; font-weight: 650; }
+.learning-panel label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px;
+}
+.learning-panel input[type="radio"] { accent-color: var(--teal); }
+@media (max-width: 530px) {
+  .learning-trials { grid-template-columns: 1fr; }
+}

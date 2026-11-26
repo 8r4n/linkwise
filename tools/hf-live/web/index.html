@@ -8,6 +8,7 @@
     <title>Linkwise | Live HF simulation</title>
     <link rel="stylesheet" href="./vendor/Widgets/widgets.css">
     <link rel="stylesheet" href="./style.css">
+    <link rel="stylesheet" href="./learning.css">
     <script src="./vendor/Cesium.js" defer></script>
     <script src="./vendor/sigplot.js" defer></script>
     <script src="./app.js" type="module"></script>
@@ -30,6 +31,7 @@
         <div>
           <h1>Live HF simulation</h1>
           <p id="simulation-description">Autonomous stations exchange simulated traffic over shared HF bands.</p>
+          <a id="browser-learning" class="learning-link" href="../learn/" hidden>HF learning missions</a>
         </div>
         <div class="runtime" aria-label="Simulation run">
           <span id="model-name">Waiting for model</span>
@@ -56,6 +58,33 @@
         <div><dt>Dropped</dt><dd id="dropped">—</dd></div>
         <div><dt>Queued</dt><dd id="queued">—</dd></div>
       </dl>
+      <section id="learning-panel" class="panel learning-panel" aria-labelledby="learning-title" hidden>
+        <div class="learning-heading">
+          <div>
+            <h2 id="learning-title"></h2>
+            <p id="learning-progress" tabindex="-1"></p>
+          </div>
+          <p id="learning-badge" class="learning-badge" hidden></p>
+        </div>
+        <p id="learning-objective"></p>
+        <p id="learning-prerequisite" hidden>Complete <a></a> to unlock this mission.</p>
+        <p id="learning-route"></p>
+        <div id="learning-actions" class="learning-actions"></div>
+        <p id="learning-status" role="status"></p>
+        <a id="learning-signal" class="learning-link" href="#waveform-title" hidden>Inspect matched burst</a>
+        <div id="learning-evidence"></div>
+        <form id="learning-quiz" hidden></form>
+        <p id="learning-storage" hidden>Progress is available for this visit. Browser storage is unavailable.</p>
+        <footer class="learning-actions">
+          <a class="learning-link" href="../learn/">All missions</a>
+          <a class="learning-link" href="./">Free simulation</a>
+          <details id="learning-reset-options">
+            <summary>Reset learning progress</summary>
+            <p>Clear completed missions and comparison trials on this browser.</p>
+            <button type="button" id="learning-reset">Clear progress</button>
+          </details>
+        </footer>
+      </section>
       <section id="station-console" hidden></section>
       <div class="dashboard">
         <section class="panel map-panel" aria-labelledby="map-title">
