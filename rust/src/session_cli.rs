@@ -7,16 +7,14 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-    net::{
-        TcpStream,
-        tcp::{OwnedReadHalf, OwnedWriteHalf},
-    },
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
     sync::mpsc,
     time::timeout,
 };
 
 use crate::frame_cli::Failure;
+pub(crate) use linkwise::winlink::host_session::Control;
 
 const CHUNK: usize = 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(90);
@@ -176,93 +174,6 @@ async fn send(
         biased;
         result = transfer => result,
         result = discard_inbound => result.map_err(Into::into),
-    }
-}
-
-pub(crate) struct Control {
-    read: BufReader<OwnedReadHalf>,
-    write: OwnedWriteHalf,
-    prefix: Vec<u8>,
-}
-
-impl Control {
-    pub(crate) fn new(stream: TcpStream) -> Self {
-        let (read, write) = stream.into_split();
-        Self {
-            read: BufReader::new(read),
-            write,
-            prefix: Vec::new(),
-        }
-    }
-
-    pub(crate) async fn line(&mut self) -> io::Result<String> {
-        loop {
-            let bytes = self.read.fill_buf().await?;
-            if bytes.is_empty() {
-                return Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "modem command port closed",
-                ));
-            }
-            let end = bytes.iter().position(|&byte| byte == b'\r');
-            let count = end.unwrap_or(bytes.len());
-            if self.prefix.len() + count > 1024 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "oversized modem notice",
-                ));
-            }
-            self.prefix.extend_from_slice(&bytes[..count]);
-            self.read.consume(count + usize::from(end.is_some()));
-            if end.is_some() {
-                return String::from_utf8(std::mem::take(&mut self.prefix))
-                    .map_err(io::Error::other);
-            }
-        }
-    }
-
-    pub(crate) async fn request(&mut self, command: &str) -> io::Result<()> {
-        self.write
-            .write_all(format!("{command}\r").as_bytes())
-            .await
-    }
-
-    pub(crate) async fn command(&mut self, command: &str) -> io::Result<()> {
-        self.request(command).await?;
-        loop {
-            match self.line().await?.as_str() {
-                "OK" => return Ok(()),
-                "WRONG" => return Err(io::Error::other(format!("modem rejected {command}"))),
-                "IAMALIVE" => continue,
-                other => {
-                    return Err(io::Error::other(format!(
-                        "unexpected modem response: {other}"
-                    )));
-                }
-            }
-        }
-    }
-
-    pub(crate) async fn acknowledged(&mut self, size: usize) -> io::Result<()> {
-        let mut pending = 0usize;
-        let mut acknowledged = 0usize;
-        loop {
-            let line = self.line().await?;
-            if line == "DISCONNECTED" {
-                return Err(io::Error::new(
-                    io::ErrorKind::ConnectionAborted,
-                    "modem disconnected with unconfirmed bytes",
-                ));
-            }
-            if let Some(value) = line.strip_prefix("BUFFER ") {
-                let current: usize = value.parse().map_err(io::Error::other)?;
-                acknowledged += pending.saturating_sub(current);
-                pending = current;
-                if pending == 0 && acknowledged >= size {
-                    return Ok(());
-                }
-            }
-        }
     }
 }
 
