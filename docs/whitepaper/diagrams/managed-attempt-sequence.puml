@@ -1,0 +1,44 @@
+@startuml Linkwise_Managed_Attempt
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 10
+skinparam sequenceMessageAlign center
+skinparam sequenceLifeLineBorderColor #9BA8AE
+skinparam ArrowColor #2A9D8F
+hide footbox
+
+participant "MCP client" as Client #EFF5F8
+participant "Station service" as Station #EFF5F8
+participant "Simulated radio" as Radio
+participant "Virtual modem pair\n+ B2F peers" as Pair
+
+Client -> Station: Prepare channel
+Station -> Radio: Configure + read back
+Radio --> Station: Verified RX state
+Station --> Client: Prepared handle
+Client -> Station: Authorize preparation
+Station --> Client: Single-use grant
+Client -> Station: Start (handle + grant)
+Station -> Station: Recheck and journal\nRetain lease
+Station --> Client: Attempt ID
+Station -> Pair: Spawn and attach with tokens\nCommand, DATA and PCM
+Pair --> Station: Listener ready, then link-up
+
+alt Normal completion
+  Pair --> Station: B2F delivery + clean close
+  Station -> Station: Verify both attachment hashes
+else Abort after peer connection
+  Client -> Station: Abort attempt
+  Station -> Pair: Cancel clients and PCM relay
+end
+
+Station -> Pair: Stop and reap both modems
+Station -> Radio: Confirm key-down
+Station -> Station: Journal and release lease\nInhibit on cleanup failure
+Station --> Client: Status or abort result
+note over Client, Pair #EFF5F8
+  Radio-free fixture. CMS and recipient status unknown.
+end note
+@enduml

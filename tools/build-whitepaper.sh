@@ -7,6 +7,19 @@ PLANTUML="${LINKWISE_PLANTUML:-plantuml}"
 TECTONIC="${LINKWISE_TECTONIC:-tectonic}"
 JAVA_HOME="${LINKWISE_JAVA_HOME:-${JAVA_HOME:-}}"
 
+if [ "$#" -gt 1 ]; then
+  printf 'Usage: %s [--reference]\n' "$0" >&2
+  exit 2
+fi
+case "${1:-}" in
+  '') paper=linkwise-architecture-whitepaper.tex ;;
+  --reference) paper=linkwise-architecture-reference.tex ;;
+  *)
+    printf 'Usage: %s [--reference]\n' "$0" >&2
+    exit 2
+    ;;
+esac
+
 # Prefer a workspace-local JRE when one is provisioned. This also avoids
 # macOS's /usr/bin/java launcher masking the absence of an installed runtime.
 if [ -z "$JAVA_HOME" ] &&
@@ -42,14 +55,21 @@ done
 
 cd "$WHITEPAPER_DIR"
 mkdir -p build/diagrams
+if [ "$paper" = linkwise-architecture-reference.tex ]; then
+  set -- diagrams/*.puml
+else
+  set -- diagrams/station-as-built.puml \
+    diagrams/managed-attempt-sequence.puml \
+    diagrams/commissioned-transmit-boundary.puml
+fi
 
 # PlantUML is the source of truth. Its standalone LaTeX output is compiled to
 # vector PDFs, which the main paper includes as figures.
 "$PLANTUML" --check-before-run --stop-on-error --latex \
   -Playout=smetana \
-  --output-dir "$WHITEPAPER_DIR/build/diagrams" diagrams/*.puml
+  --output-dir "$WHITEPAPER_DIR/build/diagrams" "$@"
 
-for diagram in diagrams/*.puml; do
+for diagram do
   diagram_name=$(sed -n 's/^@startuml[[:space:]]*\([^[:space:]]*\).*/\1/p' "$diagram" | sed -n '1p')
   if [ -z "$diagram_name" ]; then
     printf 'Could not determine PlantUML diagram name from %s.\n' "$diagram" >&2
@@ -65,4 +85,4 @@ for diagram in diagrams/*.puml; do
 done
 
 "$TECTONIC" --keep-logs --keep-intermediates --outdir build \
-  linkwise-architecture-whitepaper.tex
+  "$paper"

@@ -1,0 +1,40 @@
+@startuml Linkwise_Transmit_Boundary
+!theme plain
+top to bottom direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 10
+skinparam packageStyle rectangle
+skinparam ArrowColor #2A9D8F
+skinparam nodesep 18
+skinparam ranksep 22
+
+package "Commissioned transmit boundary (target)" {
+  rectangle "Transmit requests\nStation, modem or client" as Request #EFF5F8
+  rectangle "Installed policy\nLease + verified settings" as Policy #EFF5F8
+  rectangle "PTT arbiter\nOne-use permit\nTime and duty limits" as Arbiter #EFF5F8
+  rectangle "Qualified key and audio gates\nCAT, PTT line, modem keying, VOX" as Gates
+  rectangle "Fail-safe hardware inhibit" as Inhibit #F6F2E9
+  rectangle "Radio transmitter" as TX
+  rectangle "Measured PTT / RF\nLatch if release unknown" as Sense
+
+  Request -down-> Arbiter
+  Policy -down-> Arbiter
+  Arbiter -down-> Gates : permit
+  Gates -down-> Inhibit : all keying paths
+  Inhibit -down-> TX
+  TX -right-> Sense : actual state
+  Sense -up-> Arbiter : confirm release
+}
+
+rectangle "Independent watchdog\nExpiry or controller loss" as Watchdog #F6F2E9
+rectangle "Physical emergency stop" as Stop #F6F2E9
+rectangle "Current native preview\nExternal PTT remains unqualified" as Preview #F5F6F7
+
+Arbiter -right-> Watchdog : deadline
+Watchdog -right-> Inhibit : force inhibit
+Stop -right-> Inhibit : force inhibit
+Watchdog -[hidden]down-> Stop
+TX -[hidden]down-> Preview
+@enduml

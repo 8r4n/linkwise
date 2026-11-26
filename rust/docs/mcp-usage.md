@@ -158,9 +158,10 @@ control is writable and the configured policy permits the value):
 The catalog is backend-discovered and includes common controls plus generic
 Hamlib levels, functions, and parameters. Memory contents/records, vendor
 extension invocation, typed parameter enums, some non-control rig operations,
-external-controller revision tracking, and transmit authorization/watchdog
-remain incomplete. Modem and Winlink operations are not implemented by this
-MCP server.
+external-controller revision tracking, and physical transmit authorization
+and watchdog integration remain incomplete. The shadow station below can
+supervise a local virtual BW500 and B2F peer fixture. Commissioned radio
+operation and live Winlink gateway sessions require separate qualification.
 
 ## Station inventory and shadow operation
 
