@@ -53,7 +53,8 @@ for (const [source, replacement] of [
   ['<html lang="en">', '<html lang="en" data-mode="browser">'],
   ["<title>Linkwise | Live HF simulation</title>", `<title>${title} | Linkwise</title>
     <meta name="description" content="${description}">
-    <link rel="canonical" href="${canonical}">`],
+    <link rel="canonical" href="${canonical}">
+    <link rel="describedby" type="text/plain" href="/linkwise/llms.txt">`],
   ["<h1>Live HF simulation</h1>", `<h1>${title}</h1>
           <p>${introduction}</p>`],
 ]) {

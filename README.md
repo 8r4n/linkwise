@@ -1,9 +1,9 @@
 # Linkwise
 
-[Linkwise HF modem](https://8r4n.github.io/linkwise/) · [HF propagation and antenna simulator](https://8r4n.github.io/linkwise/hf-simulation/)
+[Linkwise HF modem](https://8r4n.github.io/linkwise/) · [HF propagation and antenna simulator](https://8r4n.github.io/linkwise/hf-simulation/) · [Documentation index for agents](https://8r4n.github.io/linkwise/llms.txt)
 
-Linkwise is an independent, cross-platform Rust modem and automated link
-control research project. Its long-term goal is to implement a native modem
+Linkwise is an open-source Rust HF modem and automated link-control research
+project for amateur radio. Its long-term goal is to implement a native modem
 that interoperates with an unmodified VARA HF installation on macOS, Windows,
 and Linux, while enabling AI systems to manage and optimize Winlink links
 through safe, observable, policy-controlled tools.
@@ -12,9 +12,61 @@ VARA HF is the interoperability target. Linkwise is a separate implementation:
 it is not a redistribution of VARA software, decompiled source, or proprietary
 assets.
 
+[![Cesium replay showing four simulated HF stations between Spain and Norway over the nighttime Earth](docs/media/demos/three-hf-links.webp)](https://8r4n.github.io/linkwise/demos/#three-hf-links)
+
+*Follow a three-hop HF message replay from Spain to Norway. The [interactive simulator](https://8r4n.github.io/linkwise/hf-simulation/) lets you inspect individual modem bursts.*
+
+[Try the antenna comparison](#how-antenna-heading-affects-hf-decoding) · [Connect an agent to a simulated radio](#connect-an-agent-to-a-simulated-radio) · [Check modem downloads](https://8r4n.github.io/linkwise/downloads/)
+
+## What works today
+
+- The browser simulator runs a network of 48 stations with Linkwise BW500,
+  BW2300, and BW2750 modem modes. Use Antenna Lab to compare how antenna
+  heading affects HF decoding.
+- The source build supports direct BW500 terminal chat and Open B2F mail
+  forwarding. The [VarAC bench guide](https://8r4n.github.io/linkwise/varac/)
+  records tested interoperability and its scope.
+- A local Model Context Protocol (MCP) server exposes simulated-radio state
+  and control discovery over stdio. The [capability and test summary](https://8r4n.github.io/linkwise/capabilities/)
+  describes the scenarios qualified so far.
+
+## First run
+
+### How antenna heading affects HF decoding
+
+1. Open the [HF propagation and antenna simulator](https://8r4n.github.io/linkwise/hf-simulation/)
+   in a browser. Complete [Read a burst](https://8r4n.github.io/linkwise/hf-simulation/?mission=read-burst)
+   by sending the training burst, comparing its TX and RX captures, and
+   answering the question.
+2. In the same browser, open [Antenna Lab](https://8r4n.github.io/linkwise/hf-simulation/?lab=antenna).
+   Choose **Run aligned Yagi** and **Run off-axis Yagi** in the transmit exercise.
+   Both trials use 1 W of conducted power on the same simulated 20 m link.
+3. Open **Inspect received burst** after each run and compare the measurements.
+
+| Transmit antenna | EIRP toward Athens | Measured SINR | BW500 result |
+| --- | ---: | ---: | --- |
+| Yagi aimed along the path | 5.49 W | +15.99 dB | Exact frame verified |
+| Same Yagi, 90° off axis | 0.055 W | −4.01 dB | Decode failed |
+
+The [20 m antenna gain study](https://8r4n.github.io/linkwise/research/antenna-gain/)
+records the frozen fixture, the receive-port comparison, and the source
+revision used to verify the results.
+
+### Connect an agent to a simulated radio
+
+Follow the [simulated-radio MCP quickstart](rust/docs/mcp-usage.md#simulated-radio-mcp-quickstart)
+to build a pinned source revision and try the local stdio server. Discover the
+tools with `tools/list` and confirm that `radio_get_state` returns the simulated
+radio state. The quickstart runs entirely in software.
+
 Explore the [offline Cesium RF globe](globe/README.md) to replay simulated network traffic, inspect HF circuits, and view archived ionospheric conditions.
 
 ## Install the modem preview
+
+Check [Downloads](https://8r4n.github.io/linkwise/downloads/) or the
+[machine-readable release manifest](https://8r4n.github.io/linkwise/releases.json)
+for current installer availability. If installers are pending, use the hosted
+simulator or the pinned source quickstart above.
 
 Follow the installation guide for
 [macOS](docs/install/macos.md), [Windows](docs/install/windows.md),

@@ -27,6 +27,7 @@ assert.equal((await releaseManifest(mock([{ ...release, assets: assets.slice(1) 
 assert.equal((await releaseManifest(mock([{ ...release, draft: true }]))).status, "pending");
 
 const manifest = JSON.parse(await readFile(dist + "/releases.json", "utf8"));
+assert.ok(["available", "pending"].includes(manifest.status), "Unknown installer availability");
 assert.equal(manifest.installers.length, manifest.status === "available" ? 8 : 0);
 for (const { id } of deploymentBuilds) {
   assert.ok(!manifest.installers.some(installer => installer.id === id), id);
@@ -51,6 +52,26 @@ const iconName = "github-invertocat-white.svg";
 assert.deepEqual(await readFile(dist + "/" + iconName),
   await readFile(new URL("../../tools/hf-live/web/" + iconName, import.meta.url)));
 
+const readme = await readFile(new URL("../../README.md", import.meta.url), "utf8");
+assert.match(readme, /^## First run\s*$/m);
+assert.match(readme, /^## What works today\s*$/m);
+const repositorySources = repository + "/blob/main/";
+const mcpGuide = "rust/docs/mcp-usage.md";
+const stationEvidence = "docs/architecture/station-integration-status.md";
+assert.match(await readFile(new URL("../../" + mcpGuide, import.meta.url), "utf8"),
+  /^## Simulated radio MCP quickstart\s*$/m);
+assert.ok((await stat(new URL("../../" + stationEvidence, import.meta.url))).isFile());
+const agentSourceLinks = new Set([
+  repository, repository + "#first-run", repository + "#what-works-today", supportLinks.releases,
+  repositorySources + mcpGuide + "#simulated-radio-mcp-quickstart", repositorySources + stationEvidence,
+]);
+
+function checkAgentDiscovery(html, href, path) {
+  const head = html.split("</head>", 1)[0];
+  assert.deepEqual(Array.from(head.matchAll(/<link rel="describedby" type="text\/plain" href="([^"]+)"/g),
+    ([, url]) => url), [href], path);
+}
+
 const hfEntry = dist + simulatorPath + "index.html";
 const hfPage = await readFile(hfEntry, "utf8").catch(error => {
   if (error.code !== "ENOENT" || process.env.GITHUB_ACTIONS === "true") throw error;
@@ -68,6 +89,7 @@ assert.match(nativeDashboard, /<title>Linkwise \| Live HF simulation<\/title>/);
 assert.match(nativeDashboard, /<h1>Live HF simulation<\/h1>/);
 if (hfPage) {
   assert.match(hfPage, /data-mode="browser"/);
+  checkAgentDiscovery(hfPage, "/linkwise/llms.txt", simulatorPath);
   assert.match(hfPage, /<title>HF Propagation and Antenna Simulator \| Linkwise<\/title>/);
   assert.match(hfPage, /<h1>HF Propagation and Antenna Simulator<\/h1>/);
   assert.ok(hfPage.includes('name="description" content="Explore HF propagation and antenna gain in a browser simulator. Run 48 stations, compare antenna patterns, and inspect transmitted and received HF modem signals."'));
@@ -126,6 +148,11 @@ execFileSync(process.execPath, ["--test", "../tools/hf-live/test_learning.mjs",
 
 async function checkHtml(path, code, dir, alternateLocales = locales) {
   const html = await readFile(dist + path + "index.html", "utf8");
+  const agentIndexPath = "/linkwise" + pagePath(code) + "llms.txt";
+  checkAgentDiscovery(html, agentIndexPath, path);
+  const visibleAgentLinks = Array.from(html.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g))
+    .filter(([, href]) => href === agentIndexPath);
+  assert.equal(visibleAgentLinks.length, 1, path + " should have one visible agent link");
   assert.ok(html.includes('<html lang="' + code + '" dir="' + dir + '">'), path);
   assert.ok(html.includes('rel="canonical" href="' + origin + path + '"'), path);
   assert.match(html, /<h1(?:\s|>)/, path);
@@ -288,14 +315,20 @@ for (const { code, dir = "ltr" } of locales) {
   const guide = await readFile(dist + "/guides/" + code + ".md", "utf8");
   assert.ok(guide.includes(t.guide.title) && guide.includes("linkwise qsl card"));
   const agents = await readFile(dist + pagePath(code) + "llms.txt", "utf8");
-  for (const page of ["capabilities", "demos", "learn", "research"]) {
-    assert.ok(agents.includes(origin + pagePath(code, page)), code + " " + page);
+  assert.match(agents, /^# Linkwise\n/);
+  assert.ok(agents.includes("If installers are pending, use the browser simulator or build from source."), code);
+  const agentLinks = new Set(Array.from(agents.matchAll(/\]\((https:\/\/[^)]+)\)/g), ([, url]) => url));
+  const requiredAgentLinks = [
+    ...agentSourceLinks, origin + simulatorPath, origin + articlePath, origin + "/releases.json",
+    ...["capabilities", "demos", "learn", "research", "varac"].map(page => origin + pagePath(code, page)),
+    ...["#station", "#build"].map(anchor => origin + pagePath(code, "capabilities") + anchor),
+    ...["#chat-verification", "#mail-client-tests", "#performance"].map(anchor => origin + pagePath(code, "guide") + anchor),
+  ];
+  for (const href of requiredAgentLinks) {
+    assert.ok(agentLinks.has(href), code + " " + href);
   }
-  assert.ok(agents.includes(origin + pagePath(code, "varac")), code + " VarAC");
-  for (const anchor of ["chat-verification", "mail-client-tests", "performance"]) {
-    assert.ok(agents.includes(origin + pagePath(code, "guide") + "#" + anchor), code + " " + anchor);
-  }
-  for (const [, href] of agents.matchAll(/\]\((https:\/\/[^)]+)\)/g)) {
+  for (const href of agentLinks) {
+    if (agentSourceLinks.has(href) || (!hfPage && href === origin + simulatorPath)) continue;
     assert.ok(href.startsWith(origin + "/"), href);
     const { pathname, hash } = new URL(href);
     const target = dist + pathname.slice("/linkwise".length) + (pathname.endsWith("/") ? "index.html" : "");
@@ -304,4 +337,4 @@ for (const { code, dir = "ltr" } of locales) {
   }
 }
 
-console.log(locales.length + " locales, " + reference.length + " references per locale, manual downloads, canonical URLs, and internal links passed.");
+console.log(locales.length + " locales, " + reference.length + " references per locale, manual downloads, canonical URLs, agent discovery, and internal links passed.");

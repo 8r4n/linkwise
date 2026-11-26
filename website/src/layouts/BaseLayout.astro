@@ -9,6 +9,7 @@ import { websiteLabels } from "../../../docs/i18n/website-upgrade.mjs";
 
 const { title, description, locale, page, reference, t, software, singleLanguage } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const agentIndex = base + pagePath(locale.code) + "llms.txt";
 const project = websiteLabels(locale.code);
 const navigation = ["downloads", "demos", "learn", "capabilities", "guide", "research", "docs"].map(path => [path, project[path] ?? t.nav[path]]);
 const localized = (code) => singleLanguage && code === locale.code ? Astro.url.pathname
@@ -19,7 +20,7 @@ const alternates = singleLanguage ? [{ code: locale.code, href: Astro.url.pathna
 <!doctype html>
 <html lang={locale.code} dir={locale.dir || "ltr"}>
   <head>
-    <HeadSEO {title} {description} {alternates} />
+    <HeadSEO {title} {description} {alternates} {agentIndex} />
     {software && <script type="application/ld+json" set:html={JSON.stringify(software).replaceAll("<", "\\u003c")} />}
   </head>
   <body>
@@ -47,7 +48,7 @@ const alternates = singleLanguage ? [{ code: locale.code, href: Astro.url.pathna
       <a href={supportLinks.releases}>{project.releaseNotes}</a>
       <a href={supportLinks.reportBug}>{project.reportBug}</a>
       <a href={supportLinks.knownIssues}>{project.knownIssues}</a>
-      <a href={base + pagePath(locale.code) + "llms.txt"} hreflang={locale.code}>{t.ui.agents}</a>
+      <a href={agentIndex} hreflang={locale.code}>{t.ui.agents}</a>
     </footer>
   </body>
 </html>

@@ -5,6 +5,114 @@ controls, and optional station inventory and shadow sessions. Physical key-up
 remains disabled. Use `radio_get_controls` and MCP tool discovery for the
 capabilities of the installed backend.
 
+## Simulated radio MCP quickstart
+
+Use this read-only example to discover tools and inspect the initial state over
+[MCP stdio](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).
+The example launches Linkwise with its in-memory backend. It uses no radio,
+audio device, Hamlib server, or Winlink connection.
+
+On macOS or Linux, use Git, the stable Rust toolchain installed through `rustup`,
+a native linker, and Python 3.8 or later. Build the checked revision from a new
+directory with the commands below.
+
+```sh
+git clone https://github.com/8r4n/linkwise.git
+cd linkwise
+git checkout --detach 7418667cfd174dc119211e8ef13dd20026de510e
+cargo +stable build --locked --manifest-path rust/Cargo.toml --bin linkwise
+```
+
+From the clone root, run this Python standard-library client. It sends one
+newline-delimited JSON-RPC message at a time, waits for the initialization
+response, and confirms that the read-only tool appears in `tools/list` before
+calling it. Use the negotiated protocol version and returned tool name when
+configuring another local stdio client.
+
+```sh
+python3 - "${CARGO_TARGET_DIR:-rust/target}/debug/linkwise" <<'PY'
+import asyncio
+import json
+import os
+from pathlib import Path
+import sys
+
+
+async def main():
+    env = {key: value for key, value in os.environ.items() if not key.startswith("LINKWISE_")}
+    env["LINKWISE_RADIO_BACKEND"] = "simulated"
+    server = await asyncio.create_subprocess_exec(
+        str(Path(sys.argv[1]).resolve()), env=env,
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+    )
+
+    async def send(**message):
+        server.stdin.write((json.dumps({"jsonrpc": "2.0", **message}) + "\n").encode())
+        await server.stdin.drain()
+
+    async def request(request_id, method, params):
+        await send(id=request_id, method=method, params=params)
+        while True:
+            line = await asyncio.wait_for(server.stdout.readline(), timeout=5)
+            if not line:
+                raise RuntimeError(f"Linkwise closed stdout during {method}")
+            reply = json.loads(line)
+            if reply.get("id") == request_id:
+                if "error" in reply:
+                    raise RuntimeError(f"{method}: {reply['error']}")
+                return reply["result"]
+
+    try:
+        protocol = "2025-06-18"
+        initialized = await request(1, "initialize", {
+            "protocolVersion": protocol, "capabilities": {},
+            "clientInfo": {"name": "linkwise-quickstart", "version": "1"},
+        })
+        assert initialized["protocolVersion"] == protocol, initialized
+        await send(method="notifications/initialized")
+
+        tools = await request(2, "tools/list", {})
+        name = "radio_get_state"
+        assert any(tool["name"] == name for tool in tools["tools"]), tools
+        reply = await request(3, "tools/call", {"name": name, "arguments": {}})
+        assert not reply.get("isError", False), reply
+        state = reply.get("structuredContent")
+        if state is None:
+            state = json.loads(reply["content"][0]["text"])
+        assert state["status"] == "ok", state
+        expected = {"radio_info": "Linkwise simulated radio (no hardware connection)",
+                    "frequency_hz": 28120000, "mode": "USB", "ptt_asserted": False,
+                    "state_revision": 0}
+        observed = {key: state["data"][key] for key in expected}
+        assert observed == expected, observed
+        print(f"MCP {protocol}; tools/list includes {name}")
+        print(json.dumps(observed, sort_keys=True))
+    finally:
+        server.stdin.close()
+        try:
+            await asyncio.wait_for(server.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            server.kill()
+            await server.wait()
+        if server.returncode != 0:
+            raise RuntimeError(f"Linkwise exited with status {server.returncode}")
+
+
+asyncio.run(main())
+PY
+```
+
+Expected output from a fresh simulator process:
+
+```text
+MCP 2025-06-18; tools/list includes radio_get_state
+{"frequency_hz": 28120000, "mode": "USB", "ptt_asserted": false, "radio_info": "Linkwise simulated radio (no hardware connection)", "state_revision": 0}
+```
+
+The frequency and PTT values describe in-memory state. The example checks tool
+discovery and a successful simulated read. For the separate inventory and
+virtual-peer workflow, see [station inventory and shadow operation](#station-inventory-and-shadow-operation).
+
 ## Recommended call sequence
 
 1. Call `radio_get_state` to observe the current radio state and its
