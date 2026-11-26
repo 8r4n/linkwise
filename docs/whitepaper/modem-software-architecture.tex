@@ -2,29 +2,27 @@
 \section{Agent orchestration and modem software architecture}
 \label{sec:modem-software}
 
-This section connects the proposed ports-and-adapters architecture to the
-Rust modem implementation as of 11 November 2026. The radio-free modem
-preview serves traditional clients over paired TCP sockets and exchanges
-audio with a bench peer. The proposed station runtime adds policy, device
-ownership, and physical transmit control. The evidence table records
-modem interoperability, client transfer, and station qualification separately.
+This section describes the Rust modem implementation and the proposed
+commissioned runtime as of 25 November 2026. The radio-free preview serves
+traditional clients over paired TCP sockets. A managed station attempt can
+supervise its own one-shot modem pair and B2F peer exchange. The native
+preview runs device audio. Hardware ownership, physical transmit control,
+and the commissioned client binding remain qualification work.
 
 \subsection{Standalone modem product and shared runtime}
 \label{sec:modem-shared-runtime}
-\emph{Proposed integration.} The native modem should be delivered as a shared
-Rust runtime usable by traditional amateur-radio applications without an AI
-host. The foreground executable \path{linkwise-modemd} will
-assemble the runtime and its adapters. Optional operating-system supervision
-and graphical configuration do not define a different protocol engine.
-Linkwise orchestration remains an additional client of the station execution
-contract, not a prerequisite for an ordinary client connection.
+\path{linkwise-modemd} serves traditional amateur-radio applications
+without an AI host. Its virtual and native-audio runners use the same
+waveform engine. The managed runner adds authenticated local attachment to
+the virtual audio path. The target integration consolidates session
+ownership in one shared Rust runtime for standalone and managed use.
 
-The common core owns session state, queues, deadlines, handshake and ARQ
+The proposed common core owns session state, queues, deadlines, handshake and ARQ
 sequencing, byte accounting, and outcomes. Platform adapters provide audio
 capture and playback, device discovery, PTT, permissions, and process startup.
-The implementation supports virtual time for deterministic tests and a
-monotonic clock for the foreground runner. The device execution tests use
-simulated audio and PTT.
+The separate \path{modem::runtime} implementation supports virtual time for
+deterministic tests and a monotonic clock for its runner. Its device
+execution tests use simulated audio and PTT.
 
 The radio-free preview supports uncompressed BW500 and fixed level-4
 BW2300/BW2750. BW500 remains the first target for station integration.
@@ -33,13 +31,12 @@ host commands, reply/query forms, rate behavior, and disconnect behavior.
 
 \subsection{Traditional-client interface and session admission}
 \label{sec:modem-client-admission}
-\emph{Proposed integration.} A VARA-compatible host adapter exposes a
+\path{linkwise-modemd} implements a subset of the VARA host interface with a
 CR-delimited TCP channel for commands and notifications and a separate raw binary DATA
-channel. Ports default to loopback 8300/8301 where available and remain
-configurable. These are host-protocol compatibility goals; neither accepting
-a command nor opening a socket establishes on-air interoperability. Winlink
-message framing, mailbox exchange, and message acceptance remain the client's
-responsibility. No message body or continuous modem stream traverses MCP.
+channel. The legacy listeners default to loopback ports 8300 and 8301 and
+are configurable. Command admission, wire interoperability and message
+delivery require separate checks. Winlink message framing, mailbox
+exchange, and message acceptance remain the client's responsibility.
 
 The preview uses \path{host::tcp} to pair one host command socket and one
 DATA socket. \path{api::CommandDecoder} parses the command stream.
@@ -53,7 +50,8 @@ each qualified client/version. The current parser supports only a subset;
 unsupported commands continue to fail explicitly. In particular, an
 \texttt{OK} reply acknowledges command acceptance, not a completed RF link.
 
-One station execution service arbitrates both admission paths:
+In the proposed live integration, one station execution service would
+arbitrate both admission paths.
 \begin{description}
 \item[Standalone.] A locally configured client principal requests
 \texttt{CONNECT}. The service validates identity, station configuration,
@@ -69,16 +67,55 @@ expiry. Mismatches, competing requests, and attachment timeout fail explicitly.
 \end{description}
 
 The legacy two-socket protocol supplies no authenticated pairing token.
-Initially permit one exclusive control/data pair per configured endpoint,
-with a bounded attachment timeout and an explicit pairing state machine that
-handles either arrival order. RF admission requires a complete pair.
-A replacement socket cannot adopt an existing
-session; when either channel closes, both are detached, admission is blocked
-until cleanup completes, and the active session is cancelled with PTT release
-requested. Peer address alone is not client identity. Loopback is a deployment
-restriction rather than authentication; shared or remote deployments require
-an authenticated enclosing transport or a separately qualified ownership
-mechanism. Model disconnect is different from modem-client channel loss.
+The current transport pairs one control and DATA connection at a time and
+detaches both when either reaches EOF, including while a backend reply is
+pending. The managed virtual path adds an attempt-specific capability as
+described below. A live deployment must require a complete pair before
+admission, invalidate both endpoints on loss, and verify release before
+admitting a new session. A shared or remote deployment needs a qualified
+authenticated transport or an equivalent ownership mechanism.
+
+\subsection{Managed virtual BW500 execution}
+\label{sec:managed-bw500}
+The station admits one shadow attempt under a lease and consumes its
+single-use grant. Repeating start with the same prepared handle and grant
+returns the original attempt ID and current outcome. Journal replay marks
+an attempt that was active at restart as interrupted. For the managed
+profile the supervisor starts two
+dedicated \path{linkwise-modemd} children with the installed BW500 waveform
+profile, one per expected B2F peer. Each binds ephemeral IPv4 loopback
+command, DATA, and virtual PCM listeners and emits one JSON readiness
+record. The supervisor decodes that record into the three endpoint fields
+under a timeout and checks their ports are distinct and nonzero.
+
+Each child receives a fresh one-use capability over stdin. The supervisor
+presents its 64 hexadecimal characters and newline on each of the three
+sockets before normal wire traffic. All three must authenticate within a
+bounded attachment window. The child closes its listeners after association
+and serves one attempt. Losing command or DATA closes that pair and ends the
+child. The virtual cable is scoped to the same attempt. Device audio and
+physical PTT are outside this path.
+
+The supervisor relays framed 48~kHz mono virtual PCM between the children
+and runs the B2F caller and listener in private temporary mailboxes with
+the same host-session code as \path{linkwise mail}. Connection evidence
+requires both expected modem peers. An endpoint that finishes remains
+attached while its peer observes its own \texttt{DISCONNECTED}. Completion
+requires both B2F results, both disconnects, and exact received fixture
+envelopes. The station records per-direction attachment lengths and
+SHA-256 digests, the waveform-profile digest, and the attempt outcome.
+MCP carries lifecycle and transfer summaries. Payload bytes stay on the
+local B2F and modem data paths. CMS acceptance and recipient delivery
+remain unknown.
+
+On connected abort the supervisor cancels both client transports, joins
+their workers, drops the temporary mailbox directory, and stops and reaps
+both children before releasing the lease. Failure to confirm process cleanup
+latches the station. The installed-binary regression aborts a connected
+pair, checks teardown and directory removal, and repeats with a fresh grant
+to verify a 23-byte and a 26-byte attachment by exact length and SHA-256.
+The source map and reproduction commands are in
+\path{docs/architecture/station-integration-status.md}.
 
 \subsection{Native session and device execution contracts}
 \label{sec:modem-execution-contracts}
@@ -143,14 +180,14 @@ duplicate handling must be qualified independently of local callback tokens.
 
 \subsection{Shared-core implementation order and exit criteria}
 \label{sec:modem-core-plan}
-The first two stages have an implementation at the validated-event boundary
-with a clock-driven runner and simulated devices. The BW500 audio loopback
-and paired TCP bench exercise stages three and four with simulated peers.
+The first two stages have a validated-event implementation with a
+clock-driven runner and simulated devices. The BW500 waveform and paired
+TCP bench exercise parts of stages three and four. Managed BW500
+demonstrates a radio-free form of stage five under the station lease.
 Rolling pilot acquisition for levels 1--3 has separate off-air receive
-evidence (Table~\ref{tab:modem-evidence-gates}). The remaining work includes
-production DATA sequencing and recovery, native audio/PTT integration,
-and broader client and reference-peer qualification. The sequence below defines the
-scope and exit criteria for each stage.
+evidence (Table~\ref{tab:modem-evidence-gates}). Remaining work includes
+unified session ownership and byte accounting, measured native audio and
+PTT, and broader client and reference-peer qualification.
 \begin{enumerate}
 \item \textbf{Session contracts and owner.} Define typed commands/events,
 state transitions, operation/session/transmission identities, finite budgets,
@@ -184,11 +221,11 @@ Native hardware measurements still require the corresponding device adapter.
 \end{enumerate}
 
 The production qualification baseline is Rocky Linux 9 ARM64 with ALSA,
-systemd, and SELinux. Verify the installed RPM in that execution context,
-including audio-device permissions and service isolation. Other platforms
-have individual foreground and service qualification for their native audio
-backends. Each native adapter must satisfy the same fault/completion contract
-and pass inhibited or conducted PTT qualification before operational RF use.
+systemd, and SELinux. The installed RPM passed managed BW500 and separate
+ALSA-loopback service startup in a Rocky guest
+(Section~\ref{sec:rocky-wsl-verification}). Each commissioned native
+adapter must satisfy the same fault and completion contract and pass
+inhibited or conducted PTT qualification before operational RF use.
 
 \subsection{ChatGPT Agent and Codex as the orchestrating agents}
 ChatGPT Agent or Codex is the decision-making orchestrator: it observes station
@@ -268,7 +305,7 @@ framing or body bytes to the language model.\\
 \bottomrule
 \end{longtable}
 
-\landscapeplantuml{build/diagrams/Linkwise_Modem_Runtime}{Proposed agent-to-modem ownership and backend choices, over the native components currently implemented. Dotted integration edges remain incomplete; this is not an as-built operational runtime.}{fig:modem-runtime}
+\landscapeplantuml{build/diagrams/Linkwise_Modem_Runtime}{Proposed native session, backend, and device integration. Section~\ref{sec:managed-bw500} describes the implemented radio-free path.}{fig:modem-runtime}
 
 The backend port should provide versioned capabilities, an observed state
 snapshot, internal begin/stop operations, a session/event cursor, and a bounded
@@ -280,7 +317,7 @@ truth through MCP. Backend replacement cannot silently increase station
 privileges or normalize an unverified signal into a connection.
 
 \subsection{MCP observations and the modem data plane}
-The modem's MCP surface is observational:
+The proposed modem MCP queries are
 \path{modem_get_capabilities}, \path{modem_get_state},
 \path{modem_get_session}, and \path{modem_get_events}, plus the cached
 \path{linkwise://modem/state} resource. Session start/abort is routed through
@@ -289,24 +326,22 @@ policy-mediated contracts. Audio-route selection uses qualified profile IDs,
 never arbitrary device names, filesystem paths, gain scripts, or routing
 expressions supplied by the agent.
 
-Capability results must distinguish implementation from qualification: for
-example, level-4 single-frame synthesis exists, but stock-peer acceptance and
-multi-frame operation are unqualified. An advertised capability needs a
-backend/version, mode, direction, supported parameters, availability, and a
-qualification scope. State should distinguish device present, stream open,
+Capability results must identify the backend version, mode, direction,
+parameters, availability, and qualification scope. For example, stock-peer
+guarded multi-frame results apply to the builds in
+Table~\ref{tab:modem-evidence-gates}. State should distinguish device present, stream open,
 audio observed, synchronized candidate, CRC-valid frame, handshake complete,
 and active data exchange. Observations include sample ranges where useful and
 source/freshness metadata; missing BER, SNR, throughput, or retry measurements
 remain unsupported, not zero.
 
-Protocol bytes travel between the Winlink client and modem on a bounded
-stream or spool. MCP carries aggregate queue counts, message references where
-supported, progress, and outcome summaries; raw audio, continuous IQ, and
-message bodies are excluded by default. The agent-facing operation ID, station
-attempt ID, modem-session ID, and Winlink-session ID remain distinct and are
-correlated in the event store. UTC timestamps support audit correlation;
-monotonic instants enforce deadlines; absolute sample counters locate signal
-evidence. One must not substitute for another.
+The current managed station tools report attachment, connection, transfer,
+and cleanup status under the operation ID. B2F bytes flow directly between
+the Winlink clients and modems. In the proposed live interface, MCP carries
+aggregate queue counts, progress, and outcome summaries, and the event
+store correlates the operation, station attempt, modem session, and Winlink
+session IDs. UTC timestamps support audit correlation, monotonic instants
+enforce deadlines, and absolute sample counters locate signal evidence.
 
 \subsection{Native implementation map and current limits}
 The Rust package contains the foreground bench service and reusable components.
@@ -334,15 +369,22 @@ up to 4,096 bytes and segments BW500 writes into measured uncompressed
 deliveries of up to 203 bytes. A wide level-4 delivery can carry two 89-byte
 full frames and a closing frame of up to 86 bytes. Wide level-3 and level-2
 full frames carry 47 and 22 bytes, respectively.
-The optional CPAL bridge provides native capture and playback for isolated
-audio routes. Station integration still needs qualified hardware playback
-completion, PTT release, and the station admission and ownership contracts.
+The native \path{linkwise-modemd --serve-station} runner can use CPAL input
+and playback with the same waveform engine when its profile selects a
+bandwidth. \texttt{CONNECT} and immediate \texttt{DISCONNECT} acknowledge
+admission before waveform I/O. Decoded \texttt{ABORT} takes priority over
+pending waveform work. Forced service stop cancels local playback without
+sending a disconnect burst. An interrupted virtual record invalidates the
+cable. If native presentation cannot be confirmed, the service closes its
+listeners and waits for restart. CPAL reports a presentation estimate.
+The commissioned path still needs an independent measure of actual device
+presentation, tokened playback and PTT events, verified hardware release,
+and the shared live admission and ownership contracts.
 
-ARM64 preview installers and station guides are available for macOS,
-Windows, Ubuntu, and Fedora. Windows, Ubuntu, and Fedora passed install,
-launch, simulation, and removal checks. The extracted macOS package
-executable ran successfully, and its bundled guide was checked. Native macOS
-capture awaits an input endpoint.
+The preview package workflow built and tested installers for macOS, Windows,
+Ubuntu, and Fedora on x64 and ARM64 for PR~\#25. The workflow checks package
+installation, CLI and simulation behavior, and removal. Native macOS
+capture still requires testing with a station input endpoint.
 
 \subsection{Optional encrypted Linkwise peer transfer}
 \label{sec:secure-peer-transfer}
@@ -914,7 +956,7 @@ request still proceeds when audit persistence fails; the fault is latched and
 reported separately. The physical emergency stop remains independent of
 software execution and of either AI host.
 
-\landscapeplantuml{build/diagrams/Linkwise_Modem_Keying}{Proposed local playback, keying, completion, and watchdog sequence below an asynchronous agent request. This integration is not yet implemented; no MCP round trip is allowed inside a symbol or ACK deadline.}{fig:modem-keying}
+\landscapeplantuml{build/diagrams/Linkwise_Modem_Keying}{Target native playback, physical keying, and watchdog sequence. Symbol and ACK deadlines are handled locally.}{fig:modem-keying}
 
 \subsection{Verification matrix and implementation exit gates}
 The 9 November run of \path{tools/test-modem.py --audio-device} passed 41 tests:
@@ -1001,6 +1043,10 @@ final-ACK-loss runs and one intermediate-ACK-loss run at BW500, with 406
 exact bytes and two-ended disconnect in each pass. Setup and DATA timeouts
 interrupted the sequences.
 The earlier three-pass results apply to their recorded builds.\\
+Managed station & The station MCP regression aborted a connected virtual
+BW500 pair, verified local cleanup, and then completed a fresh attempt
+with both exact B2F attachment hashes. This exercises the installed
+Rocky binaries and both WSL archive builds in Linux.\\
 Station safety & Qualify actual device presentation, turnaround, exclusive
 lease, permit expiry, duty limits, watchdog release and independent stop on
 an inhibited or conducted setup before operational RF use.\\

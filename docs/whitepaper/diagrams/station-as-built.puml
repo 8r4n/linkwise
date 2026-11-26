@@ -1,0 +1,48 @@
+@startuml Linkwise_Station_As_Built
+!theme plain
+top to bottom direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Latin Modern Roman"
+skinparam defaultFontSize 10
+skinparam packageStyle rectangle
+skinparam ArrowColor #2A9D8F
+skinparam nodesep 16
+skinparam ranksep 20
+
+rectangle "Local MCP client" as Client #EFF5F8
+
+package "Shadow station" {
+  rectangle "RMS inventory file\nOptional forecast file" as Files
+  rectangle "Station service\nRank, lease, attempt" as Station #EFF5F8
+  database "Journal\nRankings + attempts" as Journal
+  rectangle "Simulated radio\nConfig + readback" as Radio
+
+  package "Managed radio-free BW500" {
+    rectangle "B2F clients\nCaller + listener" as Peers
+    rectangle "Two one-shot modems\nLinked by virtual PCM" as Modems
+    Peers <-right-> Modems : command + DATA
+  }
+
+  Files -right-> Station
+  Station -right-> Journal
+  Station -down-> Radio
+  Station -down-> Peers : supervises
+}
+
+package "Native audio preview" {
+  rectangle "Native modem\nOS audio" as Native
+  rectangle "Station hardware\nExternal PTT" as Hardware #F6F2E9
+  Native <-right-> Hardware : audio I/O
+}
+
+package "Adaptive network bench" {
+  rectangle "BPv7 daemon\nPrivate Unix queue" as Network
+  database "redb\nPer-station spool" as Spool
+  Network -right-> Spool
+}
+
+Client -down-> Station : MCP over stdio
+Radio -[hidden]down-> Native
+Modems -[hidden]down-> Network
+@enduml

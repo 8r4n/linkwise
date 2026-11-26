@@ -1,6 +1,6 @@
 # Linkwise adaptive network bench
 
-This standalone Rust crate runs a deterministic contact simulator and independent store-and-forward stations. It uses a separate database per station. The station authenticates commissioned neighbors with per-link keys, learns expiring path vectors, and opportunistically calls neighbors with a route to queued traffic. It reserves alternate call opportunities for discovery. Data and end-to-end application receipts travel as separate BPv7 bundles. A receiver commits the bundle before acknowledging a hop. Receipts rely on trusted relays and do not provide end-to-end cryptographic origin authentication.
+This standalone Rust crate runs a deterministic contact simulator and independent store-and-forward stations. Each station owns a separate redb database. The station authenticates commissioned neighbors with per-link keys, learns expiring path vectors, and opportunistically calls neighbors with a route to queued traffic. It reserves alternate call opportunities for discovery. A receiver commits the bundle before acknowledging a hop. The destination spool generates a durable-acceptance receipt before a consumer reads the data. The receipt travels as a separate BPv7 bundle and relies on trusted relays for its origin.
 
 ## Reproduce
 

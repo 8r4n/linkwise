@@ -1,0 +1,209 @@
+\section{One managed station attempt}
+\label{sec:managed-bw500}
+
+The Linkwise link coordinator owns the station profile, candidate eligibility,
+lease, and attempt record. The model proposes a candidate through the local
+Model Context Protocol (MCP) service. Deterministic station code decides whether
+to admit it. With an observation profile the service imports and ranks
+evidence. With a shadow profile it also prepares a simulated radio and runs
+either a scripted outcome or the managed virtual BW500 fixture. The fixture
+uses two real waveform modem processes and two Winlink B2F peer clients. The
+radio has zero power, simulated CAT readback, and no physical keying route.
+\repolink{rust/docs/mcp-usage.md}{Station profiles and tools.}
+
+\stationfigure[0.85\textheight]{Linkwise_Managed_Attempt}{One installed shadow attempt from ranked candidate through local evidence and cleanup.}{fig:managed-attempt}
+
+\paragraph{Prepare, authorize, start.}
+\path{link_rank_gateways} records a ranking from configured RMS inventory and
+optional VOACAP forecast files. The selected ranking and channel identify a
+candidate. \path{link_prepare_candidate} revalidates its eligibility, acquires
+one expiring station lease, and verifies simulated dial frequency, USB mode,
+zero RF power, and PTT down. The prepared handle binds the candidate and
+readback revision. \path{link_request_session_authorization} refreshes the
+evidence and verifies that preparation again before issuing a short-lived,
+single-use grant. \path{link_start_session} checks the prepared handle,
+grant, and readback before journaling one active attempt and returning its ID.
+The station then runs the attempt asynchronously within the configured
+session time. Repeating start with the same handle and grant returns the
+original attempt and its current outcome. A new attempt requires a new grant.
+\repolink{rust/src/olm.rs}{Station lifecycle.}
+
+\begin{samepage}
+\paragraph{Attach the peers.}
+The supervisor starts one dedicated \path{linkwise-modemd} per peer using the
+installed waveform profile. Each child reports ephemeral IPv4 loopback ports
+for command, DATA, and virtual PCM in a bounded JSON readiness record. The
+supervisor sends a fresh random capability over that child's stdin and
+presents it as a prefix on each socket. The child accepts the three
+associated sockets within its attachment deadline, closes the listeners,
+and serves one wire attempt. The supervisor relays framed 48~kHz mono
+samples between the modems. It creates two private temporary mailboxes
+and runs the same host-session code used by \path{linkwise mail}. The
+listener arms before the caller sends \texttt{CONNECT}. That command begins
+the peer handshake inside the existing attempt.
+\repolink{rust/src/olm/virtual_bench.rs}{Supervisor and waveform fixture.}
+\repolink{rust/src/winlink/host_session.rs}{B2F host session.}\par
+\end{samepage}
+
+\paragraph{Observe and verify.}
+\path{link_get_status} advances from attachment and peer wait to connected
+when both sides report the expected callsigns. The fixture keeps an endpoint's
+command and DATA sockets attached when its B2F work finishes so its peer can
+observe its own \texttt{DISCONNECTED}. Success requires both B2F client
+results, both disconnects, and byte-for-byte agreement between sent and received
+fixture envelopes. The record carries the lengths and SHA-256 digests of the
+received 23-byte caller attachment and 26-byte responder attachment, plus
+the waveform-profile digest. Payload bytes stay off MCP. An eligible RMS
+entry establishes a candidate. A virtual modem handshake establishes a
+local peer connection. Exact peer mailbox contents establish local B2F
+transfer. The gateway is uncontacted in this fixture, and CMS acceptance
+and recipient delivery remain unknown. Section~\ref{sec:verification}
+describes the associated tests.
+
+\paragraph{End the attempt.}
+Command or DATA EOF detaches the pair and ends the affected child. Virtual
+audio loss makes the bearer unusable. On abort or deadline, the supervisor
+cancels the B2F transports and relay, joins the client work, drops the
+temporary mailboxes, and stops and reaps both children. Normal completion
+also reaps both children before the station releases its lease. The
+connected-abort regression checks cleanup and then verifies an exact
+exchange under a fresh grant. If cleanup exceeds its grace period,
+the station inhibits further admission while cleanup continues. An
+unconfirmed reap or terminal journal failure also inhibits admission.
+The shadow release result combines simulated key-down with fixture cleanup.
+On restart, journal replay marks an active record interrupted. The
+original attempt remains queryable without a recorded release result.
+A new shadow process can clear a shadow inhibit because it reconstructs a
+simulated radio.
+\repolink{rust/tests/olm_station.rs}{Attempt and teardown regressions.}
+
+\section{Commissioned radio design}
+\label{sec:live-safety}
+
+\paragraph{One transmit authority.}
+The target station verifies actual radio state after preparation and
+revalidates it at admission. An authenticated local client or a managed
+client reservation can associate with that admission. Each session owns one
+radio lease. A session grant authorizes a bounded operation. Each burst
+needs a separate expiring, single-use permit checked against the current
+lease, verified settings, route, interlocks, and remaining continuous-key
+and duty limits. The modem owns protocol timing, and the station supervisor
+owns session admission and cancellation. A local arbiter owns physical
+key-up through the qualified driver. Independent watchdog release and a
+physical emergency stop must still work when the application stalls or
+fails. Key-down remains available without a permit.
+\repolink{docs/architecture/safety-security-reliability.md}{Safety requirements.}
+
+\stationfigure{Linkwise_Transmit_Boundary}{Proposed transmit authority, separate from protocol timing and independent release controls.}{fig:transmit-boundary}
+
+\begin{samepage}
+\paragraph{Control every route.}
+The native \path{linkwise-modemd --serve-station} preview can run the modem
+waveform engine through CPAL capture and playback. It accepts a legacy local
+command and DATA pair outside the shadow coordinator. Physical PTT is
+external to the preview, and the setup guide describes radio or interface
+VOX and external PTT. The installed MCP service denies key-up and reports
+an inactive watchdog. A commissioned design must prevent transmit through
+any route outside the arbiter. That includes CAT transmit, serial or
+interface keying, audio-triggered VOX, and any modem or client keying
+control. Verify the hardware inhibit covers those routes. Loopback binding
+limits where clients connect. The live admission service still needs to
+verify the client association before allowing use of the radio.
+\repolink{rust/docs/modem-setup.md}{Native preview setup.}\par
+\end{samepage}
+
+\paragraph{Measure device completion.}
+The target session owner gives each playback request a unique transmission
+token tied to the session and capture epoch. The route reports acceptance,
+presentation, cancellation, and failure. A queue acknowledgment or CPAL
+presentation estimate cannot establish when the last sample left the
+device. A physical release request and observed PTT down are separate
+events. Only calibrated presentation and observed release with the
+qualified turnaround allow protocol transmit-complete and the receive
+deadline to advance. A late result from a cancelled token is discarded.
+An uncertain stop or loss of readback invalidates pending playback,
+requests release, and blocks another transmission. Byte accounting
+distinguishes pending, peer-acknowledged, discarded, and unresolved bytes.
+Unresolved payload is never automatically replayed across sessions.
+\repolink{rust/docs/modem-runtime.md}{Current runtime and device contracts.}
+
+\subsection{Fault handling and restart}
+
+The station distinguishes loss of the planning model, loss of the MCP
+transport, and loss of a session or device. Each changes a different
+owner's authority. In the target design, release proceeds independently
+of the application and audit writer.
+
+{\small
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{\fill}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.21\linewidth}
+  >{\raggedright\arraybackslash}p{.34\linewidth}
+  >{\raggedright\arraybackslash}p{.38\linewidth}@{}}
+\toprule
+\textbf{Event and owner} & \textbf{Installed behavior} & \textbf{Commissioned requirement}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Event and owner} & \textbf{Installed behavior} & \textbf{Commissioned requirement}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Model or evidence outage.
+Station policy owns admission. &
+Inventory refresh reports stale or failed input. A running shadow attempt
+has its own session deadline. &
+The installed live profile specifies whether already authorized work
+can finish under continuing safety checks or must abort. Local timers
+and release remain available throughout the outage.\\
+\addlinespace
+MCP stdio EOF.
+Station supervisor owns shutdown. &
+EOF shuts down the local service and cancels an active station attempt. &
+Exercise the local end-of-session policy and measure release when the
+control connection ends. Prior authorization continues to bound any
+work allowed to finish.\\
+\addlinespace
+Command, DATA, or audio loss.
+Modem and station supervisors own teardown. &
+Host EOF detaches the pair. A broken virtual cable ends the managed
+exchange and triggers cleanup. &
+Invalidate both host attachments and queued output. Confirm presentation
+and release state before admitting another client.\\
+\addlinespace
+Readback mismatch or late completion.
+Session owner validates device events. &
+Changed simulated settings invalidate preparation. The native preview
+uses an estimate of playback presentation. &
+Reject stale configuration and playback tokens, cancel pending work,
+and hold transmit inhibit while device or release state is uncertain.\\
+\addlinespace
+Lease or permit expiry, stall, or process restart.
+Arbiter and independent watchdog own release. &
+Shadow deadlines bound work. Journal replay marks an active attempt
+interrupted. &
+Force hardware release on the approved deadline. Invalidate outstanding
+authority and independently reconcile PTT, radio settings, and client
+activity before recovery.\\
+\end{longtable}
+}
+
+\repolink{rust/src/mcp.rs}{Installed stdio shutdown}.
+\repolink{docs/architecture/safety-security-reliability.md}{Target failure handling}.
+
+\paragraph{Commission against the installed route.}
+Freeze the application, modem, client, and radio revisions, waveform
+digest, audio route, and station profile. Use an inhibited or conducted
+setup with independent observation of actual output and PTT state. Measure
+presentation, turnaround, abort latency, and watchdog release against
+the profile's deadlines. Inject stale readback, lost command or DATA,
+device loss, stalled and crashed processes, and a late playback
+completion. Record the emergency stop and demonstrate that neither a
+fault nor restart can silently re-enable keying. Then run an approved
+exchange with an authorized Winlink account, a compatible RMS gateway,
+and an agreed test message. The trace must report actual RF and PTT,
+expected modem connection, client transfer, CMS acceptance if observed,
+and recipient delivery if separately confirmed. Section~\ref{sec:roadmap}
+identifies the gates that remain open.
+\repolink{docs/architecture/station-integration-status.md}{External qualification gates.}

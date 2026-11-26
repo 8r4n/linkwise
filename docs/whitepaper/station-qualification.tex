@@ -1,0 +1,188 @@
+\section{Verification by claim}\label{sec:verification}
+
+The implementation baseline is the station integration merged in PR~\#25
+at \texttt{15062e6}. Each result below applies to its stated build,
+transport, peer, and test. A fixture digest
+confirms that specific bytes arrived at the named endpoint. A complete
+modem exchange, local B2F transfer, CMS acceptance, and recipient retrieval
+each require evidence from their respective endpoints.
+
+{\small
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{\fill}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{.20\linewidth}
+  >{\raggedright\arraybackslash}p{.43\linewidth}
+  >{\raggedright\arraybackslash}p{.30\linewidth}@{}}
+\toprule
+Claim & Setup and observed result & Qualification boundary \\
+\midrule
+\endfirsthead
+\toprule
+Claim & Setup and observed result & Qualification boundary \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Station decision and authorization &
+Service tests used file-based RMS and forecast inputs and a simulated
+radio. A separate shadow run exercised MCP over stdio. Tests checked
+deterministic ranking, scheduled refresh with fallback, stale readback
+and grant rejection, one-use authorization, idempotent start, journal
+replay, and inhibition after an unconfirmed release. &
+The radio, source freshness inputs, and failure outcomes are controlled
+fixtures. Live ingestion, device readback, and physical release have
+their own gates.
+\repolink{rust/tests/olm_station.rs}{Station tests}. \\
+\addlinespace
+Managed BW500 B2F &
+One MCP attempt reached connection and was aborted. Both modem children
+were reaped and private mailboxes removed. A fresh attempt through two
+real waveform modem processes and virtual PCM exchanged 23-byte and
+26-byte fixture attachments using the production B2F host-session code.
+Both hashes matched and both modems reported disconnect. &
+The attempt proves a local two-peer application transfer and cleanup.
+The journal records the waveform hash and attachment proofs. CMS and
+recipient outcomes remain unknown.
+\repolink{rust/src/olm/virtual_bench.rs}{Managed fixture}. \\
+\addlinespace
+Installed Rocky server package &
+Rocky 9.9 ARM64 accepted the bench-signed \texttt{1.rockymail} RPM via
+DNF, verified installed files, loaded both SELinux modules in enforcing
+mode, and verified all three systemd units. The installed binaries
+passed managed BW500. The build fixture rejected an untrusted signer
+and a modified RPM. &
+A separate service start used kernel ALSA loopback, the expected SELinux
+domain, and loopback host listeners. Physical hardware and a
+production-signed upgrade and recovery drill remain open.
+\repolink{docs/architecture/station-integration-status.md}{Rocky evidence}. \\
+\addlinespace
+Rocky mail TLS and payload &
+With kernel FIPS mode, the system FIPS policy and provider, and SELinux
+enforcing, a guest accepted authenticated TLS~1.3 SMTP STARTTLS and
+IMAPS over loopback using a fixture CA. Virtual BW500 carried an
+attachment to the peer and a separate reply to local IMAP. Both hashes
+matched and both sessions closed. &
+The installed mail binary refused TLS startup with FIPS disabled.
+Deployment-specific cryptographic module coverage and production trust
+configuration require assessment.
+\repolink{docs/architecture/station-integration-status.md}{Mail evidence}. \\
+\addlinespace
+Rocky WSL archives &
+The x64 and ARM64 Rocky 9.9 archives passed SHA-256 checks. Extracted
+installed binaries from each passed managed connected abort, cleanup,
+and two-way attachment verification under Linux. Each image bundles
+an unsigned development RPM and leaves the services opt-in. &
+Windows WSL~2 import, first launch, service operation, and Windows
+audio or radio integration remain separate tests by architecture.
+\repolink{docs/install/windows-wsl.md}{WSL build record}. \\
+\addlinespace
+Stock modem and client interoperability &
+Against stock VARA HF 4.9.1, Linkwise \texttt{70cf5ed} passed three
+consecutive counted runs per BW2300/BW2750 row with Linkwise sending
+as caller or receiving as responder. Each run injected corruption after
+an acknowledged 89-byte prefix, recovered the exact streams, closed at
+both ends, and passed a same-socket reconnect and close. &
+The four qualified rows cover guarded radio-free recovery. Earlier
+missed injections and incomplete runs are recorded separately.
+BW500 mixed-client and ACK-loss repeat gates remain open.
+\repolink{docs/testing/vara-interoperability.md}{Reference matrix}. \\
+\addlinespace
+Adaptive queue and receipt &
+The separate network bench submitted via a private local socket while
+the daemon held its database. With one commissioned peer offline, the
+loopback fixture routed 4,352 exact bytes across three hops via D and E
+to F, committed the payload, and recorded the destination receipt
+at A. A duplicate submission returned the original ID. &
+The receipt relies on trust in commissioned relays. Its result concerns
+the bundle destination and stays separate from the station's
+gateway and mailbox evidence.
+\repolink{rust/network/tests/autonomous.py}{Queue fixture}. \\
+\end{longtable}
+}
+
+The Rocky result applies to \texttt{linkwise-modem-0.1.0-1.rockymail.aarch64.rpm}
+built from local revision \texttt{e60a35c}, whose Git tree matches
+published revision \texttt{8990419}. For WSL, local assembly revision
+\texttt{7c8ad67} matches \texttt{713a510}. The native ARM64 RPM revision
+\texttt{da2578b} matches \texttt{5cd40c5} and the cross-built x64 RPM
+revision \texttt{20ae0a8} matches \texttt{add36c2}. The build records
+retain artifact checksums. Git-tree equivalence identifies the source
+used in the test.
+\repolink{docs/architecture/station-integration-status.md}{Rocky build record}.
+\repolink{docs/install/windows-wsl.md}{WSL build record}.
+
+A separate virtual BW500 run paired Linkwise with Pat v1.0.1
+(\texttt{2ad31e8}) and verified two 1,400-byte attachments and both
+disconnects. Mixed Windows Winlink Express 1.8.6.0 and Pat trials
+verified P2P receipt in both directions. The sender-side close for Pat
+to Express still needs a successful radio-free reference retest. The distinct
+client and modem fixtures allow attachment delivery and teardown to
+be evaluated independently.
+\repolink{docs/architecture/station-integration-status.md}{Pat setup}.
+\repolink{docs/testing/vara-interoperability.md}{Express and stock results}.
+
+\section{Qualification roadmap}\label{sec:roadmap}
+
+\paragraph{Freeze and secure the Rocky candidate.}
+Record the public revision, waveform, package, and installed binary
+digests. Use the production signing and repository trust configuration
+for a clean installation, an upgrade from the supported starting
+version, and rollback or recovery after an interrupted upgrade.
+Accept only authorized signatures and demonstrate rejection of an
+altered package. Verify preserved accounts, configuration and journal,
+safe service defaults, SELinux enforcing, loopback bindings, and
+post-recovery managed BW500 and mail TLS. Record the actual TLS module
+and policy against the deployment requirements. This gate can run
+while native and reference development continues.
+
+\paragraph{Qualify the native session and radio release.}
+Bind the commissioned client and device adapters to one session owner.
+Carry owner and epoch through playback, acknowledgments, cancellation,
+and release. Pass concurrent admission and wrong-owner trials. Account
+separately for queued, acknowledged, and unresolved bytes, and demonstrate
+bounded queues under backpressure, socket loss, restart, and abort.
+Commission the actual radio, firmware, Hamlib backend, and audio
+interface with the transmit path inhibited. Then use a controlled
+conducted route and independent RF output and PTT instrumentation.
+Set numerical presentation, turnaround, and release limits in the
+commissioning profile before the test. Measure the worst observed
+release against the approved bound during audio and host loss, stale
+readback, concurrent control, process stall or crash, and power loss.
+An independent watchdog and physical emergency stop must force release.
+Confirm a fault latches receive-only and that key-up requires deliberate
+recovery after independent release verification.
+\repolink{docs/architecture/safety-security-reliability.md}{Safety and commissioning requirements}.
+
+\paragraph{Close interoperability and planning gaps.}
+Freeze the candidate, waveform hash, reference versions, and bridge
+calibration. Use an unmodified stock peer and require three consecutive
+passes per required bandwidth, role, payload and fault row. Count all
+attempts in the record, identify missed injections and failed runs, and
+retain directional payloads, audio, actual injection and retry markers,
+application outcomes, and both disconnects. Close BW500 intermediate and
+final ACK-loss and mixed Pat rows, including the Pat-to-Express sender
+close. Repeat the wide sign-off after relevant runtime changes.
+In parallel, connect authorized live RMS channel data and a pinned
+VOACAP runner. Test provenance, stale or partial inputs, and fallback,
+then compare ranking policies against measured outcomes on held-out
+scenarios with denominators and uncertainty reported. Require a historic
+ranking to replay from its recorded inputs.
+
+\paragraph{Commission one authorized RMS/CMS exchange.}
+Proceed after the signed-package, native safety, and applicable
+interoperability and input gates pass. Use an approved station profile,
+permitted channel, authorized account and client, and an agreed test
+gateway and window. Capture the station permit, independently verified
+release, and separately observed modem and client transfer, CMS
+acceptance, and recipient retrieval. Include an abort or a failed
+transfer with safe recovery and no unsupported delivery state. Extend
+qualification to each additional hardware or operating-system profile
+using the same applicable gates.
+
+\paragraph{Qualify Windows distribution separately.}
+On native x64 and ARM64 Windows hosts, verify the archive hash, import
+under WSL~2, complete first-user setup, check the installed RPM, confirm
+service defaults, and rerun managed BW500 after an opt-in start.
+Qualify host connectivity, audio or CAT access, and FIPS if claimed
+for a supported Windows and WSL kernel configuration.
+\repolink{docs/install/windows-wsl.md}{Windows import and verification}.
