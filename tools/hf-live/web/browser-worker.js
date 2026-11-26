@@ -306,15 +306,30 @@ class Simulation {
     }
     const available = this.bands.map((_, band) => band).filter(band =>
       using[band] < BAND_CAPACITY && (!using[band] || this.bandAccess[band] <= this.elapsed));
-    const pending = this.queues.filter(queue => queue[0]?.ready <= this.elapsed)
-      .map(queue => queue[0]).sort((a, b) => Number(Boolean(b.payload)) - Number(Boolean(a.payload))
-        || a.ready - b.ready || a.id - b.id);
+    const queued = this.queues.map(queue => queue[0]).filter(Boolean);
+    const overdue = queued.filter(message => message.payload && message.deadline <= this.elapsed)
+      .sort((a, b) => a.deadline - b.deadline || a.id - b.id)[0];
+    if (overdue && overdue.listenBand == null) {
+      overdue.listenBand = this.chooseTuning(overdue, available, using, Date.now()).band;
+    }
+    let reserving = Boolean(overdue);
+    const pending = queued.filter(message => message.ready <= this.elapsed || message === overdue)
+      .sort((a, b) => Number(b === overdue) - Number(a === overdue)
+        || Number(Boolean(b.payload)) - Number(Boolean(a.payload)) || a.ready - b.ready || a.id - b.id);
 
     for (const message of pending) {
       const { source, target } = message;
-      if (!available.length || busy.has(source) || busy.has(target)) {
+      // Let already-airborne calls finish while an overdue user frame listens.
+      // Only new background calls yield the reserved band and stations.
+      let eligible = available;
+      if (reserving && !message.payload) {
+        if ([source, target].some(station => station === overdue.source || station === overdue.target)) continue;
+        eligible = available.filter(band => this.bands[band].id !== overdue.listenBand);
+      }
+      if (!eligible.length || busy.has(source) || busy.has(target)) {
         if (message.payload) this.radio(message, "waiting", {
-          reason: !available.length ? "Waiting for a clear band." : "Waiting for both stations to finish current traffic.",
+          band: message === overdue ? overdue.listenBand : undefined,
+          reason: !eligible.length ? "Waiting for a clear band." : "Waiting for both stations to finish current traffic.",
         });
         continue;
       }
@@ -323,16 +338,16 @@ class Simulation {
       const now = Date.now();
       let tuning;
       if (message.payload) {
-        tuning = this.chooseTuning(message, available, using, now);
+        tuning = this.chooseTuning(message, eligible, using, now);
         if (tuning.action === "wait") {
           this.radio(message, "waiting", tuning);
           message.ready = this.elapsed + Math.max(.1, tuning.waitS ?? .4);
           continue;
         }
-        chosen = available.findIndex(band => this.bands[band].id === tuning.band && !using[band]);
+        chosen = eligible.findIndex(band => this.bands[band].id === tuning.band && !using[band]);
         if (chosen < 0) throw Error("The radio selected an occupied band.");
       } else {
-        for (const [index, band] of available.entries()) {
+        for (const [index, band] of eligible.entries()) {
           const score = (this.successesByBand[source][band] + 1) / (this.attemptsByBand[source][band] + 2)
             + this.policyRandom() * .4;
           if (score > best) {
@@ -341,7 +356,9 @@ class Simulation {
           }
         }
       }
-      const [band] = available.splice(chosen, 1);
+      const band = eligible[chosen];
+      available.splice(available.indexOf(band), 1);
+      if (message === overdue) reserving = false;
       using[band]++;
       this.bandAccess[band] = this.elapsed + .2 - REACCESS_MEAN_S * Math.log(1 - this.accessRandom());
       busy.add(source).add(target);
@@ -453,6 +470,7 @@ class Simulation {
           message.retry++;
           message.ready = this.elapsed + 1.5 + this.policyRandom() * 3.5;
           message.deadline = message.ready + 10;
+          message.listenBand = null;
           if (!this.enqueuePriority(message)) this.settleFrame(message, null);
         } else if (!message.payload && message.retry < MAX_RETRIES && queue.length < MAX_QUEUE) {
           message.retry++;
