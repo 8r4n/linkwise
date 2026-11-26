@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "build:hf": "node scripts/prepare-hf.mjs",
     "check": "node scripts/check.mjs",
     "prebuild": "node scripts/prepare.mjs",
     "predev": "node scripts/prepare.mjs"

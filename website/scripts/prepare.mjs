@@ -1,4 +1,8 @@
+import { execFileSync } from "node:child_process";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { locales, loadMessages, pages, pagePath } from "../../docs/i18n/locales.mjs";
 import { buildGuides, buildManuals } from "../../docs/i18n/manuals.mjs";
 import { catalog, translation } from "../../docs/i18n/catalog.mjs";
@@ -106,3 +110,18 @@ for (const { code } of locales) {
 await buildManuals(new URL("manuals/", publicDir));
 await buildGuides(new URL("guides/", publicDir));
 await writeFile(new URL(".nojekyll", publicDir), "");
+
+if (process.env.GITHUB_ACTIONS === "true") {
+  const forecast = join(process.env.RUNNER_TEMP || tmpdir(), "linkwise-hf-forecast.json");
+  const env = { ...process.env, LINKWISE_HF_REFRESH_WEATHER: "1" };
+  execFileSync("rustup", ["target", "add", "wasm32-unknown-unknown", "--toolchain", "stable"], { stdio: "inherit" });
+  try {
+    execFileSync("bash", [fileURLToPath(new URL("forecast-hf.sh", import.meta.url)), forecast],
+      { stdio: "inherit", timeout: 180_000 });
+    env.LINKWISE_HF_FORECAST = forecast;
+  } catch {
+    console.warn("P.533 forecast preparation failed; the HF page will use its scenario fallback.");
+  }
+  execFileSync(process.execPath, [fileURLToPath(new URL("prepare-hf.mjs", import.meta.url))],
+    { stdio: "inherit", env });
+}

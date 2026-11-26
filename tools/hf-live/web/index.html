@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b141e">
+    <link rel="icon" href="data:,">
+    <title>Linkwise | Live HF simulation</title>
+    <link rel="stylesheet" href="./vendor/Widgets/widgets.css">
+    <link rel="stylesheet" href="./style.css">
+    <script src="./vendor/Cesium.js" defer></script>
+    <script src="./vendor/sigplot.js" defer></script>
+    <script src="./app.js" type="module"></script>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="page masthead-inner">
+        <div class="wordmark"><span class="brand-mark" aria-hidden="true"></span>Linkwise</div>
+        <div id="connection" class="connection" data-state="connecting" role="status">Connecting</div>
+      </div>
+    </header>
+    <main class="page">
+      <div class="intro">
+        <div>
+          <h1>Live HF simulation</h1>
+          <p id="simulation-description">Autonomous stations exchange simulated traffic over shared HF bands.</p>
+        </div>
+        <div class="runtime" aria-label="Simulation run">
+          <span id="model-name">Waiting for model</span>
+          <div class="browser-controls" id="browser-controls" hidden>
+            <label for="browser-mode">Modem mode</label>
+            <select id="browser-mode">
+              <option value="500">BW500</option>
+              <option value="2300">BW2300</option>
+              <option value="2750">BW2750</option>
+            </select>
+            <button type="button" id="browser-run" disabled>Pause simulation</button>
+          </div>
+          <div><span id="seed">Seed —</span><span id="sim-clock">00:00:00</span> sim time</div>
+        </div>
+      </div>
+      <noscript><p class="notice">Enable JavaScript to view the live simulation.</p></noscript>
+      <p class="notice" id="feed-error" role="alert" hidden></p>
+      <dl class="metrics" aria-label="Run totals">
+        <div><dt>Attempted</dt><dd id="attempted">—</dd></div>
+        <div data-kind="active"><dt>Busy links</dt><dd id="active">—</dd></div>
+        <div data-kind="delivered"><dt>Delivered</dt><dd id="delivered">—</dd></div>
+        <div data-kind="failed"><dt>Lost calls</dt><dd id="failed">—</dd></div>
+        <div><dt>Retries</dt><dd id="retried">—</dd></div>
+        <div><dt>Dropped</dt><dd id="dropped">—</dd></div>
+        <div><dt>Queued</dt><dd id="queued">—</dd></div>
+      </dl>
+      <section id="station-console" hidden></section>
+      <div class="dashboard">
+        <section class="panel map-panel" aria-labelledby="map-title">
+          <div class="panel-head">
+            <div>
+              <h2 id="map-title">Station map</h2>
+              <p id="station-count">Waiting for stations</p>
+            </div>
+            <div class="filters">
+              <label>Band <select id="band-filter" aria-controls="earth traffic"><option value="">All bands</option></select></label>
+              <label>Station <select id="station-filter" aria-controls="earth traffic waveform"><option value="">All stations</option></select></label>
+            </div>
+            <a class="map-jump" href="#waveform-title">View signal</a>
+          </div>
+          <dl id="space-weather" class="space-weather" aria-label="NOAA space weather" hidden>
+            <div><dt>NOAA space weather</dt><dd id="weather-mode"></dd></div>
+            <div><dt>GloTEC</dt><dd id="weather-glotec"></dd></div>
+            <div><dt>Planetary Kp</dt><dd id="weather-kp"></dd></div>
+            <div id="weather-drap-field" hidden><dt>D-RAP absorption model</dt><dd id="weather-drap"></dd></div>
+          </dl>
+          <p id="forecast-source" class="forecast-source" hidden></p>
+          <div class="map-stage">
+            <div id="earth" role="region" aria-label="Interactive 3D globe of simulated stations and calls"></div>
+            <div id="map-message" class="map-message" role="status">Loading globe</div>
+            <div class="map-controls" aria-label="Globe controls" hidden>
+              <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+              <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+              <button type="button" id="overview">Overview</button>
+            </div>
+          </div>
+          <ul class="legend" aria-label="Map legend">
+            <li><span class="point"></span>Station</li>
+            <li><span class="line active"></span>Busy</li>
+            <li><span class="line delivered"></span>Delivered</li>
+            <li><span class="line failed"></span>Lost</li>
+            <li class="map-note">Schematic paths</li>
+            <li id="basemap-source" hidden></li>
+          </ul>
+        </section>
+        <aside class="signal-and-traffic">
+          <section id="waveform" class="panel waveform-panel" aria-labelledby="waveform-title">
+            <div class="panel-head">
+              <div>
+                <h2 id="waveform-title" tabindex="-1">Burst signal</h2>
+                <p id="waveform-station">Select a station on the map or in the filter.</p>
+              </div>
+              <button type="button" id="waveform-reset" hidden>Reset zoom</button>
+            </div>
+            <div id="waveform-compare" hidden>
+              <div class="capture-stage" role="group" aria-label="Signal stage and burst selection">
+                <button type="button" id="waveform-tx" aria-label="Transmitted (TX)" aria-pressed="true" aria-controls="waveform-capture">TX</button>
+                <button type="button" id="waveform-rx" aria-label="Received (RX)" aria-pressed="false" aria-controls="waveform-capture">RX</button>
+                <button type="button" id="waveform-follow" aria-pressed="true">Follow latest</button>
+              </div>
+              <div class="comparison-meta">
+                <p id="waveform-attempt"></p>
+                <dl class="comparison-metrics">
+                  <div><dt>Channel</dt><dd id="waveform-channel"></dd></div>
+                  <div><dt>In-band SNR / SINR</dt><dd id="waveform-snr"></dd></div>
+                  <div><dt>Decode</dt><dd id="waveform-decode" aria-live="polite"></dd></div>
+                </dl>
+                <p id="waveform-interference" hidden></p>
+              </div>
+            </div>
+            <p id="waveform-status" role="status" hidden></p>
+            <div id="waveform-capture" hidden>
+              <div class="capture-tabs" role="tablist" aria-label="Signal views">
+                <button type="button" id="waveform-signal-tab" role="tab" aria-selected="true" aria-controls="waveform-signal-view">Signal</button>
+                <button type="button" id="waveform-time-tab" role="tab" aria-selected="false" aria-controls="waveform-time-view" tabindex="-1">Waveform</button>
+              </div>
+              <div id="waveform-signal-view" role="tabpanel" aria-labelledby="waveform-signal-tab" tabindex="0">
+                <p id="waveform-analysis-empty" class="plot-detail" hidden>Simulated RF analysis is unavailable for this capture.</p>
+                <div id="waveform-analyzer">
+                  <div class="signal-controls" aria-label="Waterfall display options">
+                    <label>Raster mode
+                      <select id="waveform-raster-mode" aria-controls="waveform-waterfall">
+                        <option value="scrolling">Scrolling</option>
+                        <option value="rising">Rising</option>
+                        <option value="falling">Falling</option>
+                      </select>
+                    </label>
+                    <label>Palette
+                      <select id="waveform-palette" aria-controls="waveform-waterfall">
+                        <option value="spectrum">Spectrum</option>
+                        <option value="ocean">Ocean</option>
+                        <option value="gray">Grayscale</option>
+                      </select>
+                    </label>
+                    <label>Level range
+                      <select id="waveform-level-range" aria-controls="waveform-spectrum waveform-waterfall">
+                        <option value="70">70 dB</option>
+                        <option value="90">90 dB</option>
+                        <option value="full">Full</option>
+                      </select>
+                    </label>
+                    <div class="frequency-controls" role="group" aria-label="Simulated RF frequency range on both plots">
+                      <button type="button" id="waveform-pan-left" aria-label="Pan to lower frequencies">‹</button>
+                      <button type="button" id="waveform-zoom-out" aria-label="Zoom out in frequency">−</button>
+                      <output id="waveform-range" aria-label="Visible frequency range" aria-live="polite"></output>
+                      <button type="button" id="waveform-zoom-in" aria-label="Zoom in on frequency">+</button>
+                      <button type="button" id="waveform-pan-right" aria-label="Pan to higher frequencies">›</button>
+                    </div>
+                  </div>
+                  <div class="signal-heading">
+                    <h3>Spectrum</h3>
+                    <div class="signal-key" aria-label="Spectrum traces">
+                      <span class="trace mean">Burst mean</span><span class="trace latest">Latest window</span>
+                    </div>
+                    <output id="waveform-measurement" class="signal-measurement" aria-label="Spectrum measurement" aria-live="off"></output>
+                  </div>
+                  <div id="waveform-spectrum" class="capture-plot signal-plot" role="img" aria-label="Simulated RF spectrum in MHz with burst-average and latest-window levels in dBFS" aria-describedby="waveform-spectrum-detail"></div>
+                  <p id="waveform-spectrum-detail" class="plot-detail"></p>
+                  <div class="signal-heading">
+                    <h3>Waterfall</h3>
+                    <div class="signal-tally">
+                      <span id="waveform-playback" role="status"></span>
+                      <span id="waveform-rows"></span>
+                    </div>
+                  </div>
+                  <div id="waveform-waterfall" class="capture-plot signal-plot" role="img" aria-label="Simulated RF waterfall in MHz with captured-window levels in dBFS" aria-describedby="waveform-waterfall-detail"></div>
+                  <div id="waveform-scale" class="waterfall-scale" aria-label="Waterfall dBFS color scale">
+                    <span id="waveform-floor"></span><span id="waveform-ramp" class="scale-ramp" aria-hidden="true"></span><span id="waveform-ceiling"></span>
+                  </div>
+                  <p id="waveform-waterfall-detail" class="plot-detail">The axis counts captured windows. Idle gaps are omitted.</p>
+                </div>
+              </div>
+              <div id="waveform-time-view" role="tabpanel" aria-labelledby="waveform-time-tab" tabindex="0" hidden>
+                <div id="waveform-plot" class="capture-plot" role="img" aria-label="Time plot of captured samples"></div>
+              </div>
+              <div class="waveform-info">
+                <p id="waveform-route"></p>
+                <dl class="waveform-metrics">
+                  <div><dt>Samples</dt><dd id="waveform-count"></dd></div>
+                  <div><dt>Sample rate</dt><dd id="waveform-rate"></dd></div>
+                  <div><dt>TX airtime</dt><dd id="waveform-duration"></dd></div>
+                </dl>
+                <p id="waveform-weather" class="waveform-caption" hidden></p>
+                <p id="waveform-forecast" class="waveform-caption" hidden></p>
+                <p id="waveform-caption" class="waveform-caption"></p>
+              </div>
+            </div>
+          </section>
+          <section class="panel traffic-panel" aria-labelledby="traffic-title">
+            <div class="panel-head">
+              <div>
+                <h2 id="traffic-title">Recent traffic</h2>
+                <p>Busy links and recent outcomes</p>
+              </div>
+            </div>
+            <p id="traffic-empty" class="empty">Waiting for the first call.</p>
+            <ul id="traffic" aria-label="Recent simulated calls"></ul>
+          </section>
+        </aside>
+      </div>
+      <footer>Simulation only. No RF transmission or gateway contact.</footer>
+    </main>
+  </body>
+</html>

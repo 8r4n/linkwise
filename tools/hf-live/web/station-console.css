@@ -1,0 +1,64 @@
+#station-console {
+  margin-block: 0 1rem;
+  border: 1px solid #2b4656;
+  border-radius: .75rem;
+  background: #101f2b;
+}
+
+#station-console summary {
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 650;
+  padding: .85rem 1rem;
+}
+
+.station-console-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  padding: 0 1rem 1rem;
+}
+
+.station-compose, .station-endpoints, .station-compose label {
+  display: grid;
+  gap: .55rem;
+  min-width: 0;
+}
+
+.station-endpoints {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.station-compose label {
+  font-size: .875rem;
+}
+
+.station-compose label[hidden], .station-empty[hidden] { display: none; }
+
+.station-compose select, .station-compose input, .station-compose textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #476071;
+  border-radius: .4rem;
+  padding: .4rem .55rem;
+  color: #f2f6fa;
+  background: #0b141e;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.station-compose textarea { resize: vertical; }
+.station-compose button { justify-self: start; }
+.station-compose p, .station-inbox p { margin: 0; }
+.station-budget, .station-feedback { font-size: .875rem; }
+.station-inbox h3 { margin: 0 0 .55rem; }
+.station-inbox .station-radio { margin-bottom: .55rem; font-size: .875rem; color: #a9e6d8; }
+.station-transfers { display: grid; gap: .5rem; list-style: none; margin: .5rem 0 0; padding: 0; }
+.station-transfers li { padding: .6rem; border: 1px solid #3d5364; border-radius: .4rem; overflow-wrap: anywhere; }
+.station-transfers li[data-state="delivered"] { border-color: #54ba9b; }
+.station-transfers li[data-state="failed"] { border-color: #d79a68; }
+.station-delivered { white-space: pre-wrap; }
+
+@media (max-width: 42rem) {
+  .station-console-grid, .station-endpoints { grid-template-columns: minmax(0, 1fr); }
+}
