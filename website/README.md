@@ -31,9 +31,10 @@ level-4 DATA waveforms. The station console encrypts chat and email between
 ephemeral station keys with ECDH P-256 and AES-256-GCM. Authenticated messages
 appear in the simulated inbox after their modem frames arrive. The simulated
 station chooses a frequency and transmit power, listens for a clear channel,
-and backs off or retunes when delivery fails. Marginal paths and interference
-can exhaust the retry budget. This is a frame-level simulation with
-browser-local mail delivery.
+and backs off or retunes when delivery fails. A waiting message can hold the
+next clear turn on one band while current traffic finishes. Marginal paths
+and interference can exhaust the retry budget. This is a frame-level
+simulation with browser-local mail delivery.
 
 The Pages build prepares the assets automatically. For local development,
 install the Rust WASM target and prepare the page before running Astro.
