@@ -1,0 +1,401 @@
+{
+  "schema": 1,
+  "profiles": [
+    {
+      "id": "isotropic",
+      "name": "Isotropic reference",
+      "role": "tx-rx",
+      "polarization": "any",
+      "pattern": "isotropic",
+      "switch_s": 0,
+      "rotatable": false,
+      "slew_deg_per_s": 0,
+      "source": {
+        "kind": "isotropic reference",
+        "url": null,
+        "note": "Exactly 0 dBi over the modeled bands. Matches the existing P.533 assumptions."
+      },
+      "bands": {
+        "80m": {
+          "peak_dbi": 0,
+          "elevation_deg": 0,
+          "azimuth_width_deg": 360,
+          "elevation_width_deg": 180,
+          "azimuth_limit_db": 0,
+          "elevation_limit_db": 0
+        },
+        "40m": {
+          "peak_dbi": 0,
+          "elevation_deg": 0,
+          "azimuth_width_deg": 360,
+          "elevation_width_deg": 180,
+          "azimuth_limit_db": 0,
+          "elevation_limit_db": 0
+        },
+        "20m": {
+          "peak_dbi": 0,
+          "elevation_deg": 0,
+          "azimuth_width_deg": 360,
+          "elevation_width_deg": 180,
+          "azimuth_limit_db": 0,
+          "elevation_limit_db": 0
+        }
+      },
+      "feedline_loss_db": 0
+    },
+    {
+      "id": "dipole-hf",
+      "name": "Band-tuned horizontal dipole",
+      "role": "tx-rx",
+      "polarization": "horizontal",
+      "pattern": "bidirectional",
+      "switch_s": 1,
+      "rotatable": false,
+      "slew_deg_per_s": 0,
+      "source": {
+        "kind": "illustrative",
+        "url": "https://github.com/8r4n/linkwise/blob/main/reference/kiwisdr-antenna-study/2026-11-18-summary.json",
+        "note": "Separate tuned dipoles by band. Broadside headings and gains are modeled values; the Kiwi examples are descriptive."
+      },
+      "bands": {
+        "80m": {
+          "peak_dbi": 4.5,
+          "elevation_deg": 55,
+          "azimuth_width_deg": 88,
+          "elevation_width_deg": 105,
+          "azimuth_limit_db": 18,
+          "elevation_limit_db": 12
+        },
+        "40m": {
+          "peak_dbi": 4.5,
+          "elevation_deg": 42,
+          "azimuth_width_deg": 88,
+          "elevation_width_deg": 90,
+          "azimuth_limit_db": 18,
+          "elevation_limit_db": 12
+        },
+        "20m": {
+          "peak_dbi": 4.5,
+          "elevation_deg": 30,
+          "azimuth_width_deg": 88,
+          "elevation_width_deg": 78,
+          "azimuth_limit_db": 18,
+          "elevation_limit_db": 12
+        }
+      },
+      "feedline_loss_db": 0.75
+    },
+    {
+      "id": "vertical-hf",
+      "name": "Ground-mounted vertical",
+      "role": "tx-rx",
+      "polarization": "vertical",
+      "pattern": "omni",
+      "switch_s": 1,
+      "rotatable": false,
+      "slew_deg_per_s": 0,
+      "source": {
+        "kind": "illustrative",
+        "url": "https://github.com/8r4n/linkwise/blob/main/reference/kiwisdr-antenna-study/2026-11-18-summary.json",
+        "note": "Representative low-angle monopole with modeled ground and fixed radiation efficiency."
+      },
+      "bands": {
+        "80m": {
+          "peak_dbi": 1,
+          "elevation_deg": 22,
+          "azimuth_width_deg": 360,
+          "elevation_width_deg": 60,
+          "azimuth_limit_db": 0,
+          "elevation_limit_db": 16
+        },
+        "40m": {
+          "peak_dbi": 2,
+          "elevation_deg": 18,
+          "azimuth_width_deg": 360,
+          "elevation_width_deg": 62,
+          "azimuth_limit_db": 0,
+          "elevation_limit_db": 16
+        },
+        "20m": {
+          "peak_dbi": 2.5,
+          "elevation_deg": 15,
+          "azimuth_width_deg": 360,
+          "elevation_width_deg": 64,
+          "azimuth_limit_db": 0,
+          "elevation_limit_db": 16
+        }
+      },
+      "feedline_loss_db": 1
+    },
+    {
+      "id": "t2fd",
+      "name": "Terminated folded dipole",
+      "role": "tx-rx",
+      "polarization": "horizontal",
+      "pattern": "bidirectional",
+      "switch_s": 1,
+      "rotatable": false,
+      "slew_deg_per_s": 0,
+      "source": {
+        "kind": "illustrative",
+        "url": "https://github.com/8r4n/linkwise/blob/main/reference/kiwisdr-antenna-study/2026-11-18-summary.json",
+        "note": "Representative broadband wire; Westminster and Free Union list distinct T2FD receive installations."
+      },
+      "bands": {
+        "80m": {
+          "peak_dbi": -1,
+          "elevation_deg": 55,
+          "azimuth_width_deg": 110,
+          "elevation_width_deg": 110,
+          "azimuth_limit_db": 14,
+          "elevation_limit_db": 12
+        },
+        "40m": {
+          "peak_dbi": 0.5,
+          "elevation_deg": 43,
+          "azimuth_width_deg": 100,
+          "elevation_width_deg": 95,
+          "azimuth_limit_db": 14,
+          "elevation_limit_db": 12
+        },
+        "20m": {
+          "peak_dbi": 0,
+          "elevation_deg": 31,
+          "azimuth_width_deg": 96,
+          "elevation_width_deg": 82,
+          "azimuth_limit_db": 14,
+          "elevation_limit_db": 12
+        }
+      },
+      "feedline_loss_db": 1
+    },
+    {
+      "id": "active-loop",
+      "name": "Active receiving loop",
+      "role": "rx-only",
+      "polarization": "mixed",
+      "pattern": "bidirectional",
+      "switch_s": 1,
+      "rotatable": false,
+      "slew_deg_per_s": 0,
+      "source": {
+        "kind": "illustrative",
+        "url": "https://github.com/8r4n/linkwise/blob/main/reference/kiwisdr-antenna-study/2026-11-18-summary.json",
+        "note": "Direction-dependent receive pattern example. LZ1AQ and Wellbrook entries identify installations; they do not measure this model."
+      },
+      "bands": {
+        "80m": {
+          "peak_dbi": -5,
+          "elevation_deg": 26,
+          "azimuth_width_deg": 92,
+          "elevation_width_deg": 130,
+          "azimuth_limit_db": 20,
+          "elevation_limit_db": 10
+        },
+        "40m": {
+          "peak_dbi": -5,
+          "elevation_deg": 26,
+          "azimuth_width_deg": 92,
+          "elevation_width_deg": 130,
+          "azimuth_limit_db": 20,
+          "elevation_limit_db": 10
+        },
+        "20m": {
+          "peak_dbi": -5,
+          "elevation_deg": 26,
+          "azimuth_width_deg": 92,
+          "elevation_width_deg": 130,
+          "azimuth_limit_db": 20,
+          "elevation_limit_db": 10
+        }
+      },
+      "feedline_loss_db": 0.5
+    },
+    {
+      "id": "beverage",
+      "name": "Terminated Beverage",
+      "role": "rx-only",
+      "polarization": "vertical",
+      "pattern": "directional",
+      "switch_s": 1,
+      "rotatable": false,
+      "slew_deg_per_s": 0,
+      "source": {
+        "kind": "illustrative",
+        "url": "https://github.com/8r4n/linkwise/blob/main/reference/kiwisdr-antenna-study/2026-11-18-summary.json",
+        "note": "Low-angle directional receive-wire example. Site design, ground loss, and length vary."
+      },
+      "bands": {
+        "80m": {
+          "peak_dbi": -5,
+          "elevation_deg": 15,
+          "azimuth_width_deg": 80,
+          "elevation_width_deg": 55,
+          "azimuth_limit_db": 18,
+          "elevation_limit_db": 18
+        },
+        "40m": {
+          "peak_dbi": -3,
+          "elevation_deg": 12,
+          "azimuth_width_deg": 60,
+          "elevation_width_deg": 46,
+          "azimuth_limit_db": 22,
+          "elevation_limit_db": 18
+        },
+        "20m": {
+          "peak_dbi": -5,
+          "elevation_deg": 9,
+          "azimuth_width_deg": 45,
+          "elevation_width_deg": 39,
+          "azimuth_limit_db": 24,
+          "elevation_limit_db": 18
+        }
+      },
+      "feedline_loss_db": 1
+    },
+    {
+      "id": "yagi-20m",
+      "name": "Rotatable 20 m Yagi",
+      "role": "tx-rx",
+      "polarization": "horizontal",
+      "pattern": "directional",
+      "switch_s": 2,
+      "rotatable": true,
+      "slew_deg_per_s": 6,
+      "source": {
+        "kind": "illustrative",
+        "url": null,
+        "note": "Modeled three-element Yagi. Peak gain, beam shape, and turning speed are explicit scenario parameters."
+      },
+      "bands": {
+        "20m": {
+          "peak_dbi": 8,
+          "elevation_deg": 20,
+          "azimuth_width_deg": 52,
+          "elevation_width_deg": 55,
+          "azimuth_limit_db": 20,
+          "elevation_limit_db": 16
+        }
+      },
+      "feedline_loss_db": 0.5
+    },
+    {
+      "id": "tci-530",
+      "name": "TCI 530 omni receiver",
+      "role": "rx-only",
+      "polarization": "horizontal",
+      "pattern": "omni",
+      "switch_s": 1,
+      "rotatable": false,
+      "slew_deg_per_s": 0,
+      "source": {
+        "kind": "operator specifications and modeled shape",
+        "url": "https://www.kfsdr.org/about",
+        "note": "KFS reports 3–30 MHz and nominal 6 dBi. Elevation center, width/limits and switch time are modeled."
+      },
+      "bands": {
+        "80m": {
+          "peak_dbi": 6,
+          "elevation_deg": 30,
+          "azimuth_width_deg": 360,
+          "elevation_width_deg": 95,
+          "azimuth_limit_db": 0,
+          "elevation_limit_db": 14
+        },
+        "40m": {
+          "peak_dbi": 6,
+          "elevation_deg": 30,
+          "azimuth_width_deg": 360,
+          "elevation_width_deg": 95,
+          "azimuth_limit_db": 0,
+          "elevation_limit_db": 14
+        },
+        "20m": {
+          "peak_dbi": 6,
+          "elevation_deg": 30,
+          "azimuth_width_deg": 360,
+          "elevation_width_deg": 95,
+          "azimuth_limit_db": 0,
+          "elevation_limit_db": 14
+        }
+      },
+      "feedline_loss_db": 1
+    },
+    {
+      "id": "tci-532",
+      "name": "TCI 532 sector receiver",
+      "role": "rx-only",
+      "polarization": "horizontal",
+      "pattern": "directional",
+      "switch_s": 1,
+      "rotatable": false,
+      "slew_deg_per_s": 0,
+      "source": {
+        "kind": "operator specifications and modeled shape",
+        "url": "https://www.kfsdr.org/about",
+        "note": "KFS reports 3–30 MHz, nominal 12 dBi, and 55° beamwidth; its sectors point at 278° and 222°. Mounted heading is configured separately. Elevation widths and interpolation are modeled."
+      },
+      "bands": {
+        "80m": {
+          "peak_dbi": 12,
+          "elevation_deg": 36,
+          "azimuth_width_deg": 55,
+          "elevation_width_deg": 80,
+          "azimuth_limit_db": 12,
+          "elevation_limit_db": 15
+        },
+        "40m": {
+          "peak_dbi": 12,
+          "elevation_deg": 34,
+          "azimuth_width_deg": 55,
+          "elevation_width_deg": 76,
+          "azimuth_limit_db": 12,
+          "elevation_limit_db": 15
+        },
+        "20m": {
+          "peak_dbi": 12,
+          "elevation_deg": 29,
+          "azimuth_width_deg": 55,
+          "elevation_width_deg": 69,
+          "azimuth_limit_db": 12,
+          "elevation_limit_db": 15
+        }
+      },
+      "feedline_loss_db": 1
+    },
+    {
+      "id": "tci-527b",
+      "name": "TCI 527B sector receiver",
+      "role": "rx-only",
+      "polarization": "horizontal",
+      "pattern": "directional",
+      "switch_s": 1,
+      "rotatable": false,
+      "slew_deg_per_s": 0,
+      "source": {
+        "kind": "operator specifications and modeled shape",
+        "url": "https://www.kfsdr.org/about",
+        "note": "KFS reports 6.2–30 MHz, nominal 15 dBi, 64° beamwidth, and a 135° mount. Elevation widths and interpolation are modeled."
+      },
+      "bands": {
+        "40m": {
+          "peak_dbi": 15,
+          "elevation_deg": 20,
+          "azimuth_width_deg": 64,
+          "elevation_width_deg": 65,
+          "azimuth_limit_db": 13,
+          "elevation_limit_db": 15
+        },
+        "20m": {
+          "peak_dbi": 15,
+          "elevation_deg": 18,
+          "azimuth_width_deg": 64,
+          "elevation_width_deg": 61,
+          "azimuth_limit_db": 13,
+          "elevation_limit_db": 15
+        }
+      },
+      "feedline_loss_db": 1
+    }
+  ]
+}

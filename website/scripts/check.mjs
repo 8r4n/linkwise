@@ -10,6 +10,7 @@ import { websiteLabels } from "../../docs/i18n/website-upgrade.mjs";
 import { audioSamples, deploymentBuilds, projectMedia, supportLinks } from "../src/project-content.mjs";
 import { MISSION_CATALOG } from "../../tools/hf-live/web/learning-data.mjs";
 import { TRAINING_ARCHIVE } from "../../tools/hf-live/web/training-scenarios.mjs";
+import { ANTENNA_LAB_ARCHIVE } from "../../tools/hf-live/web/antenna-runtime.mjs";
 
 const sha = "b".repeat(64);
 const dist = process.argv[2] ?? "dist";
@@ -75,11 +76,21 @@ if (hfPage) {
     "browser-worker.js", "data/path-inputs.mjs", "data/stations.mjs",
     "github-invertocat-white.svg", "vendor/Cesium.js", "vendor/sigplot.js",
     "learning-ui.mjs", "learning-state.mjs", "learning-data.mjs", "learning.css", "training-scenarios.mjs",
+    "antenna-console.mjs", "antenna-console.css", "antenna-lab.mjs", "antenna-lab.css", "antenna-lab-state.mjs",
+    "antenna-model.mjs", "antenna-runtime.mjs",
   ]) {
     assert.ok((await stat(dist + "/hf-simulation/" + asset)).size > 0, asset);
   }
+  assert.deepEqual(await readFile(dist + "/hf-simulation/antenna-profiles.json"),
+    await readFile(new URL("../../tools/hf-live/antenna-profiles.json", import.meta.url)));
+  assert.ok(hfPage.includes('id="antenna-lab"') && hfPage.includes('href="?antennas=1"'));
   for (const name of Object.keys(TRAINING_ARCHIVE)) {
     const asset = "training-data/v1/" + name;
+    assert.deepEqual(await readFile(dist + "/hf-simulation/" + asset),
+      await readFile(new URL("../../tools/hf-live/web/" + asset, import.meta.url)), asset);
+  }
+  for (const name of Object.keys(ANTENNA_LAB_ARCHIVE)) {
+    const asset = "training-data/antenna-v1/" + name;
     assert.deepEqual(await readFile(dist + "/hf-simulation/" + asset),
       await readFile(new URL("../../tools/hf-live/web/" + asset, import.meta.url)), asset);
   }
@@ -89,9 +100,12 @@ if (hfPage) {
     "../tools/hf-live/test_radio_policy.mjs"], { stdio: "inherit" });
   execFileSync(process.execPath, ["../tools/hf-live/test_training_scenarios.mjs", dist + "/hf-simulation"],
     { stdio: "inherit" });
+  execFileSync(process.execPath, ["../tools/hf-live/test_antenna_lab_worker.mjs", dist + "/hf-simulation"],
+    { stdio: "inherit" });
 }
 
-execFileSync(process.execPath, ["--test", "../tools/hf-live/test_learning.mjs"], { stdio: "inherit" });
+execFileSync(process.execPath, ["--test", "../tools/hf-live/test_learning.mjs",
+  "../tools/hf-live/test_antenna_lab.mjs", "../tools/hf-live/test_antenna_runtime.mjs"], { stdio: "inherit" });
 
 async function checkHtml(path, code, dir) {
   const html = await readFile(dist + path + "index.html", "utf8");
@@ -199,6 +213,10 @@ for (const { code, dir = "ltr" } of locales) {
     if (page === "learn") {
       assert.ok(html.includes("data-learning-progress") && html.includes("data-learning-badge"), path);
       const simulator = hfPage ? "/linkwise/hf-simulation/" : origin + "/hf-simulation/";
+      assert.equal(Array.from(html.matchAll(/data-learning-mission="/g)).length, 4, path);
+      assert.ok(html.includes("data-antenna-lab-launch") && html.includes("data-antenna-lab-progress"), path);
+      assert.ok(html.includes(`href="${simulator}?lab=antenna"`), path);
+      assert.ok(html.includes(`href="${simulator}?antennas=1"`), path);
       for (const id of Object.keys(MISSION_CATALOG)) {
         assert.ok(html.includes(`data-learning-mission="${id}"`), path + id);
         assert.ok(html.includes(`href="${simulator}?mission=${id}"`), path + id);

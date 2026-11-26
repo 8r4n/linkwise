@@ -7,6 +7,44 @@ Training runs use bundled channel inputs and a fixed simulation clock.
 The Missions panel saves progress in the browser and offers a reset for
 another practice run.
 
+## Antennas and link budget
+
+Open [Antenna Lab](https://8r4n.github.io/linkwise/hf-simulation/?lab=antenna)
+after completing **Read a burst**. It uses matched BW500 transmissions on an
+archived 20 m link. Compare dipole and Yagi transmission and then change only
+the receiving antenna. Each trial retains its original antenna configuration
+with the SigPlot capture. The lab saves its two completions in the browser.
+
+The [antenna-enabled free simulation](https://8r4n.github.io/linkwise/hf-simulation/?antennas=1)
+offers separate transmit and receive ports for each station. Choose a peer to
+see its bearing or aim a rotatable antenna. Commands settle between bursts.
+Automatic aiming can choose a compatible port and heading on a retry.
+The globe can display TX, RX, or both gain contours across the network at a
+shared elevation. A selected link has a closer view using its modeled
+elevation. Contour size is a relative gain display.
+
+The catalog in `antenna-profiles.json` records representative antenna
+patterns and links to their sources. [Antenna modeling notes](antenna-profiles.md)
+describe how to export a pattern with 4nec2. The [KiwiSDR study](../../reference/kiwisdr-antenna-study/2026-11-18-summary.json)
+informs the available installation types. Its waterfall statistics describe
+observed receive systems. They are independent from the catalog gain values.
+The model evaluates each endpoint pattern using the short-path bearing and a
+representative skywave elevation. Directional EIRP is conducted watts times
+the transmit antenna's linear gain toward the peer times feedline efficiency.
+The receiving antenna and feedline change the wanted signal and the separately
+modeled co-channel signals against the receiver's reference noise.
+
+Native runs can set `--antenna-preset kiwi-inspired` or use
+`--antenna-config PATH` to set station ports, headings, and conducted power.
+For example, a configuration can set the transmit heading and receive feed at
+one station while other stations use the isotropic reference.
+
+```json
+{"schema":1,"stations":{"SIM-001":{"tx":{"profile_id":"yagi-20m","heading_deg":80},"rx":{"profile_id":"tci-530","heading_deg":0},"power_w":100}}}
+```
+
+## Station traffic
+
 Run autonomous stations on three shared simulated HF channels and watch their
 packet attempts on a live Cesium globe. The default run starts 24 synthetic
 stations. A station generates its own traffic, chooses an available band using

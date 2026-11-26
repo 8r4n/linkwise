@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="./vendor/Widgets/widgets.css">
     <link rel="stylesheet" href="./style.css">
     <link rel="stylesheet" href="./learning.css">
+    <link rel="stylesheet" href="./antenna-console.css">
+    <link rel="stylesheet" href="./antenna-lab.css">
     <script src="./vendor/Cesium.js" defer></script>
     <script src="./vendor/sigplot.js" defer></script>
     <script src="./app.js" type="module"></script>
@@ -32,6 +34,7 @@
           <h1>Live HF simulation</h1>
           <p id="simulation-description">Autonomous stations exchange simulated traffic over shared HF bands.</p>
           <a id="browser-learning" class="learning-link" href="../learn/" hidden>HF learning missions</a>
+          <a id="antenna-preset-link" class="learning-link" href="?antennas=1" hidden>Antenna-enabled simulation</a>
         </div>
         <div class="runtime" aria-label="Simulation run">
           <span id="model-name">Waiting for model</span>
@@ -85,6 +88,35 @@
           </details>
         </footer>
       </section>
+      <section id="antenna-lab" hidden aria-labelledby="antenna-lab-heading"></section>
+      <section id="antenna-console" class="panel antenna-console" aria-labelledby="antenna-title" hidden>
+        <header>
+          <h2 id="antenna-title">Station antennas</h2>
+          <p>Choose the transmit and receive ports for any simulated station.</p>
+        </header>
+        <form id="antenna-form">
+          <div class="antenna-fields">
+            <label>Station <select id="antenna-station"></select></label>
+            <label>Peer <select id="antenna-peer"></select></label>
+            <label>TX port <select id="antenna-tx-port"></select></label>
+            <label>RX port <select id="antenna-rx-port"></select></label>
+            <label>Requested heading (° true)
+              <input id="antenna-heading" type="number" min="0" max="359.9" step="0.1" inputmode="decimal">
+            </label>
+            <label class="antenna-auto"><input id="antenna-auto" type="checkbox"> Let the station choose port and heading on retry</label>
+          </div>
+          <div class="antenna-actions">
+            <button id="antenna-aim" type="button">Aim at peer</button>
+            <button id="antenna-save" type="submit">Apply antenna settings</button>
+          </div>
+        </form>
+        <dl class="antenna-readback">
+          <div><dt>Current heading</dt><dd id="antenna-current">—</dd></div>
+          <div><dt>Requested heading</dt><dd id="antenna-target">—</dd></div>
+          <div><dt>Peer bearing</dt><dd id="antenna-bearing">—</dd></div>
+        </dl>
+        <p id="antenna-notice" role="status"></p>
+      </section>
       <section id="station-console" hidden></section>
       <div class="dashboard">
         <section class="panel map-panel" aria-labelledby="map-title">
@@ -96,6 +128,14 @@
             <div class="filters">
               <label>Band <select id="band-filter" aria-controls="earth traffic"><option value="">All bands</option></select></label>
               <label>Station <select id="station-filter" aria-controls="earth traffic waveform"><option value="">All stations</option></select></label>
+              <label id="map-pattern-control" hidden>Network antenna patterns
+                <select id="map-patterns" aria-controls="earth map-pattern-summary">
+                  <option value="both">Transmit and receive</option>
+                  <option value="tx">Transmit</option>
+                  <option value="rx">Receive</option>
+                  <option value="off">Off</option>
+                </select>
+              </label>
             </div>
             <a class="map-jump" href="#waveform-title">View signal</a>
           </div>
@@ -123,6 +163,8 @@
             <li class="map-note">Schematic paths</li>
             <li id="basemap-source" hidden></li>
           </ul>
+          <p id="map-pattern-summary" class="map-antenna" hidden></p>
+          <p id="map-antenna" class="map-antenna" hidden></p>
         </section>
         <aside class="signal-and-traffic">
           <section id="waveform" class="panel waveform-panel" aria-labelledby="waveform-title">
@@ -145,6 +187,12 @@
                   <div><dt>Channel</dt><dd id="waveform-channel"></dd></div>
                   <div><dt>In-band SNR / SINR</dt><dd id="waveform-snr"></dd></div>
                   <div><dt>Decode</dt><dd id="waveform-decode" aria-live="polite"></dd></div>
+                </dl>
+                <dl id="waveform-antenna" class="comparison-metrics capture-antenna" hidden>
+                  <div><dt>Conducted power</dt><dd id="waveform-conducted"></dd></div>
+                  <div><dt>EIRP toward peer</dt><dd id="waveform-eirp"></dd></div>
+                  <div><dt>TX antenna</dt><dd id="waveform-tx-antenna"></dd></div>
+                  <div><dt>RX antenna</dt><dd id="waveform-rx-antenna"></dd></div>
                 </dl>
                 <p id="waveform-interference" hidden></p>
               </div>

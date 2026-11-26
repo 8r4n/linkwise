@@ -1,15 +1,18 @@
 """Run independently generated station traffic over shared simulated HF bands."""
 
+import math
 import random
 import struct
 from collections import Counter, deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from antennas import REFERENCE_POWER_W, Mount, link_budget, path_geometry
 from medium import add_overlap, injected_interference
 from stations import BANDS, make_stations, path_conditions
 
 if TYPE_CHECKING:
+    from antennas import LinkBudget
     from hf_channel import EncodedBurst
     from space_weather import WeatherSnapshot
 
@@ -43,6 +46,8 @@ class Transmission:
     start_s: float
     seed: int
     weather: "WeatherSnapshot | None"
+    tx_antenna: "Mount | None" = None
+    conducted_power_w: float = REFERENCE_POWER_W
 
 
 @dataclass
@@ -53,6 +58,8 @@ class Burst:
     fading_db: float
     completion: float
     overlaps: list[Transmission] = field(default_factory=list)
+    antenna: "LinkBudget | None" = None
+    path_gain_db: float = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +71,7 @@ class WaveformPair:
 
 class Simulation:
     def __init__(self, channel, station_count, seed, band=None, weather_feed=None, *,
-                 medium="exclusive", interference="none", forecast=None, retain_waveforms=True):
+                 medium="exclusive", interference="none", forecast=None, retain_waveforms=True, antennas=None):
         self.channel = channel
         self.weather_feed = weather_feed
         self.weather = weather_feed.snapshot(0) if weather_feed else None
@@ -78,6 +85,8 @@ class Simulation:
         self.medium = medium
         self.interference = interference
         self.forecast = forecast
+        self.antennas = antennas
+        self.antenna_catalog = antennas.catalog if antennas is not None else None
         self.retain_waveforms = retain_waveforms
         self.next_access = dict.fromkeys((choice["id"] for choice in self.bands), 0)
         self.next_generation = [self.traffic_rng.uniform(0, 4) for _ in self.stations]
@@ -124,6 +133,7 @@ class Simulation:
             "sample_rate_hz": self.channel.sample_rate,
             "weather": self.weather_status(),
             "forecast": self.forecast.status() if self.forecast else None,
+            **({"antenna_model": self.antennas.mode, "antennas": self.antennas.snapshot()} if self.antennas is not None else {}),
         }
 
     def _generate(self):
@@ -167,40 +177,73 @@ class Simulation:
             started_at_s=transmission.start_s, include_noise=noise,
         )
 
+    def _reference_watts(self, weather_details):
+        status = (weather_details or {}).get("forecast", {}).get("status")
+        return self.forecast.assumptions["tx_power_w"] if status == "predicted" else REFERENCE_POWER_W
+
+    def _antenna_budget(self, source, target, band, tx, rx, power_w):
+        geometry = path_geometry(self.stations[source], self.stations[target])
+        budget = link_budget(self.antenna_catalog, geometry, band, tx, rx, power_w)
+        if budget is None:
+            raise RuntimeError("an RF attempt has an unsupported antenna path")
+        return budget
+
     def _receive(self, burst):
         tx = burst.transmission
         target = burst.message.target
         band = burst.event["band"]
-        snr_db = burst.event["snr_db"]
-        if not burst.overlaps and self.interference == "none":
+        snr_db = burst.event.get("reference_snr_db", burst.event["snr_db"])
+        if not burst.overlaps and self.interference == "none" and burst.path_gain_db == 0:
             return self.channel.receive(
                 tx.encoded, seed=tx.seed, snr_db=snr_db, fading_db=burst.fading_db,
                 path_key=(self.seed, tx.source, target, band), started_at_s=tx.start_s,
                 capture=True,
             )
 
+        # Path gains act on the arriving samples. The reference noise is
+        # generated with identical power and seed for every antenna setting.
         signal, noise = self._propagate(tx, target, band, snr_db, burst.fading_db, noise=True)
+        if burst.path_gain_db:
+            signal = signal * 10 ** (burst.path_gain_db / 20)
         rate = tx.encoded.sample_rate
         noise_power = self.channel.reference_power(tx.encoded.samples) * 10 ** (-snr_db / 10)
-        interference = injected_interference(
-            self.interference, rate=rate, count=len(signal), start_s=tx.start_s,
-            noise_power=noise_power, seed=tx.seed ^ 0x638CFD,
-        )
+        interference = None
+        if burst.overlaps or self.interference != "none":
+            interference = injected_interference(
+                self.interference, rate=rate, count=len(signal), start_s=tx.start_s,
+                noise_power=noise_power, seed=tx.seed ^ 0x638CFD,
+            )
+        antenna_interferers = []
         for other in burst.overlaps:
-            other_snr, fading_db, _ = self._path(
+            other_snr, fading_db, details = self._path(
                 other.source, target, band, other.start_s, other.weather,
                 random.Random(other.seed ^ (target + 1)),
             )
             incoming, _ = self._propagate(other, target, band, other_snr, fading_db, noise=False)
+            if burst.antenna is not None:
+                # The receiver stays at its wanted-path mount during the
+                # collision. Use that setting and the interferer's frozen TX.
+                rx = burst.antenna.rx
+                budget = self._antenna_budget(other.source, target, band, other.tx_antenna,
+                                              Mount(rx.profile_id, rx.heading_deg), other.conducted_power_w)
+                power_gain_db = 10 * math.log10(other.conducted_power_w / self._reference_watts(details))
+                other_snr += budget.net_gain_db + power_gain_db
+                antenna_interferers.append({
+                    "attempt_id": other.attempt_id, "antenna": budget.describe(),
+                    "power_gain_db": power_gain_db,
+                })
             # Use the wanted receiver's noise floor and each interfering path's
             # independent link budget. Scale before fading so fades survive.
             clean_power = self.channel.reference_power(other.encoded.samples)
             gain = (noise_power * 10 ** (other_snr / 10) / clean_power) ** 0.5
             offset = round(other.start_s * rate) - round(tx.start_s * rate)
             add_overlap(interference, incoming, offset, gain)
-        return self.channel.decode_received(
+        decoded, receiver = self.channel.decode_received(
             tx.encoded, signal, noise, interference=interference, capture=True,
         )
+        if antenna_interferers:
+            receiver["antenna_interferers"] = antenna_interferers
+        return decoded, receiver
 
     def _complete(self):
         for attempt_id, burst in list(self.active.items()):
@@ -235,6 +278,8 @@ class Simulation:
                 "profile": receiver.get("profile"),
                 "interferers": interferers,
             }
+            if "antenna_interferers" in receiver:
+                event["antenna_interferers"] = receiver["antenna_interferers"]
             if self.retain_waveforms:
                 self.waveforms[event["source"]] = WaveformPair(event, burst.transmission.encoded, receiver)
             self.recent.appendleft(event)
@@ -260,8 +305,22 @@ class Simulation:
                 break
             if msg.source in busy or msg.target in busy:
                 continue
+            source = self.stations[msg.source]
+            target = self.stations[msg.target]
+            accessible = free_bands
+            if self.antennas is not None:
+                compatible = [band["id"] for band in self.bands
+                              if self.antennas.supported(source["id"], target["id"], band["id"])]
+                if not compatible:
+                    self.queues[msg.source].popleft()
+                    self.counts["dropped"] += 1
+                    self.counts["unsupported_antenna_paths"] += 1
+                    continue
+                accessible = [choice for choice in free_bands if choice in compatible]
+                if not accessible:
+                    continue
             encoded = self.channel.prepare(msg.encode())
-            band = max(free_bands, key=lambda choice: self._band_score(msg.source, choice))
+            band = max(accessible, key=lambda choice: self._band_score(msg.source, choice))
             free_bands.remove(band)
             if self.medium == "shared":
                 # A busy band becomes eligible for another uncoordinated
@@ -273,14 +332,24 @@ class Simulation:
             self.counts["attempted"] += 1
             self.counts["retried"] += int(msg.retry > 0)
             self.band_attempts[msg.source, band] += 1
-            source = self.stations[msg.source]
-            target = self.stations[msg.target]
             snr_db, fading_db, space_weather = self._path(
                 msg.source, msg.target, band, self.elapsed, self.weather, self.rf_rng,
             )
+            budget = None
+            power_gain_db = 0
+            tx_mount = None
+            power_w = REFERENCE_POWER_W
+            if self.antennas is not None:
+                sender, receiver = (self.antennas.stations[station["id"]] for station in (source, target))
+                tx_mount = sender.tx
+                reference_watts = self._reference_watts(space_weather)
+                power_w = sender.power_w if sender.power_w is not None else reference_watts
+                power_gain_db = 10 * math.log10(power_w / reference_watts)
+                budget = self._antenna_budget(msg.source, msg.target, band, tx_mount, receiver.rx, power_w)
+            path_gain_db = budget.net_gain_db + power_gain_db if budget is not None else 0
             tx = Transmission(
                 self.counts["attempted"], msg.source, encoded, self.elapsed,
-                self.rf_rng.randrange(1, 2**31), self.weather,
+                self.rf_rng.randrange(1, 2**31), self.weather, tx_mount, power_w,
             )
             event = {
                 "id": tx.attempt_id,
@@ -293,7 +362,7 @@ class Simulation:
                 "retry": msg.retry,
                 "simulated_at_s": self.elapsed,
                 "started_at_s": self.elapsed,
-                "snr_db": round(snr_db, 1),
+                "snr_db": round(snr_db + path_gain_db, 1),
                 "airtime_s": round(encoded.airtime_s, 3),
                 "payload_bytes": PAYLOAD.size,
                 "channel_model": self.channel.channel_model,
@@ -301,12 +370,16 @@ class Simulation:
             }
             if space_weather is not None:
                 event["space_weather"] = space_weather
+            if budget is not None:
+                event.update(antenna=budget.describe(), reference_snr_db=round(snr_db, 1),
+                             power_w=power_w, power_gain_db=power_gain_db)
             if self.retain_waveforms:
                 previous = self.waveforms.get(source["id"])
                 if previous is not None:
                     self.previous_waveforms.append(previous)
                 self.waveforms[source["id"]] = WaveformPair(event, encoded)
-            burst = Burst(msg, event, tx, fading_db, self.elapsed + encoded.airtime_s)
+            burst = Burst(msg, event, tx, fading_db, self.elapsed + encoded.airtime_s,
+                          antenna=budget, path_gain_db=path_gain_db)
             for other in self.active.values():
                 if other.event["band"] == band:
                     burst.overlaps.append(other.transmission)
@@ -329,10 +402,16 @@ class Simulation:
     def weather_status(self):
         return self.weather.status() if self.weather is not None else {"mode": "scenario"}
 
+    def antenna_status(self):
+        if self.antennas is None:
+            return {}
+        return {"antenna_model": self.antennas.mode}
+
     def status(self):
         return {"running": self.running, "error": self.error,
                 "stats": self.stats(), "elapsed_s": self.elapsed, "weather": self.weather_status(),
                 "medium": self.medium, "interference": self.interference,
+                **self.antenna_status(),
                 "wall_elapsed_s": self.wall_elapsed, "peak_tick_lag_s": self.peak_tick_lag}
 
     def stop_with_error(self, error):

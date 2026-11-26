@@ -1,0 +1,64 @@
+.antenna-lab {
+  display: grid;
+  gap: 14px;
+  margin-block-end: 16px;
+  padding: clamp(12px, 2vw, 22px);
+  line-height: 1.5;
+}
+
+.antenna-lab-heading, .antenna-lab-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.antenna-lab-heading h2 { font-size: 1.35rem; }
+.antenna-lab p { max-width: 76ch; }
+.antenna-lab-muted { color: var(--muted); }
+.antenna-lab-status, .antenna-lab-complete { color: var(--teal); }
+.antenna-lab-status:empty { display: none; }
+.antenna-lab-exercises { display: grid; gap: 20px; }
+.antenna-lab-exercise { min-inline-size: 0; padding-block-start: 14px; border-block-start: 1px solid var(--border); }
+.antenna-lab-exercise h3, .antenna-lab-trial h4 { margin: 0 0 6px; line-height: 1.3; }
+.antenna-lab-exercise > p:not(.antenna-lab-complete) { color: var(--muted); }
+.antenna-lab-trials {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 10px;
+  margin-block: 12px;
+}
+.antenna-lab-trial { min-inline-size: 0; padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
+
+.antenna-lab-link, .antenna-lab :is(button, summary) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: .45rem .7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--teal);
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+.antenna-lab summary { display: list-item; }
+.antenna-lab :is(button, a, summary):hover { border-color: var(--teal); }
+.antenna-lab :is(button, a, summary):focus-visible, .antenna-lab label:focus-within, [data-lab-progress]:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+}
+.antenna-lab button:disabled { cursor: default; opacity: .65; }
+
+.antenna-lab-result dl { margin: 10px 0; font-variant-numeric: tabular-nums; }
+.antenna-lab-result dl > div { display: flex; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; }
+.antenna-lab-result dt { color: var(--muted); }
+.antenna-lab-result dd { margin: 0; }
+.antenna-lab-question fieldset { min-inline-size: 0; padding: 0; margin: 0 0 12px; border: 0; }
+.antenna-lab-question legend { font-weight: 700; }
+.antenna-lab-question label { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px; }
+.antenna-lab-question input { accent-color: var(--teal); }
+.antenna-lab-footer { justify-content: start; align-items: start; }
+.antenna-lab-footer details p { margin-block: 8px; }

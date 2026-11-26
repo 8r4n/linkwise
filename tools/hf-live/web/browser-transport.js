@@ -1,4 +1,4 @@
-export function createBrowserTransport(receive, bandwidth, { scenarioId } = {}) {
+export function createBrowserTransport(receive, bandwidth, { scenarioId, antennas = false, antennaConfigs } = {}) {
   const worker = new Worker(new URL("./browser-worker.js", import.meta.url), { type: "module" });
   const pending = new Map();
   let nextId = 0;
@@ -36,7 +36,7 @@ export function createBrowserTransport(receive, bandwidth, { scenarioId } = {}) 
   const requested = new URL(location.href).searchParams.get("seed");
   const seed = requested !== null && /^\d{1,10}$/.test(requested) && Number(requested) <= 0xffffffff
     ? Number(requested) : crypto.getRandomValues(new Uint32Array(1))[0];
-  worker.postMessage({ type: "start", seed, bandwidth, scenarioId });
+  worker.postMessage({ type: "start", seed, bandwidth, scenarioId, antennas, antennaConfigs });
 
   return {
     requestCapture(station, { signal, stage, attempt, after }) {
@@ -64,6 +64,14 @@ export function createBrowserTransport(receive, bandwidth, { scenarioId } = {}) 
     sendMessage(request) {
       if (closing || failure) throw Error("The browser simulation is unavailable.");
       worker.postMessage({ type: "send-message", request });
+    },
+    setAntenna(command) {
+      if (closing || failure) throw Error("The browser simulation is unavailable.");
+      worker.postMessage({ type: "set-antenna", command });
+    },
+    runAntennaTrial(request) {
+      if (closing || failure) throw Error("The browser simulation is unavailable.");
+      worker.postMessage({ type: "antenna-trial", request });
     },
     close() {
       closing = true;

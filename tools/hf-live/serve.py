@@ -14,9 +14,10 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from antennas import ANTENNA_PRESETS, CATALOG_PATH, load_configuration
 from medium import INTERFERENCE_PROFILES
 from simulator import PAYLOAD, TICK_HZ, Simulation
-from stations import BANDS, MAX_STATIONS
+from stations import BANDS, MAX_STATIONS, make_stations
 
 
 ROOT = Path(__file__).resolve().parent
@@ -113,6 +114,8 @@ class Handler(SimpleHTTPRequestHandler):
     def translate_path(self, url):
         path = Path(super().translate_path(url))
         parts = path.relative_to(WEB_ROOT).parts
+        if parts == (CATALOG_PATH.name,):
+            return str(CATALOG_PATH)
         if parts and parts[0] == "vendor":
             if parts == ("vendor", SATELLITE_IMAGE.name):
                 return str(SATELLITE_IMAGE)
@@ -188,7 +191,7 @@ class Handler(SimpleHTTPRequestHandler):
             "channel_model": attempt["channel_model"],
             "decode_status": attempt["decode_status"],
             "profile": attempt.get("profile"),
-            "reference_snr_db": attempt["snr_db"],
+            "reference_snr_db": attempt.get("reference_snr_db", attempt["snr_db"]),
             "measured_snr_db": attempt.get("measured_snr_db"),
             "measured_sinr_db": attempt.get("measured_sinr_db"),
             "interferers": attempt.get("interferers", []),
@@ -227,6 +230,11 @@ def main():
                         help="allow up to two uncoordinated same-band transmitters in shared mode")
     parser.add_argument("--interference", choices=INTERFERENCE_PROFILES, default="none",
                         help="inject deterministic receiver interference")
+    antenna_options = parser.add_mutually_exclusive_group()
+    antenna_options.add_argument("--antenna-preset", choices=ANTENNA_PRESETS,
+                                 help="opt in to a modeled station antenna lineup")
+    antenna_options.add_argument("--antenna-config", type=Path,
+                                 help="station TX/RX antennas, headings and transmit powers from JSON")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8752)
     parser.add_argument("--cesium-dir", type=Path, default=CESIUM_ROOT)
@@ -259,7 +267,11 @@ def main():
         channel.airtime_s(PAYLOAD.size)
     forecast = None
     weather = None
+    antennas = None
     try:
+        if args.antenna_preset or args.antenna_config:
+            antennas = load_configuration(make_stations(args.stations),
+                                          preset=args.antenna_preset, path=args.antenna_config)
         if args.forecast:
             from path_forecast import PathForecast
 
@@ -282,7 +294,7 @@ def main():
 
     simulation = Simulation(channel, args.stations, args.seed, args.band, weather,
                             medium=args.medium, interference=args.interference,
-                            forecast=forecast, retain_waveforms=not args.headless)
+                            forecast=forecast, retain_waveforms=not args.headless, antennas=antennas)
     stop = threading.Event()
     if args.headless:
         run(simulation, stop, args.speed, args.duration)

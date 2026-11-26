@@ -2,11 +2,15 @@ import { createWaveformPanel } from "./waveform.js";
 import { createBrowserTransport } from "./browser-transport.js";
 import { createStationConsole } from "./station-console.js";
 import { createLearning } from "./learning-ui.mjs";
+import { antennaReadout, createAntennaConsole, headingLabel, pointAlongHeading } from "./antenna-console.mjs";
+import { mountAntennaLab } from "./antenna-lab.mjs";
+import { gainCut, pathGeometry } from "./antenna-model.mjs";
 
 const $ = (id) => document.getElementById(id);
 const traffic = $("traffic");
 const stationFilter = $("station-filter");
 const bandFilter = $("band-filter");
+const mapPatterns = $("map-patterns");
 const states = { active: "Busy", delivered: "Delivered", failed: "Lost" };
 const totals = ["attempted", "active", "delivered", "failed", "retried", "dropped", "queued"];
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
@@ -29,17 +33,24 @@ let transport = "connecting";
 let synchronized = false;
 let globe = null;
 const inBrowser = document.documentElement.dataset.mode === "browser";
+const query = new URL(location.href).searchParams;
+const inAntennaLab = inBrowser && query.get("lab") === "antenna";
+const antennaPreset = inBrowser && !inAntennaLab && !query.has("mission") && query.get("antennas") === "1";
 const vendor = new URL("./vendor/", import.meta.url);
 const modeControl = $("browser-mode");
 const runControl = $("browser-run");
 let browserTransport = null;
+let antennaOverlay = null;
+let antennaCatalog = null;
+let antennaStations = new Map();
 const waveform = createWaveformPanel({
-  bandName, bandFrequencyHz, stationName, requestCapture,
+  bandName, bandFrequencyHz, stationName, requestCapture, antennaName,
   onCapture: capture => learning?.onCapture(capture),
+  lockLevels: inAntennaLab,
 });
 const stationConsole = inBrowser ? createStationConsole({ send: sendMessage }) : null;
-const learning = inBrowser ? createLearning({
-  id: new URL(location.href).searchParams.get("mission"),
+const learning = inBrowser && !inAntennaLab ? createLearning({
+  id: query.get("mission"),
   launch: bandwidth => { void startBrowserMode(bandwidth); },
   send: sendMessage,
   viewBurst: (station, attempt) => {
@@ -48,6 +59,27 @@ const learning = inBrowser ? createLearning({
     waveform.inspect(station, attempt);
   },
   stationName,
+}) : null;
+const antennaConsole = antennaPreset ? createAntennaConsole({
+  transport: () => browserTransport,
+  onStation: id => {
+    stationFilter.value = id;
+    changeStation();
+  },
+  onOverlay: value => {
+    antennaOverlay = value;
+    globe?.drawAntenna(value);
+  },
+}) : null;
+const antennaLab = inAntennaLab ? mountAntennaLab({
+  root: $("antenna-lab"), transport: () => browserTransport, learningHref: "../learn/",
+  onCapture: (station, attempt) => {
+    stationFilter.value = station;
+    focusAttempt(String(attempt), true);
+    waveform.inspect(station, attempt, "rx");
+    $("waveform-title").focus({ preventScroll: true });
+    $("waveform-title").scrollIntoView({ block: "start" });
+  },
 }) : null;
 
 function sendMessage(request) {
@@ -93,6 +125,10 @@ function bandFrequencyHz(id) {
 
 function stationName(id) {
   return stations.get(id)?.name ?? id;
+}
+
+function antennaName(id) {
+  return antennaCatalog?.profiles.find(profile => profile.id === id)?.name ?? id;
 }
 
 function setOptions(select, all, options) {
@@ -199,6 +235,19 @@ function renderTraffic() {
   globe?.draw(attempts);
 }
 
+function drawAttemptAntenna(attempt) {
+  const budget = antennaReadout(attempt?.antenna, antennaName);
+  if (!budget) return;
+  const { tx, rx } = budget;
+  const source = stations.get(attempt.source);
+  const peer = stations.get(attempt.target);
+  if (!source || !peer) return;
+  antennaOverlay = { source, peer, heading: tx.headingDeg, bearing: tx.bearingDeg, txProfile: tx.profileId,
+    rxHeading: rx.headingDeg, rxProfile: rx.profileId,
+    band: attempt.band, elevation: budget.elevationDeg };
+  globe?.drawAntenna(antennaOverlay);
+}
+
 function applyStatus(value) {
   if (value.stats && typeof value.stats === "object") stats = value.stats;
   if (typeof value.running === "boolean") running = value.running;
@@ -262,7 +311,12 @@ function readSnapshot(value) {
   setOptions(stationFilter, "All stations", [...stations].map(([id, station]) => new Option(station.name ?? id, id)));
   setOptions(bandFilter, "All bands", [...bands.keys()].map((id) => new Option(bandName(id), id)));
   stationConsole?.configure([...stations.values()], value.bandwidth_hz ?? 500);
+  if (inAntennaLab) $("station-console").hidden = true;
   stationConsole?.selectStation(stationFilter.value);
+  antennaCatalog = value.antennas?.catalog ?? null;
+  antennaStations = new Map((value.antennas?.stations ?? []).map(item => [item.station, item]));
+  $("map-pattern-control").hidden = inAntennaLab || antennaStations.size === 0;
+  antennaConsole?.configure(value, stations, stationFilter.value);
   waveform.select(stationFilter.value, true);
   text($("station-count"), `${stations.size} stations · ${bands.size} bands`);
   text($("model-name"), `${value.channel ?? "GNU Radio"}${Number.isFinite(value.sample_rate_hz) ? ` · ${number.format(value.sample_rate_hz)} samples/s` : ""}`);
@@ -270,7 +324,9 @@ function readSnapshot(value) {
   applyStatus(value);
   synchronized = true;
   learning?.onSnapshot(value);
+  antennaLab?.onSnapshot(value);
   globe?.setStations();
+  globe?.drawNetworkAntennas();
   renderStatus();
   renderTraffic();
 }
@@ -284,6 +340,7 @@ function readAttempt(value) {
   }
   recent = recent.filter((item) => item.id !== attempt.id);
   waveform.notify(attempt);
+  if (inAntennaLab && attempt.state === "active") drawAttemptAntenna(attempt);
   if (attempt.state === "active") {
     active.set(attempt.id, attempt);
   } else {
@@ -312,6 +369,10 @@ async function startBrowserMode(bandwidth = Number(modeControl.value)) {
   modeControl.disabled = true;
   waveform.select("");
   stationConsole.configure([], bandwidth);
+  antennaCatalog = null;
+  antennaStations.clear();
+  globe?.drawNetworkAntennas();
+  antennaConsole?.configure(null, new Map());
   active.clear();
   recent = [];
   stats = {};
@@ -342,25 +403,39 @@ async function startBrowserMode(bandwidth = Number(modeControl.value)) {
           learning?.onRadio(value);
           return;
         }
+        if (kind === "station-antenna") {
+          antennaConsole?.update(value);
+          if (!value.error && antennaStations.has(value.station)) {
+            antennaStations.set(value.station, { ...antennaStations.get(value.station), ...value });
+            globe?.drawNetworkAntennas(value.station);
+          }
+          return;
+        }
+        if (kind === "antenna-trial") {
+          antennaLab?.onTrial(value);
+          return;
+        }
         transport = "open";
         if (kind === "status" && value.error) {
           synchronized = true;
           learning?.onError(value.error);
+          antennaLab?.onError(value.error);
         }
         handlers[kind]?.(value);
         renderStatus();
       } catch (problem) {
         setNotice(`Unable to read the browser simulation. ${problem.message}`);
       }
-    }, bandwidth, { scenarioId: learning?.scenarioId ?? undefined });
+    }, bandwidth, { scenarioId: inAntennaLab ? "antenna-lab" : learning?.scenarioId, antennas: antennaPreset });
   } catch (problem) {
     transport = "open";
     synchronized = true;
     applyStatus({ running: false, error: problem.message });
     learning?.onError(problem.message);
+    antennaLab?.onError(problem.message);
     renderStatus();
   } finally {
-    modeControl.disabled = Boolean(learning);
+    modeControl.disabled = Boolean(learning) || inAntennaLab;
   }
 }
 
@@ -368,10 +443,16 @@ function connect() {
   if (inBrowser) {
     text($("simulation-description"), "This browser runs the station network and Linkwise modems while this page is open.");
     $("browser-learning").hidden = false;
-    $("browser-controls").hidden = false;
+    $("browser-controls").hidden = inAntennaLab;
+    const preset = $("antenna-preset-link");
+    preset.hidden = Boolean(learning) || inAntennaLab;
+    if (antennaPreset) {
+      preset.href = "./";
+      text(preset, "Standard simulation");
+    }
     runControl.addEventListener("click", () => browserTransport?.setRunning(!running));
     modeControl.addEventListener("change", () => { void startBrowserMode(); });
-    void startBrowserMode(learning?.initialBandwidth);
+    void startBrowserMode(inAntennaLab ? 500 : learning?.initialBandwidth);
     return;
   }
   if (!window.EventSource) {
@@ -396,18 +477,24 @@ function connect() {
   }));
 }
 
-function focusAttempt(id) {
+function focusAttempt(id, force = false) {
   const attempt = recentTraffic().find((record) => record.id === id);
   if (!attempt) return;
-  selected = selected === id ? null : id;
+  selected = !force && selected === id ? null : id;
   renderTraffic();
   if (selected) globe?.focusPath(attempt);
+  if (selected) drawAttemptAntenna(attempt);
 }
 
 function changeStation() {
   selected = null;
   waveform.select(stationFilter.value);
   stationConsole?.selectStation(stationFilter.value);
+  antennaConsole?.selectStation(stationFilter.value);
+  if (!antennaConsole && !inAntennaLab) {
+    antennaOverlay = null;
+    globe?.drawAntenna(null);
+  }
   renderTraffic();
   if (stationFilter.value) globe?.focusStation(stationFilter.value);
 }
@@ -426,6 +513,9 @@ function makeGlobe(C) {
   scene.screenSpaceCameraController.minimumZoomDistance = 350000;
   const points = scene.primitives.add(new C.PointPrimitiveCollection());
   const lines = scene.primitives.add(new C.PolylineCollection());
+  const bearings = scene.primitives.add(new C.PolylineCollection());
+  const networkAntennas = scene.primitives.add(new C.PolylineCollection());
+  const networkPatterns = new Map();
   const markers = new Map();
   const paths = new Map();
   const stationColor = C.Color.fromCssColorString("#d0ecff");
@@ -440,10 +530,84 @@ function makeGlobe(C) {
     delivered: C.Material.fromType("PolylineArrow", { color: colors.delivered.withAlpha(0.9) }),
     failed: C.Material.fromType("PolylineDash", { color: colors.failed.withAlpha(0.76), dashLength: 13 }),
   };
+  const antennaMaterials = {
+    heading: C.Material.fromType("PolylineArrow", { color: C.Color.fromCssColorString("#b9a1ff") }),
+    peer: C.Material.fromType("PolylineDash", { color: C.Color.fromCssColorString("#f5da96"), dashLength: 12 }),
+    tx: C.Material.fromType("Color", { color: C.Color.fromCssColorString("#b9a1ff") }),
+    rx: C.Material.fromType("Color", { color: C.Color.fromCssColorString("#7de8d7") }),
+    networkTx: C.Material.fromType("Color", { color: C.Color.fromCssColorString("#b9a1ff").withAlpha(.7) }),
+    networkRx: C.Material.fromType("Color", { color: C.Color.fromCssColorString("#7de8d7").withAlpha(.67) }),
+  };
 
   function position(station, height = 0) {
     return station && Number.isFinite(station.lat) && Number.isFinite(station.lon)
       ? C.Cartesian3.fromDegrees(station.lon, station.lat, height) : null;
+  }
+
+  function antennaProfile(id) {
+    return antennaCatalog?.profiles.find(profile => profile.id === id);
+  }
+
+  function antennaBand() {
+    return bandFilter.value || (bands.has("20m") ? "20m" : bands.keys().next().value);
+  }
+
+  function patternPositions(station, profile, band, elevation, heading, radius, skip) {
+    if (!station || !profile?.bands[band] || !Number.isFinite(heading) || !Number.isFinite(elevation)) return [];
+    const cut = gainCut(profile, band, elevation, heading);
+    const peak = Math.max(...cut.map(point => point.gain_dbi));
+    return cut.filter((_, i) => i % skip === 0).map(({ gain_dbi, bearing_deg }) => position(
+      pointAlongHeading(station, bearing_deg, radius * (.15 + .85 * 10 ** ((gain_dbi - peak) / 20))), 65000));
+  }
+
+  function drawNetworkAntennas(changedStation) {
+    const role = mapPatterns.value;
+    const summary = $("map-pattern-summary");
+    if (!changedStation) {
+      networkAntennas.removeAll();
+      networkPatterns.clear();
+    }
+    if (inAntennaLab || !antennaCatalog || role === "off") {
+      summary.hidden = true;
+      scene.requestRender();
+      return;
+    }
+    const band = antennaBand();
+    const elevation = 20;
+    const roles = role === "both" ? ["tx", "rx"] : [role];
+    const stationIds = changedStation ? [changedStation] : antennaStations.keys();
+    for (const id of stationIds) {
+      const state = antennaStations.get(id);
+      const station = stations.get(id);
+      for (const side of roles) {
+        const key = `${id}/${side}`;
+        const prior = networkPatterns.get(key);
+        const shape = antennaProfile(state?.[side + "Port"]);
+        const heading = state?.[side + "Heading"] ?? (shape?.rotatable ? state?.actualAzimuth : state?.fixedAzimuth);
+        const signature = `${shape?.id}/${band}/${heading}`;
+        if (prior?.signature === signature) continue;
+        const positions = patternPositions(station, shape, band, elevation, heading, side === "tx" ? .049 : .036, 2);
+        if (!positions.length) {
+          if (prior) networkAntennas.remove(prior.line);
+          networkPatterns.delete(key);
+          continue;
+        }
+        if (prior) {
+          prior.line.positions = positions;
+          prior.signature = signature;
+        } else {
+          const line = networkAntennas.add({ positions, width: 1.8,
+            id: { stationId: id }, material: side === "tx" ? antennaMaterials.networkTx : antennaMaterials.networkRx });
+          networkPatterns.set(key, { signature, line, side });
+        }
+      }
+    }
+    const patterns = [...networkPatterns.values()];
+    const counts = roles.map(side => `${patterns.filter(entry => entry.side === side).length} ${side.toUpperCase()}`).join(" · ");
+    const pigments = roles.map(side => side === "tx" ? "violet TX" : "teal RX").join(", ");
+    summary.hidden = false;
+    text(summary, `${bands.get(band)?.name ?? band} · ${counts} patterns across ${antennaStations.size} stations · ${elevation}° elevation · ${pigments} · relative scale`);
+    scene.requestRender();
   }
 
   function overview() {
@@ -517,6 +681,43 @@ function makeGlobe(C) {
     scene.requestRender();
   }
 
+  function drawAntenna(view) {
+    bearings.removeAll();
+    const label = $("map-antenna");
+    label.hidden = !view;
+    if (view) {
+      const { source, peer, heading, bearing, rxHeading } = view;
+      const addBearing = (station, angle, material, length, width) => {
+        if (!position(station) || !Number.isFinite(angle)) return;
+        const positions = Array.from({ length: 9 }, (_, index) =>
+          position(pointAlongHeading(station, angle, length * index / 8), 65000));
+        bearings.add({ positions, material, width });
+      };
+      const tx = antennaProfile(view.txProfile);
+      const rx = antennaProfile(view.rxProfile);
+      const band = view.band || antennaBand();
+      const elevation = view.elevation ?? (peer ? pathGeometry(source, peer).elevation_deg : tx?.bands[band]?.elevation_deg);
+      const addPattern = (station, shape, azimuth, material) => {
+        const positions = patternPositions(station, shape, band, elevation, azimuth, .123, 1);
+        if (!positions.length) return false;
+        bearings.add({ positions, material, width: 2.4 });
+        return true;
+      };
+      const pattern = addPattern(source, tx, heading, antennaMaterials.tx);
+      const receivePattern = addPattern(peer, rx, rxHeading, antennaMaterials.rx);
+      addBearing(source, heading, antennaMaterials.heading, .13, 6);
+      addBearing(source, bearing, antennaMaterials.peer, .18, 3);
+      addBearing(peer, rxHeading, antennaMaterials.heading, .09, 4);
+      const parts = [`${stationName(source.id)} heading ${headingLabel(heading)}`];
+      if (peer) parts.push(`${stationName(peer.id)} bearing ${headingLabel(bearing)}`);
+      if (Number.isFinite(rxHeading)) parts.push(`RX heading ${headingLabel(rxHeading)}`);
+      if (pattern) parts.push(`${bands.get(band)?.name ?? band} gain contour at ${number.format(elevation)}° elevation, relative scale`);
+      if (receivePattern) parts.push("TX violet · RX teal");
+      text(label, parts.join(" · "));
+    }
+    scene.requestRender();
+  }
+
   function focusPath(attempt) {
     const geometry = arc(attempt);
     if (!geometry) return;
@@ -554,7 +755,7 @@ function makeGlobe(C) {
     overview();
   });
   overview();
-  return { viewer, setStations, draw, focusPath, focusStation };
+  return { viewer, setStations, draw, drawAntenna, drawNetworkAntennas, focusPath, focusStation };
 }
 
 async function setupMap() {
@@ -575,6 +776,8 @@ async function setupMap() {
   });
   document.querySelector(".map-controls").hidden = false;
   globe.setStations();
+  globe.drawAntenna(antennaOverlay);
+  globe.drawNetworkAntennas();
   renderTraffic();
   const attribution = $("basemap-source");
   try {
@@ -601,6 +804,12 @@ async function setupMap() {
 }
 
 stationFilter.addEventListener("change", changeStation);
-bandFilter.addEventListener("change", () => { selected = null; renderTraffic(); });
+bandFilter.addEventListener("change", () => {
+  selected = null;
+  renderTraffic();
+  globe?.drawAntenna(antennaOverlay);
+  globe?.drawNetworkAntennas();
+});
+mapPatterns.addEventListener("change", () => globe?.drawNetworkAntennas());
 connect();
 setupMap();

@@ -40,6 +40,11 @@ The site’s **Learn** page links to four guided missions. Training uses preset
 simulated links and messages. Mission progress and the HF Operator badge are
 stored in the browser.
 
+**Antennas and link budget** adds two matched antenna exercises to Learn.
+The Antenna Lab uses bundled forecast and weather inputs and saves progress
+in the browser. The simulator's **Antenna-enabled simulation** link opens the
+interactive station ports and rotator for free play.
+
 The Pages build prepares the assets automatically. For local development,
 install the Rust WASM target and prepare the page before running Astro.
 
