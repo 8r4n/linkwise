@@ -11,7 +11,7 @@ import { guideTrustMail } from "../../docs/i18n/guide-trust-mail.mjs";
 import { visualGuide } from "../../docs/i18n/visual-guide.mjs";
 import { varacGuide } from "../../docs/i18n/varac.mjs";
 import { websiteLabels } from "../../docs/i18n/website-upgrade.mjs";
-import { deploymentBuilds, projectMedia } from "../src/project-content.mjs";
+import { deploymentBuilds, projectMedia, supportLinks } from "../src/project-content.mjs";
 import { repository } from "../src/releases.mjs";
 
 const root = new URL("../../", import.meta.url);
@@ -43,14 +43,25 @@ for (const { code } of locales) {
   const varac = varacGuide(code);
   const target = new URL(pagePath(code).slice(1), publicDir);
   const guide = base + pagePath(code, "guide").slice(1);
+  const capabilities = base + pagePath(code, "capabilities").slice(1);
   const link = (label, url) => "- [" + label + "](" + url + ")";
   const reference = source => base + "reference/" + code + "/" + source + "/";
   await mkdir(target, { recursive: true });
   const overview = [
     "# Linkwise", "", "> " + project.overview, "", t.guide.lede, "",
+    "## Start here", "",
+    link("Project source on GitHub", repository),
+    link("First run from the project README", repository + "#first-run"),
+    link("What works today", repository + "#what-works-today"),
+    link("HF propagation and antenna simulator", base + "hf-simulation/"),
+    link("Matched 20 m antenna gain study", base + "research/antenna-gain/"),
+    link("Local MCP guide", repositorySources + "rust/docs/mcp-usage.md#simulated-radio-mcp-quickstart"), "",
     "## " + t.nav.downloads, "", t.downloads.verify, "",
+    "If installers are pending, use the browser simulator or build from source.", "",
     link(t.downloads.manifest, base + "releases.json"),
     link(t.nav.downloads, base + pagePath(code, "downloads").slice(1)),
+    link(project.releaseNotes, supportLinks.releases),
+    link(project.build, capabilities + "#build"),
     ...deploymentBuilds.map(({ id, title }) => link(title, base + `install/${id}.md`)),
     link(t.ui.manuals, reference("docs/man/linkwise.1")), "",
     "## " + t.nav.guide, "",
@@ -59,6 +70,9 @@ for (const { code } of locales) {
     link(t.nav.winlink, base + pagePath(code, "winlink").slice(1)),
     ...["capabilities", "demos", "learn", "research"].map(page => link(project[page], base + pagePath(code, page).slice(1))),
     link(t.nav.docs, base + pagePath(code, "docs").slice(1)), "",
+    "## Station qualification", "",
+    link("Station integration and qualification", capabilities + "#station"),
+    link("Station implementation and test evidence", repositorySources + "docs/architecture/station-integration-status.md"), "",
     "## " + varac.title, "", varac.lede, "", varac.setup, "", varac.bench, varac.scope, "",
     link(varac.title, base + pagePath(code, "varac").slice(1)),
     link(visual.bench, reference("docs/testing/varac-chat.md")), "",
