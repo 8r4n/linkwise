@@ -6,18 +6,21 @@ import { guideTrustMail } from "../../docs/i18n/guide-trust-mail.mjs";
 import { visualGuide } from "../../docs/i18n/visual-guide.mjs";
 import { varacGuide } from "../../docs/i18n/varac.mjs";
 import { websiteLabels } from "../../docs/i18n/website-upgrade.mjs";
-import { projectMedia } from "../src/project-content.mjs";
+import { deploymentBuilds, projectMedia } from "../src/project-content.mjs";
+import { repository } from "../src/releases.mjs";
 
 const root = new URL("../../", import.meta.url);
 const publicDir = new URL("website/public/", root);
 const base = "https://8r4n.github.io/linkwise/";
+const repositorySources = repository + "/blob/main/";
 const commandLine = command => "- `" + command + "`";
 await mkdir(new URL("install/", publicDir), { recursive: true });
-for (const guide of ["windows", "macos", "ubuntu", "fedora", "winlink-quick-start"]) {
+for (const guide of ["windows", "macos", "ubuntu", "fedora", "winlink-quick-start", ...deploymentBuilds.map(({ id }) => id)]) {
   const source = await readFile(new URL(`docs/install/${guide}.md`, root), "utf8");
-  const markdown = source.replaceAll(
-    "../../rust/", "https://github.com/8r4n/linkwise/blob/main/rust/",
-  );
+  const markdown = source
+    .replaceAll("../../rust/", repositorySources + "rust/")
+    .replaceAll("../../.github/", repositorySources + ".github/")
+    .replaceAll("../architecture/", repositorySources + "docs/architecture/");
   await writeFile(new URL(`install/${guide}.md`, publicDir), markdown);
 }
 for (const [source, name] of projectMedia) {
@@ -41,6 +44,7 @@ for (const { code } of locales) {
     "## " + t.nav.downloads, "", t.downloads.verify, "",
     link(t.downloads.manifest, base + "releases.json"),
     link(t.nav.downloads, base + pagePath(code, "downloads").slice(1)),
+    ...deploymentBuilds.map(({ id, title }) => link(title, base + `install/${id}.md`)),
     link(t.ui.manuals, reference("docs/man/linkwise.1")), "",
     "## " + t.nav.guide, "",
     link(t.guide.title, guide),

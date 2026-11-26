@@ -1,6 +1,7 @@
 ---
 import DemoVideo from "./DemoVideo.astro";
 import { acquisitionEvidence, audioSamples, capabilities, laterCWResults, matchedReplay, trialsPerLevel } from "../project-content.mjs";
+import { repository } from "../releases.mjs";
 const { page, locale, t, project, base, link } = Astro.props;
 const reference = path => `${base}/reference/${locale.code}/${path}/`;
 const media = name => `${base}/media/${name}`;
@@ -20,6 +21,16 @@ const decibels = value => value > 0 ? `+${value}` : String(value).replace("-", "
           </tr>)}</tbody>
         </table>
       </div>
+      <section class="project-section" id="station">
+        <h2>Station integration and qualification</h2>
+        <p>The station manager uses local MCP stdio to rank eligible gateway channels from timestamped RMS snapshots and optional imported VOACAP results. Shadow attempts use a simulated radio, an expiring station lease and a one-use grant. The journal retains decisions, attempt IDs and outcomes across a restart.</p>
+        <ul class="result-list">
+          <li><strong>Managed virtual BW500.</strong> Two modem processes exchange Open B2F mail over isolated virtual audio. The test aborts a connected pair, verifies cleanup and compares both attachment SHA-256 digests on a fresh attempt.</li>
+          <li><strong>Rocky Linux 9 ARM64.</strong> A booted Rocky 9.9 guest verified a bench-signed RPM with SELinux enforcing. Its modem unit reached readiness on ALSA loopback. With kernel FIPS enabled, authenticated SMTP and IMAP used loopback TLS 1.3 for a virtual BW500 mail round trip.</li>
+          <li><strong>Open gates.</strong> Continuous live RMS inventory and VOACAP collection, a commissioned RMS/CMS exchange, measured station audio and independent physical PTT release, and a production-signed upgrade still need qualification.</li>
+        </ul>
+        <p class="media-links"><a href={reference("docs/architecture/station-integration-status.md")}>Implementation and test evidence</a><a href={repository + "/blob/main/docs/whitepaper/README.md"}>White paper source and build</a><a href={link("downloads") + "#deployment-builds"}>Rocky and WSL builds</a></p>
+      </section>
       <section class="project-section" id="build">
         <h2>Build from source</h2>
         <p>Install the pinned Rust toolchain and the audio build dependencies for your platform. From the repository root, build the station daemon and CLI.</p>

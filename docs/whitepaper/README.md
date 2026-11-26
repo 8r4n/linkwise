@@ -34,9 +34,10 @@ original project material. The supplied
 structures, but its DoW acquisition class and markings were not imported or
 copied.
 
-The whitepaper describes the proposed station system and the implemented
-radio-free modem and MCP components. The contract-level
-software design is in
+Revision 0.4 records the implemented shadow station, managed virtual BW500
+B2F exchange, adaptive network queue, Rocky Linux 9 ARM64 server RPM, and
+Windows WSL development builds. It also describes the proposed live system
+and its remaining qualification. The contract-level software design is in
 [`../architecture/software-design.md`](../architecture/software-design.md);
 supporting architecture, requirements, and safety documents are in
 [`../architecture/`](../architecture/).

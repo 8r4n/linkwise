@@ -56,7 +56,7 @@
 \title{Linkwise: Radio, Modem, and Link Management Research\\[0.4em]
 \large Lab notes and evidence ledger}
 \author{Engineering research log}
-\date{15 November 2026}
+\date{25 November 2026}
 
 \begin{document}
 \maketitle
@@ -70,9 +70,12 @@ codec, streaming receive, audio-handshake, DATA/ARQ, and host-stream components
 now exist. The 9 November entry records their implementation and validation.
 The 10 November entry adds a shared session runtime, a clock-driven runner, and
 a two-way BW500 audio loopback. On 11 November, stock VARA HF accepted
-a Linkwise-initiated BW500 connection over virtual audio. Later entries record exact payload transfer over virtual audio, BW500
-sensitivity experiments, and receive-only KiwiSDR observations. Controlled
-RF qualification remains open.
+a Linkwise-initiated BW500 connection over virtual audio. Later entries record
+exact payload transfer over virtual audio, BW500 sensitivity experiments, and
+receive-only KiwiSDR observations. The 25 November entry records managed
+station operation, Rocky ARM64 server qualification in a disposable guest,
+and Windows WSL image verification under Linux. Controlled RF qualification
+remains open.
 \end{abstract}
 
 \tableofcontents
@@ -4460,6 +4463,90 @@ or VOACAP scoring. Retain the original recordings and use the linked result
 archives to reproduce each comparison.
 
 \clearpage
+\section{Station integration and Rocky packaging, 25 November 2026}
+\label{sec:station-integration-nov25}
+Times use Pacific Standard Time.
+
+\textbf{Architecture gap review.} Compared the station and modem requirements
+in whitepaper \texttt{LINKWISE-WP-001} with the repository and bench evidence.
+The review prioritized
+station-owned attempts, verified radio state, modem cancellation and teardown,
+and installed-package tests. Follow-on work still includes live inventory and
+propagation inputs, a commissioned native modem and client, measured PTT
+release, and a gateway exchange. The implementation matrix maps observed
+behavior and outstanding gates to the requirement IDs.
+See \pathtext{docs/architecture/station-integration-status.md}.
+
+\textbf{Adaptive network and lifecycle.} The independent station daemon gained
+a private Unix socket for live queue submission, status, and readback. A caller
+can retry the same request ID after a lost reply without inserting another
+bundle. The six-station fixture verified 4,352 exact bytes and the return
+receipt on A--D--E--F with B offline. The network also transferred 32 exact
+bytes over virtual BW500. The modem and CAT changes added radio write readback,
+host-socket loss cleanup, and priority cancellation of pending waveform work.
+When native presentation was unconfirmed, the service closed the host
+listeners and required a restart. See \pathtext{rust/network/README.md} and
+\pathtext{rust/docs/modem-runtime.md}.
+
+\textbf{Shadow and managed station.} The shadow MCP run refreshed inventory,
+ranked a channel, prepared a simulated radio, and exercised a one-use grant.
+An idempotent retry returned the same attempt ID. Direct key-up was denied
+and simulated key-down was confirmed. The managed test used two one-shot
+waveform modem processes and two B2F attachments under one station lease.
+It aborted a connected pair, verified mailbox cleanup and process reaping,
+then exchanged exact attachments in both directions on a fresh attempt. The
+journal confirmed local B2F delivery. CMS and recipient status remained
+unknown. In a separate loopback-only trial, official Pat 1.0.1 and Linkwise
+exchanged 1,400-byte attachments in both directions and both modems closed
+cleanly. See \pathtext{rust/tests/olm_station.rs} and
+\pathtext{docs/architecture/station-integration-status.md}.
+
+\textbf{Rocky Linux 9.9 ARM64.} Signature fixtures for the server RPM
+from \texttt{e60a35c} rejected an untrusted signer and a modified package.
+DNF installed the bench-signed copy with local signature checks in an
+enforcing SELinux guest. RPM file verification and systemd unit checks
+passed, and both SELinux policy modules loaded. The installed modem service
+reported ready with kernel ALSA loopback in the expected SELinux domain.
+Mail TLS refused startup with FIPS disabled. After rebooting with kernel
+FIPS mode and the system FIPS policy active, the installed SMTP and IMAP
+services used authenticated TLS 1.3 on loopback with a fixture CA. An SMTP
+attachment reached the peer over virtual BW500 and a separate reply came
+back for IMAP retrieval. Both attachment hashes matched and both modem
+sessions closed cleanly. See \pathtext{docs/install/rocky-server.md} and
+\pathtext{docs/architecture/station-integration-status.md}.
+
+\newpage
+\textbf{Windows WSL images.} Built from the official Rocky 9.9 WSL bases
+with the unsigned Linkwise \texttt{1.rockymail} RPM. The x64 RPM used a
+cross-build and an emulated Rocky x64 packaging container. Both archives
+passed checksum, architecture, and WSL metadata checks. Their extracted
+binaries passed the managed BW500 abort, cleanup, and two-way attachment
+test under Linux. See \pathtext{docs/install/windows-wsl.md}.
+
+\begin{itemize}[leftmargin=*]
+  \item \pathtext{linkwise-rocky9-x64.wsl}\\
+        \hashtext{7fe8b502c0397984}{783ddc5c0faf5e23}{5c6bc95ecd703da0}{88468b0b71c0d4ad}
+  \item \pathtext{linkwise-rocky9-arm64.wsl}\\
+        \hashtext{9ac000902c183f27}{54ddcd645d6d1c30}{75cae9f35494f7fc}{2f1281b5f650a4fc}
+\end{itemize}
+
+\textbf{Review and merge.} Local checks exercised queue retry, station state
+recovery, socket loss, and cancellation paths. Automated review of PR head
+\texttt{9ba3813} reported no findings. PR~\#25 merged into \texttt{main}
+at 16:31 PST as \texttt{15062e6}. Seven PR workflows passed in total,
+including the macOS x64 installer job that finished after the merge.
+\href{https://github.com/8r4n/linkwise/pull/25}{Pull request and checks}.
+\href{https://github.com/8r4n/linkwise/pull/25\#issuecomment-7178648831}{Review summary}.
+
+\textbf{Disposition.} Production trust still requires release signing and
+signed upgrade and recovery. Resume the stock VARA reference bench and
+qualify native audio presentation and physical PTT release with inhibited
+hardware and an independent stop. Windows WSL import, first launch and
+systemd startup await a Windows host. One live RMS/CMS exchange requires
+an authorized account and client, a commissioned station, and an approved
+test window.
+
+\clearpage
 \section{Next work}
 
 \begin{enumerate}[leftmargin=*]
@@ -4470,9 +4557,9 @@ archives to reproduce each comparison.
         native CoreAudio capture with an available input endpoint.
   \item Complete the three-pass repeat sequences on one build for mixed Pat,
         BW500 ACK loss, and BW2300/BW2750 DATA recovery.
-  \item Connect the host command/data transports to one operational session
-        owner with explicit socket pairing, buffering, backpressure, and
-        channel-loss cleanup. Parsing a command is not session acceptance.
+  \item Extend shared session ownership to the native modem, including
+        explicit socket pairing, buffering, backpressure, and channel-loss
+        cleanup.
   \item Integrate device playback and measured turnaround with exclusive
         radio/audio ownership, one-use transmit permits, watchdog release,
         readback, audit, and the independent emergency stop. Keep physical

@@ -6,7 +6,7 @@ import { catalog, translation } from "../../docs/i18n/catalog.mjs";
 import { manuals } from "../../docs/i18n/manuals.mjs";
 import { varacGuide } from "../../docs/i18n/varac.mjs";
 import { websiteLabels } from "../../docs/i18n/website-upgrade.mjs";
-import { audioSamples, projectMedia, supportLinks } from "../src/project-content.mjs";
+import { audioSamples, deploymentBuilds, projectMedia, supportLinks } from "../src/project-content.mjs";
 
 const sha = "b".repeat(64);
 const dist = process.argv[2] ?? "dist";
@@ -24,6 +24,14 @@ assert.equal((await releaseManifest(mock([{ ...release, draft: true }]))).status
 
 const manifest = JSON.parse(await readFile(dist + "/releases.json", "utf8"));
 assert.equal(manifest.installers.length, manifest.status === "available" ? 8 : 0);
+for (const { id } of deploymentBuilds) {
+  assert.ok(!manifest.installers.some(installer => installer.id === id), id);
+}
+const wslGuide = await readFile(dist + "/install/windows-wsl.md", "utf8");
+assert.ok(wslGuide.includes(repository + "/blob/main/.github/workflows/rocky-wsl.yml"));
+assert.ok(wslGuide.includes("(rocky-server.md#mail-access)"));
+const rockyGuide = await readFile(dist + "/install/rocky-server.md", "utf8");
+assert.ok(rockyGuide.includes(repository + "/blob/main/docs/architecture/station-integration-status.md"));
 for (const [source, output] of projectMedia) {
   assert.ok((await stat(dist + "/" + output)).size > 0, output);
   assert.equal((await stat(dist + "/" + output)).size, (await stat("../" + source)).size, output);
@@ -86,6 +94,7 @@ for (const { code, dir = "ltr" } of locales) {
       assert.ok(html.includes("<title>" + varac.siteTitle + " | Linkwise</title>"), path);
       assert.ok(html.includes(`data-release-status="${manifest.status}"`), path);
       assert.ok(html.includes('href="/linkwise' + pagePath(code, "demos") + '"'), path);
+      assert.ok(html.includes('href="/linkwise' + pagePath(code, "capabilities") + '#station"'), path);
       if (manifest.status === "pending") {
         assert.ok(html.includes(project.pending) && html.includes(pagePath(code, "capabilities") + "#build"), path);
       } else assert.ok(html.includes(project.available), path);
@@ -102,6 +111,12 @@ for (const { code, dir = "ltr" } of locales) {
         assert.ok(html.includes(asset.url) && html.includes(asset.sha256));
         await stat(new URL(asset.install_guide).pathname.replace("/linkwise/", dist + "/"));
       }
+      for (const { id, workflow } of deploymentBuilds) {
+        const source = `docs/install/${id}.md`;
+        const guide = translation(code, source) ? `/linkwise/reference/${code}/${source}/` : `/linkwise/install/${id}.md`;
+        assert.ok(html.includes(`id="${id}"`) && html.includes(guide) && html.includes(workflow), path + id);
+      }
+      assert.ok(html.includes("Windows import and first launch remain open"), path);
     }
     if (["downloads", "guide", "varac", "winlink"].includes(page)) {
       assert.ok(html.includes(supportLinks.reportBug) && html.includes(supportLinks.knownIssues), path);
@@ -117,6 +132,8 @@ for (const { code, dir = "ltr" } of locales) {
     }
     if (page === "capabilities") {
       assert.ok(html.includes('id="build"') && html.includes("--features audio-device"), path);
+      assert.ok(html.includes('id="station"') && html.includes("commissioned RMS/CMS exchange"), path);
+      assert.ok(html.includes("/docs/architecture/station-integration-status.md/") && html.includes(repository + "/blob/main/docs/whitepaper/README.md"), path);
     }
     if (page === "demos") {
       for (const anchor of ["waveform", "winlink", "chat-and-mail", "rocky-live-usb", "briefing"]) {

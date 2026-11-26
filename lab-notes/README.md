@@ -2,6 +2,7 @@
 
 - [`lab-notes.tex`](lab-notes.tex) is the chronological research log and
   evidence ledger.
+- [`lab-notes.pdf`](lab-notes.pdf) is the published edition copied to the website.
 - [`presentation.tex`](presentation.tex) is a Beamer progress briefing.
 - Generated PDFs and LaTeX auxiliary files go in `build/`.
 
@@ -13,5 +14,5 @@ latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=build presentation.
 ```
 
 The October presentation records the initial setup and static analysis.
-See the dated entries in the lab notes for current audio interoperability
-results and the limits of the radio-free runtime.
+The November 25 entry records station integration, Rocky server and WSL
+verification, and the remaining qualification.

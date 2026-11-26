@@ -6,6 +6,21 @@ export const supportLinks = {
   knownIssues: `${repository}/issues?q=is%3Aissue+is%3Aopen`,
 };
 
+export const deploymentBuilds = [
+  {
+    id: "rocky-server",
+    title: "Rocky Linux 9 ARM64 server",
+    description: "The production baseline uses the 1.rockymail RPM. Use the workflow for build candidates and smoke-test logs. Deployment requires an approved release signature.",
+    workflow: `${repository}/actions/workflows/rocky-server.yml`,
+  },
+  {
+    id: "windows-wsl",
+    title: "Windows WSL 2 · x64 and ARM64",
+    description: "The workflow builds both Rocky Linux development images with SHA-256 sidecars. Both images passed installed-binary BW500 tests under Linux. Windows import and first launch remain open.",
+    workflow: `${repository}/actions/workflows/rocky-wsl.yml`,
+  },
+];
+
 export const audioSamples = [
   ["bw500-level1-clean.wav", "BW500 level 1 · clean", "3 frames verified"],
   ["bw500-level2-clean.wav", "BW500 level 2 · clean", "1 frame verified"],
@@ -44,6 +59,9 @@ export const capabilities = [
   ["Winlink and direct mail", "A Linkwise modem endpoint for Winlink Express and Pat. The CLI also offers Open B2F forwarding between Linkwise stations.",
     "Mixed P2P attachment transfers passed on isolated audio paths. Live gateway and physical RF qualification remain open.",
     "docs/testing/vara-interoperability.md"],
+  ["MCP station manager", "A local shadow profile with a simulated radio, an imported RMS inventory and optional VOACAP results.",
+    "Scripted trials verified ranking, leases, cancellation and journal recovery. A managed virtual BW500 trial verified two-way B2F attachments.",
+    "rust/docs/mcp-usage.md"],
   ["Desktop and mobile mail clients", "SMTP and IMAP access requires a mail-tls build for TLS. Protected radio mail uses a shared PKI profile.",
     "Evidence includes macOS client login and display, Android emulator attachment exchange, and iOS simulator protocol-library tests. Client and channel coverage varies.",
     "docs/architecture/rocky-thunderbird-validation.md"],

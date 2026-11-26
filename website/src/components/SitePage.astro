@@ -4,7 +4,7 @@ import Button from "./Button.astro";
 import VisualGuide from "./VisualGuide.astro";
 import ProjectPages from "./ProjectPages.astro";
 import { publishedRelease, repository, targets } from "../releases.mjs";
-import { supportLinks } from "../project-content.mjs";
+import { deploymentBuilds, supportLinks } from "../project-content.mjs";
 import { loadMessages, pagePath } from "../../../docs/i18n/locales.mjs";
 import { websiteLabels } from "../../../docs/i18n/website-upgrade.mjs";
 import { catalog, translation } from "../../../docs/i18n/catalog.mjs";
@@ -74,6 +74,7 @@ const software = page === "" ? {
         <article class="card"><h3><a href={link("varac")}>{varac.title}</a></h3><p>{varac.lede}</p></article>
         <article class="card"><h3>{t.guide.title}</h3><p>{t.home.guideLede}</p><a href={link("guide")}>{t.nav.guide}</a></article>
       </div>
+      <p class="media-links"><a href={link("capabilities") + "#station"}>{project.capabilities}</a></p>
     </section>
   </>}
   {page === "downloads" && release && <div class="wrap section">
@@ -84,7 +85,10 @@ const software = page === "" ? {
       <a href={supportLinks.reportBug}>{project.reportBug}</a><a href={supportLinks.knownIssues}>{project.knownIssues}</a>
     </div>
     {!downloadable && <div class="actions"><Button href={link("capabilities") + "#build"}>{project.build}</Button><Button href={link("demos")} variant="outline">{project.watch}</Button></div>}
-    <nav class="jump" aria-label={t.downloads.choose}>{targets.map(({ id, label }) => <a href={"#" + id}>{label}</a>)}</nav>
+    <nav class="jump" aria-label={t.downloads.choose}>
+      {targets.map(({ id, label }) => <a href={"#" + id}>{label}</a>)}
+      {deploymentBuilds.map(({ id, title }) => <a href={"#" + id} lang="en" dir="ltr">{title}</a>)}
+    </nav>
     <p id="platform-suggestion" data-label={t.downloads.choose} hidden></p>
     <div class="cards">
       {targets.map(target => <section class="card" id={target.id}>
@@ -97,11 +101,22 @@ const software = page === "" ? {
       </section>)}
     </div>
     <p><a href={base + "/releases.json"}>{t.downloads.manifest}</a></p>
+    {locale.code !== "en" && <p>{t.ui.fallback}</p>}
+    <section class="project-section" lang="en" dir="ltr" aria-labelledby="deployment-builds">
+      <h2 id="deployment-builds">Server and WSL builds</h2>
+      <div class="cards">
+        {deploymentBuilds.map(({ id, title, description, workflow }) => <article class="card" id={id}>
+          <h3>{title}</h3><p>{description}</p>
+          <p class="media-links"><a href={install(id).href} hreflang={install(id).language}>Installation guide</a><a href={workflow}>Build workflow and artifacts</a></p>
+        </article>)}
+      </div>
+    </section>
   </div>}
   {page === "mail" && <article class="wrap section guide">
     <h1>{t.mail.title}</h1><p class="lede">{t.mail.lede}</p>
     <h2>{t.mail.bench}</h2><p>{t.mail.tested}</p><h2>{t.mail.status}</h2><p>{downloadable ? t.mail.scope : project.pending}</p>
     <p><a href={repository + "/blob/main/docs/architecture/software-design.md"} hreflang="en">{t.mail.architecture} ({t.ui.english})</a></p>
+    <p><a href={link("capabilities") + "#station"}>{project.capabilities}</a></p>
     <p><a href={link("guide") + "#mail-example"}>{t.guide.title}</a> · <a href={link("guide") + "#mail"}>{t.guide.mail}</a> · <a href={link("winlink")}>{t.nav.winlink}</a></p>
   </article>}
   {page === "winlink" && <article class="wrap section guide">

@@ -36,7 +36,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \lhead{\small\color{ovgray}LINKWISE \textbullet{} SYSTEM ARCHITECTURE}
-\rhead{\small\color{ovgray}Whitepaper 0.3 \textbullet{} Proposed}
+\rhead{\small\color{ovgray}Whitepaper 0.4}
 \cfoot{\small\color{ovgray}\thepage\ of \pageref{LastPage}}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{ovblue}\leaders\hrule height \headrulewidth\hfill}}
@@ -83,9 +83,9 @@
   \vspace{0.65in}
   \vfill
   \textbf{Document:} LINKWISE-WP-001\par
-  \textbf{Version:} 0.3 --- Architecture proposal and modem bench status\par
-  \textbf{Date:} November 2026\par
-  \textbf{Status:} Proposed station system with a radio-free modem preview\par
+  \textbf{Version:} 0.4 --- Architecture and implementation evidence\par
+  \textbf{Date:} 25 November 2026\par
+  \textbf{Status:} Radio-free station integration verified. Live station qualification open.\par
   \vspace{0.25in}
   {\small\color{ovgray}Prepared as an engineering whitepaper. Section~\ref{sec:modem-software} records the tested modem capabilities and open station qualification.}
 \end{titlepage}
@@ -96,7 +96,20 @@
 \landscapeplantuml{build/diagrams/Linkwise_Cover_Architecture}{C4 system context: Linkwise and its people, station interfaces, Winlink services, and evidence sources.}{fig:c4-system-context-cover}
 
 \begin{abstract}
-\noindent\system{} is a proposed system for helping a radio station send and receive Winlink messages over HF radio. It brings together radio settings, the VARA modem, Winlink gateways, and information about radio conditions. An AI agent would use this information to choose a promising gateway, configure the radio, and manage message sessions automatically within limits set before operation. The operator would not need to supervise routine activity and could stop transmissions using an independent emergency stop. The system would record session results to guide future choices. VOACAP forecasts can help compare possible radio paths, but they cannot guarantee a connection; the possible effects of satellite reentry remain a research question. One radio can use only one HF channel at a time. Linkwise has not yet implemented this full system, so the paper describes a design that still needs to be built and tested.
+\noindent\system{} combines station control, modem and Winlink integration,
+and path evidence to manage HF message sessions within preinstalled limits.
+The Rust station service imports and ranks RMS channels, prepares a simulated
+radio, and records bounded shadow attempts. In the managed BW500 fixture, one
+attempt runs two waveform modem processes and two B2F peers over virtual audio.
+It verifies both attachment hashes, records peer and transfer outcomes, and
+reaps the modems on completion or connected abort. The independent adaptive
+network daemon accepts private local bundle submissions while it runs.
+Rocky Linux 9 ARM64 is the server baseline, with installed-package verification
+in a Rocky guest. The x64 and ARM64 Windows WSL development images have
+Linux-side evidence. Live operation still requires measured device timing and
+transmit release, an independent emergency stop, and a commissioned
+RMS/CMS exchange. VOACAP forecasts help compare possible paths. The effects
+of satellite reentry remain a research question.
 \end{abstract}
 
 \vspace{0.12in}
@@ -111,18 +124,33 @@
 
 Reliable HF messaging depends on several things lining up: a gateway must be available, the path must support the selected frequency, the station must be configured correctly, and the modem and client must complete a session. Those facts are spread across radio-control software, VARA, Winlink, channel directories, propagation services, and recorded station experience.
 
-\system{} proposes a local autonomous coordination layer that brings those inputs together. It maintains a time-stamped set of eligible gateway channels, ranks them for the installed service objective, configures the radio, and starts an eligible session. Before each transmission, deterministic policy checks station limits and issues a bounded authorization automatically. Afterward, the system records outcomes to improve future choices.
+The Linkwise station service maintains a time-stamped inventory and ranks
+eligible gateway channels for the installed service objective. In shadow
+operation it checks simulated radio readback, admits one bounded attempt
+under a single-use grant, and journals the result. The live design uses the
+same control sequence and adds a commissioned radio, qualified device
+readback, and deterministic authorization before every transmission.
 
 The design keeps each responsibility at a clear boundary. Hamlib/rigctld exposes all capabilities reported by the radio backend, and the AI can request any locally enabled CAT setting or registered device extension through typed MCP tools. PTT state, key-up, and key-down are also explicit tools; key-up remains subject to station-configured authority, and release remains an independent safety operation. A modem adapter handles protocol timing and the data link, and a Winlink-client adapter manages message and gateway sessions. Other adapters collect propagation and gateway evidence. The model does not connect to CAT/PTT sockets itself: Linkwise serializes and audits each operation and validates it against the radio profile and policy.
 
-Linkwise remains a proposed architecture. Companion architecture, requirements,
-interface, safety, simulation, and lab-notes documents carry detailed design
-and implementation history.
+The managed BW500 implementation exercises the station admission and B2F
+data paths as a single radio-free operation
+(Section~\ref{sec:managed-bw500}). The native modem preview can run on
+station audio, with physical PTT left to external equipment. Release
+qualification still requires measured native playback, a single local
+permit arbiter and independent release watchdog, and a confirmed live
+Winlink gateway exchange. Companion requirements, safety, implementation,
+and lab notes carry the traceability and reproduction details.
 
 \section{Purpose and scope}
 
 \subsection{Purpose}
-This whitepaper explains the proposed architecture, how the autonomous agent uses the existing radio and messaging software, how the station owner commissions it before deployment, and how the design could be verified. It is written for radio operators, software architects, modem developers, radio integrators, and AI-host developers. It includes a summarized layered SDD view; the companion SDD remains the contract-level design baseline, and this paper's coverage and remaining gaps are assessed in Appendix~\ref{app:template-alignment}.
+This whitepaper explains the proposed autonomous station architecture, the
+implemented radio-free station and adjacent services, and the evidence
+required before live deployment. It is written for radio operators, software
+architects, modem developers, radio integrators, and AI-host developers.
+The companion SDD defines the contract-level design. Appendix~\ref{app:template-alignment}
+assesses coverage and remaining gaps.
 
 \subsection{System goals}
 Linkwise is intended to:
@@ -279,13 +307,13 @@ frames are not MCP payloads or ordinary audit-log entries.
 MCP (Model Context Protocol) is a standard interface through which an AI host
 can discover and call typed tools and read contextual resources from a
 software server [5]. It is the agent-facing interface, not the radio-control
-protocol and not the AI model itself. Linkwise proposes an MCP server that
-exposes tools such as reading station state, listing eligible RMS channels,
-requesting a radio configuration, starting a bounded session, and observing
-its result. The AI host can use those tools to plan and coordinate actions;
-Linkwise's deterministic application and policy services still validate and
-execute every side effect. The model cannot connect directly to CAT, PTT,
-VARA, or Winlink sockets or expand its preinstalled authority.
+protocol and not the AI model itself. The local Rust MCP server exposes
+station state, inventory and ranking, shadow preparation, authorization,
+start, abort, and outcome queries. Separate radio tools expose the Hamlib
+preview. The station profile restricts the shadow workflow to simulated
+radio control and denies direct CAT writes and physical key-up through MCP.
+The AI host requests operations while the local application and policy
+services validate and execute each side effect.
 
 \subsection{How the existing pieces become a communications solution}
 Taken together, the interfaces form a chain rather than one monolithic
@@ -300,14 +328,13 @@ session events, which Linkwise records and uses to update measured gateway
 history. The AI participates through MCP throughout this loop, while local
 policy retains the authority to deny unsafe or out-of-profile operations.
 
-This decomposition is also the integration strategy. Existing programs stay
-behind adapters, so their version-specific interfaces can be tested and
-replaced without putting those details into the optimizer. The current Rust
-prototype uses the official Rust MCP SDK \texttt{rmcp} and connects to
-Hamlib's \texttt{rigctld} service over TCP. The radio-control MCP prototype
-uses that interface for CAT. The separate native modem preview uses optional
-\texttt{cpal} capture and playback for its virtual audio bridge [23,24].
-The station architecture connects these services through separate adapters.
+This decomposition allows version-specific interfaces to be tested behind
+adapters. The Rust MCP service uses \texttt{rmcp}. Its standalone radio
+preview connects to Hamlib's \texttt{rigctld} over TCP for CAT [23,24].
+The native modem preview uses optional CPAL for device capture and
+playback. The station-managed radio-free path uses loopback virtual PCM
+and the Linkwise B2F peer client. The commissioned CAT, PTT, audio, and
+RMS client path described above remains the live design.
 
 \subsection{Stakeholders and concerns}
 The design serves people with different priorities. The station owner needs reliable pre-deployment configuration and a dependable emergency stop; developers need stable interfaces and testable behavior; safety reviewers need to know how autonomous actions are bounded. The table connects those concerns to the views used later in the paper.
@@ -692,13 +719,15 @@ a Winlink service, reserves spectrum, or authorizes transmission.
 
 \landscapeplantuml{build/diagrams/Linkwise_Propagation_Evidence_Flow}{Proposed propagation evidence flow: independent collection, normalization, persistent analysis snapshots, candidate links, MCP queries, and policy-mediated sessions.}{fig:propagation-evidence-flow}
 
-The Rust MCP service now supports station-file imports, durable gateway
-rankings, and a shadow station lifecycle with simulated radio readback,
-bounded authorization, and recorded outcomes. A managed radio-free BW500
-profile binds a station attempt to two waveform modems and a real B2F
-peer exchange. The native radio path, physical transmit control, and
-Winlink gateway qualification remain release gates. The implementation status is tracked in
-\path{docs/architecture/station-integration-status.md}.
+The implemented service imports versioned RMS snapshots and optional VOACAP
+forecasts from configured files, refreshes inventory independently of MCP
+calls, and persists rankings and shadow attempts. A ranking remains
+queryable by ID after restart. The service checks simulated readback and
+owns one lease at a time. A shadow profile selects scripted outcomes or
+managed virtual BW500. The latter binds the admitted attempt to two waveform
+modems and a B2F peer exchange. Live RMS collection, a version-pinned VOACAP
+runner, and qualified native station execution remain to be integrated.
+See \path{docs/architecture/station-integration-status.md}.
 
 \subsection{Layered software design}
 ChatGPT Agent or Codex supplies the external decision-making orchestration.
@@ -867,7 +896,8 @@ active or past decision.
 \end{description}
 
 \subsection{Deployment}
-The production baseline is the Rocky Linux 9 ARM64 server RPM. The station
+The production baseline is the Rocky Linux 9 ARM64 server RPM with release
+suffix \texttt{1.rockymail}. The station
 design locates OLM, radio/modem/client adapters, and persistent state on the
 station host. The radio attaches via CAT/USB plus audio/PTT. Internet access
 supports RMS and optional propagation evidence. The PTT watchdog, release,
@@ -876,6 +906,29 @@ The stock VARA reference peer provides a separate interoperability fixture.
 MCP runs over local stdio in the current implementation. Radio and modem
 control endpoints are local by default. Remote deployment requires
 authenticated transport and explicit security review.
+
+\subsection{Adaptive network queue}
+\label{sec:adaptive-network-queue}
+The standalone adaptive network daemon uses an SQLite store per station.
+It authenticates commissioned neighbors with per-link keys, learns expiring
+path vectors, and commits each received BPv7 bundle before acknowledging a
+hop. Separate bundles carry destination application receipts back to the
+source. The receipt model trusts forwarding relays.
+
+On Unix, the daemon can expose a private local queue while it owns the
+database. The socket lives in an owner-only directory and accepts one
+bounded, length-prefixed JSON request and reply per connection. Access
+depends on the directory's Unix permissions. A submit operation returns
+the committed bundle ID. A repeat
+with the same request ID, destination, bytes, and lifetime returns that ID,
+and a conflicting reuse is rejected. List reports durable queue and receipt
+state. Read returns the destination's committed binary payload. The
+multi-process fixture repeats and conflicts a submission while stations
+run, transfers 4,352 exact bytes from A through D and E to F with B
+offline, and verifies the return receipt at A.
+This is the adaptive network's local BPv7 queue. The station service's
+Winlink workflow has its own B2F client boundary. See
+\path{rust/network/README.md}.
 
 \subsection{Evidence model}
 Every item is tagged as \evidence{DOCUMENTED}, \evidence{MEASURED},
@@ -1132,9 +1185,9 @@ establish gateway reachability. During local transmission, desense, or a
 receive gap, the adapter reports degraded or absent coverage rather than
 interpreting that interval as a quiet channel.
 
-\subsection{Modem adapter: VARA or future Linkwise modem}
-The modem adapter owns waveform/modem lifecycle and protocol-level link
-state, not Winlink message routing or radio CAT. \path{modem_get_state}
+\subsection{Proposed modem adapters for VARA and Linkwise}
+The proposed adapter owns waveform lifecycle and protocol-level link
+state. Its \path{modem_get_state}
 reports process/device readiness, audio/PTT route health, and current state.
 The \path{linkwise://modem/state} resource exposes the latest read-only
 snapshot with source time and freshness;
@@ -1195,8 +1248,8 @@ preserves the prior snapshot as stale and reports the failure rather than
 replacing unavailable counts with zero.
 
 \subsection{Winlink client and session adapter}
-The client adapter owns queue/session/message-service interaction and keeps
-those outcomes separate from modem link state. \path{winlink_get_status}
+The target client adapter owns queue, session, and message service
+interaction. Its proposed \path{winlink_get_status}
 reports client readiness, supported connection methods, and modem/client
 association. \path{winlink_get_queue_summary} returns only aggregate counts
 or bytes for supported clients, with queue direction, observation time, and
@@ -1210,13 +1263,13 @@ default. The \path{linkwise://winlink/queue-summary} resource exposes only
 the supported aggregate queue view; session resources remain addressed by
 session ID.
 
-Session start and abort are routed through the link coordinator and local
-authorization and PTT arbiter, not directly from the inventory or modem
-adapter. A client adapter is implemented only against a verified supported
-interface; Pat remains a candidate, and the design does not assume Winlink
-Express GUI automation. Outcomes distinguish gateway contact, RF/modem link,
-client session completion, CMS acceptance, and recipient delivery only if
-explicitly confirmed by the client.
+The implemented managed BW500 profile uses the Linkwise B2F peer client
+and reports its outcome through station session queries. A live adapter
+must use a qualified client interface and route start and abort through
+the coordinator, local authorization, and PTT arbiter. Outcomes distinguish
+gateway contact, modem link establishment, client session completion, CMS
+acceptance, and recipient delivery. The last two stages require independent
+client confirmation.
 
 \subsection{Propagation and gateway data}
 \path{propagation_get_status} returns provider health, latest source and
@@ -1234,23 +1287,27 @@ evidence classes; none acts as a reachability guarantee or transmit permit.
 Scheduled collection and analysis run independently of MCP calls.
 
 \subsection{Link coordination, history, and evidence adapter}
-\path{link_rank_gateways} accepts a service objective and permitted
-band/mode/filter set, then returns an immutable ranking snapshot with
-gateway/channel IDs, eligible/excluded status, component scores, evidence
-references, freshness, uncertainty, and reasons.
-\path{link_get_candidate_analysis} returns the pinned analysis and
-ranking-entry IDs, input provenance, and any associated policy decision.
-\path{link_get_similar_sessions} accepts bounded matching dimensions and a
-UTC window; it returns measured outcome counts, denominators, sample size,
-coverage, and uncertainty, retaining sparse data as sparse.
+\path{link_rank_gateways} creates an immutable ranking snapshot under the
+installed profile's objective and policy. The caller can page its entries
+and retrieve a stored ranking by ID after restart. The snapshot records
+eligible and excluded channel decisions and the corresponding evidence.
+The proposed \path{link_get_candidate_analysis} would expose pinned analysis
+provenance and policy decisions. The proposed
+\path{link_get_similar_sessions} would return outcome counts,
+denominators, coverage, and uncertainty for bounded matching criteria.
 
 \path{link_get_session}, \path{link_get_history}, and
-\path{link_get_metrics} return ordered attempts and distinct connection and
-transfer numerators/denominators with data coverage. Retries create new
-attempts; session records are append-only and omit message payloads. The
-correlated evidence view distinguishes radio configuration/readback,
-transmission attempt, valid peer response, modem link establishment, Winlink
-session completion, CMS acceptance, and message-transfer confirmation.
+\path{link_get_metrics} expose the recorded attempt, history, and aggregate
+outcomes. Repeating start with the original prepared handle and grant
+returns the recorded attempt and its current outcome. After restart,
+an attempt that was active is recorded as interrupted. A new attempt
+needs a new grant. Session records omit message
+payloads. For managed BW500, \path{link_get_status} reports the active
+attempt and its phase, from attaching through peer wait, connection,
+and cleanup. Session history records abort and cleanup outcomes, B2F
+transfers, and fixture digests, with CMS acceptance and recipient delivery
+unknown. A live evidence view must additionally record verified device
+state and transmission, modem link and client outcome, and CMS evidence.
 Energy detection, an S-meter value, PTT assertion, or RMS directory listing
 cannot independently establish a link. The full machine-readable schemas,
 resources, common errors, and versioning policy remain defined by the
@@ -1266,26 +1323,71 @@ security design makes that distinction enforceable.
 \section{Deployment profiles}
 
 \begin{description}[leftmargin=1.45in,style=nextline]
-  \item[Shadow qualification] The agent observes and makes simulated/shadow decisions; no transmitter actuation is enabled. This is a pre-deployment qualification stage, not an operator-selected runtime mode.
-  \item[Autonomous operation] After commissioning and station-specific safety qualification, the agent has full locally enabled CAT/PTT authority and manages sessions, retries, and recovery automatically within the signed profile. Human runtime actuation is limited to emergency stop.
+  \item[Observation] The installed observation profile imports and ranks
+    channel evidence. The local MCP service exposes state and ranking
+    queries without admitting shadow attempts.
+  \item[Shadow qualification] The installed shadow profile uses simulated
+    readback and either scripted outcomes or the managed BW500 peer fixture.
+    Physical key-up is denied.
+  \item[Proposed autonomous operation] A commissioned station would
+    manage sessions, retries, and recovery automatically within the signed
+    profile after passing station-specific qualification. Human runtime
+    actuation would be limited to the independent emergency stop.
 \end{description}
 
-The autonomous profile is not activated until all readiness checks pass. During operation, policy faults cause automatic recovery or a latched safe state; only the independent human emergency stop is exposed as an operator actuator. Model/provider selection must not alter station-level limits.
+The autonomous release requires all readiness checks to pass. Policy faults
+must cause bounded recovery or a latched safe state. Model or provider
+selection must preserve station-level limits.
 
-The requirements and verification strategy set the gates for implementation.
-The roadmap orders work through observation, policy-controlled actuation,
-simulated/shadow qualification, and finally autonomous operation after station
-safety acceptance.
+\subsection{Rocky server and WSL verification}
+\label{sec:rocky-wsl-verification}
+The Rocky Linux 9 ARM64 server baseline is built with the
+\path{audio-device} and \path{rocky-mail-tls} features. The package uses
+ALSA, systemd, SELinux policy, and Rocky's system OpenSSL FIPS provider.
+The November 25 candidate from \texttt{e60a35c} was packaged as
+\path{linkwise-modem-0.1.0-1.rockymail.aarch64.rpm}. The Rocky build
+container passed the installed-binary BW500 smoke and rejected an untrusted
+signer and a modified RPM. A booted Rocky 9.9 ARM64 guest with SELinux
+enforcing accepted the bench-signed package through DNF, verified its
+installed files and policy modules, checked the three systemd units, and
+passed the managed BW500 fixture using the installed executables.
+
+The packaged mail service rejected TLS with FIPS disabled. With kernel and
+system FIPS enabled in the guest, authenticated SMTP and IMAP TLS 1.3 over
+IPv4 loopback transferred attachments through the packaged virtual BW500
+path and back. Both attachment hashes and clean modem closes were verified.
+A separate native startup test used kernel ALSA loopback, the expected SELinux
+domain, and local command and DATA listeners. Production signing and upgrade,
+deployment-specific FIPS qualification, and commissioned hardware and live
+gateway operation remain release gates. The package SHA-256, test scope, and
+setup are recorded in \path{docs/architecture/station-integration-status.md}
+and \path{docs/install/rocky-server.md}.
+
+The x64 and ARM64 Windows WSL development images use the official Rocky
+Linux 9.9 filesystem, bundle the unsigned \texttt{1.rockymail} RPM, enable
+systemd, and leave Linkwise services opt-in. The images are
+\path{linkwise-rocky9-x64.wsl} and \path{linkwise-rocky9-arm64.wsl}, each
+with a SHA-256 sidecar. Linux-side checks verified both archives and
+ran the installed binaries from each through managed BW500 connected abort,
+reaping, and exact transfer. Windows import, first launch, host networking,
+station hardware, and production FIPS and SELinux on WSL remain to be
+qualified. See \path{docs/install/windows-wsl.md}.
 
 \section{Implementation roadmap}
 
 \begin{enumerate}
-  \item \textbf{Foundation:} identify station profile, supported radio, and documented client interfaces; preserve evidence ledger.
-  \item \textbf{Observability:} read-only Hamlib, modem, and gateway adapters; typed state and local audit records.
-  \item \textbf{Inventory and history:} documented channel-source adapter, distinct gateway/channel counts, idempotent session/transfer events, and explicit metric coverage.
-  \item \textbf{Candidate analysis:} source-normalized evidence, ranking/explanations, simulated test fixtures.
-  \item \textbf{Preparation:} exclusive lease, configuration writes, readback, and mismatch handling; no transmission.
-  \item \textbf{Session supervision:} supported Winlink client adapter, separate authorization, watchdog, timeouts, abort and recovery.
+  \item \textbf{Evidence and ranking.} The service imports and ranks
+        configured inventory and forecast files and persists results.
+        Qualify live RMS and VOACAP adapters, station observations, and
+        history-based scoring with paired held-out scenarios.
+  \item \textbf{Shadow station.} Simulated preparation, single-use grants,
+        durable attempts, and managed BW500 supervision exercise the MCP
+        lifecycle. Bind these contracts to verified native readback,
+        tokened device events, and a qualified live client.
+  \item \textbf{Station safety.} Implement the common session owner, permit
+        arbiter, independent release watchdog, and hardware emergency stop.
+        Measure presentation, release, failure, and restart on the
+        commissioned hardware with transmit inhibited or conducted.
   \item \textbf{Modem interoperability:} radio-free stock VARA transfers
         have passed at BW500, BW2300, and BW2750. Mixed Winlink Express
         and Pat peer-to-peer transfers have verified attachment delivery
@@ -1293,7 +1395,9 @@ safety acceptance.
         verified PRBS9 attachment delivery with each modem as caller.
         Repeatability and station qualification are
         tracked in Table~\ref{tab:modem-evidence-gates}.
-  \item \textbf{Adaptive operation:} learn from historical outcomes and enable only bounded automation that has passed station-specific review.
+  \item \textbf{Live acceptance.} Qualify a signed Rocky release and an
+        authorized RMS/CMS session, including failure and recovery. Enable
+        autonomous operation only after station-specific safety acceptance.
 \end{enumerate}
 
 \section{Risks and open decisions}
@@ -1321,15 +1425,15 @@ External data licensing/availability & May constrain automation, retention, or r
 
 \section{Conclusion}
 
-Linkwise's contribution is not a claim that AI can see through an uncertain
-ionosphere. It is a disciplined way to connect existing radio-control,
-modem, Winlink, and propagation software; assemble gateway, station, and
-session evidence; compare available routes; and learn from measured outcomes.
-The agent autonomously manages the configured station through mediated tools,
-while deterministic local policy and watchdogs enforce the preinstalled
-authority. During runtime the human has read-only telemetry and an independent
-emergency stop. This architecture offers a path to autonomous communications
-only after each adapter, control path, and operating limit has been validated.
+Linkwise now connects file-backed gateway and forecast evidence, local
+ranking and authorization, two BW500 modem processes, and exact B2F fixture
+delivery through its shadow station service. The independent adaptive
+network daemon can accept durable bundle submissions while it runs.
+The Rocky server package exercises these station components in a measured
+guest environment. Live station operation depends on validating each
+device and client adapter, enforcing actual transmit timing and release
+through independent safety controls, and confirming the RMS/CMS outcome on
+the commissioned route.
 
 \appendix
 \input{modem-wire-example}
@@ -1384,7 +1488,7 @@ The companion SDD specifies layer responsibilities, component contracts,
 principal execution flows, state/concurrency rules, persistence semantics,
 and deployment evolution. Formal view correspondences, final
 interface-control definitions, physical schema, implementation timing
-budgets, and as-built qualification evidence remain future work.
+budgets, and live-station qualification evidence remain future work.
 
 \clearpage
 \begin{landscape}
@@ -1399,7 +1503,7 @@ budgets, and as-built qualification evidence remain future work.
 \textbf{Template element} & \textbf{Assessment} & \textbf{Coverage or remaining work}\\
 \midrule
 \endhead
-Purpose, scope, system overview & Covered & The abstract, executive summary, purpose, goals, and non-goals define the system and its proposed status. \\
+Purpose, scope, system overview & Covered & The abstract, executive summary, purpose, goals, and non-goals describe the proposed and implemented system scope. \\
 Stakeholders and concerns & Covered at system level & The stakeholder table links primary concerns to operational, functional, deployment, safety, data, and verification views. Detailed stakeholder analysis belongs in the SAD. \\
 Architecture viewpoints and views & Partial & The paper names principal viewpoints and includes context, operating-loop, component, deployment, evidence, and safety material. Formal model conventions and a complete view catalog belong in a fuller SAD. \\
 Consistency and correspondences & Partial & Key allocations are stated here and mapped in the SAD cross-view table. A formal correspondence register with explicit rules and dispositions for inconsistencies remains needed for strict SAD completeness. \\
@@ -1408,7 +1512,7 @@ Components and execution concept & Covered at design-summary level & Layer owner
 Interfaces and data design & Substantially covered; finalization pending & Typed port semantics, provenance-bearing observations, authorization handles, and event ownership are described in the paper and SDD. A finalized interface-control baseline and physical database schema are not yet present. \\
 Requirements traceability and qualification & Partial & Representative requirements and methods appear here. The requirements document contains the fuller use-case, requirement-to-component, and qualification baseline; final bidirectional verification traceability remains a release task. \\
 Security, safety, deployment, risks & Covered at proposed-system level & The paper identifies local control, PTT gates, trust concerns, deployment profiles, and major risks. Detailed hazards, controls, and failure handling are in the companion safety/security/reliability document. \\
-As-built design and configuration record & Not applicable yet & This is a proposed architecture, not an as-built design. Implementation baselines, validated interfaces, timing/resource budgets, and final TBD values must be recorded before qualification. \\
+As-built design and configuration record & Partial & The managed BW500 chapter and deployment evidence record radio-free behavior and package verification. Native timing, transmit release, and live-client qualification still need commissioned baselines. \\
 \bottomrule
 \end{longtable}
 \end{landscape}
