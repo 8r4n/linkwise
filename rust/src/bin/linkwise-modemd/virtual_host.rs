@@ -41,16 +41,22 @@ enum Request {
     Data(Vec<u8>, oneshot::Sender<io::Result<()>>),
 }
 
+enum HostAction {
+    Establish(Action),
+    Disconnect,
+}
+
 struct Port {
     requests: mpsc::Sender<Request>,
-    #[cfg(windows)]
+    aborts: mpsc::Sender<oneshot::Sender<Reply>>,
+    #[cfg(all(windows, feature = "audio-device"))]
     report_attachment: std::sync::atomic::AtomicBool,
 }
 
 #[async_trait]
 impl ModemPort for Port {
     async fn command(&self, command: Command) -> Reply {
-        #[cfg(windows)]
+        #[cfg(all(windows, feature = "audio-device"))]
         if self
             .report_attachment
             .swap(false, std::sync::atomic::Ordering::Relaxed)
@@ -61,12 +67,15 @@ impl ModemPort for Port {
             );
         }
         let (send, receive) = oneshot::channel();
-        if self
-            .requests
-            .send(Request::Command(command, send))
-            .await
-            .is_err()
-        {
+        let queued = if matches!(command, Command::Abort) {
+            self.aborts.send(send).await.is_ok()
+        } else {
+            self.requests
+                .send(Request::Command(command, send))
+                .await
+                .is_ok()
+        };
+        if !queued {
             return Reply::Wrong;
         }
         receive.await.unwrap_or(Reply::Wrong)
@@ -349,10 +358,16 @@ impl Engine<'_> {
         Ok(())
     }
 
-    async fn host_command(&mut self, command: Command, cable: &mut Audio) -> io::Result<Reply> {
+    fn accept_command(
+        &mut self,
+        command: Command,
+        cable: &Audio,
+        reply: oneshot::Sender<Reply>,
+    ) -> io::Result<Option<HostAction>> {
         let idle = self.phase == Phase::Handshake && self.deadline.is_none();
-        match command {
-            Command::Version => Ok(Reply::Version(format!(
+        let mut action = None;
+        let response = match command {
+            Command::Version => Reply::Version(format!(
                 "LINKWISE {}BW{}",
                 if matches!(cable, Audio::Virtual(_)) {
                     "VIRTUAL "
@@ -360,51 +375,51 @@ impl Engine<'_> {
                     ""
                 },
                 self.mode.width()
-            ))),
-            Command::MyCall(calls) if calls.as_slice() == [self.local] => Ok(Reply::Ok),
-            Command::Bw500 if self.mode.bandwidth() == Hz500 => Ok(Reply::Ok),
-            Command::Bw2300 if self.mode.bandwidth() == Bandwidth::Hz2300 => Ok(Reply::Ok),
-            Command::Bw2750 if self.mode.bandwidth() == Bandwidth::Hz2750 => Ok(Reply::Ok),
-            Command::CompressionOff | Command::Public(false) | Command::Cwid(false) => {
-                Ok(Reply::Ok)
-            }
-            Command::P2pSession | Command::ClearTxBuffer if idle => Ok(Reply::Ok),
+            )),
+            Command::MyCall(calls) if calls.as_slice() == [self.local] => Reply::Ok,
+            Command::Bw500 if self.mode.bandwidth() == Hz500 => Reply::Ok,
+            Command::Bw2300 if self.mode.bandwidth() == Bandwidth::Hz2300 => Reply::Ok,
+            Command::Bw2750 if self.mode.bandwidth() == Bandwidth::Hz2750 => Reply::Ok,
+            Command::CompressionOff | Command::Public(false) | Command::Cwid(false) => Reply::Ok,
+            Command::P2pSession | Command::ClearTxBuffer if idle => Reply::Ok,
             Command::Listen(on) if idle => {
                 self.listen = on;
                 self.reset()?;
-                Ok(Reply::Ok)
+                Reply::Ok
             }
             Command::Connect {
                 source,
                 destination,
             } if idle && source == self.local => {
-                let action = self.handshake.handle(
-                    self.start.elapsed(),
-                    Event::Call {
-                        called: destination,
-                    },
-                );
-                if action.is_none() {
-                    return Ok(Reply::Wrong);
+                action = self
+                    .handshake
+                    .handle(
+                        self.start.elapsed(),
+                        Event::Call {
+                            called: destination,
+                        },
+                    )
+                    .map(HostAction::Establish);
+                if action.is_some() {
+                    Reply::Ok
+                } else {
+                    Reply::Wrong
                 }
-                self.establish(action, cable).await?;
-                Ok(Reply::Ok)
             }
             Command::Disconnect => {
                 if self.session.is_some() && !self.pending.is_empty() {
                     self.disconnect_pending = true;
                 } else {
-                    self.disconnect(cable).await?;
+                    action = Some(HostAction::Disconnect);
                 }
-                Ok(Reply::Ok)
+                Reply::Ok
             }
-            Command::Abort => {
-                self.reset()?;
-                self.notify("DISCONNECTED\r".into())?;
-                Ok(Reply::Ok)
-            }
-            _ => Ok(Reply::Wrong),
-        }
+            _ => Reply::Wrong,
+        };
+        // A command ACK reports admission. Releasing the reader before audio
+        // I/O lets the same client cancel an in-flight action with ABORT.
+        let _ = reply.send(response);
+        Ok(action)
     }
 
     fn host_data(&mut self, bytes: &[u8]) -> io::Result<()> {
@@ -1477,9 +1492,18 @@ impl Engine<'_> {
 struct Cable {
     stream: TcpStream,
     input: Vec<u8>,
+    write_pending: bool,
 }
 
 impl Cable {
+    fn new(stream: TcpStream) -> Self {
+        Self {
+            stream,
+            input: Vec::new(),
+            write_pending: false,
+        }
+    }
+
     async fn read(&mut self) -> io::Result<Vec<f32>> {
         loop {
             if self.input.len() >= 4 {
@@ -1527,7 +1551,9 @@ impl Cable {
         for sample in samples {
             frame.extend_from_slice(&sample.to_le_bytes());
         }
+        self.write_pending = true;
         timeout(IO_TIMEOUT, self.stream.write_all(&frame)).await??;
+        self.write_pending = false;
         Ok(())
     }
 }
@@ -1567,41 +1593,69 @@ impl Audio {
         self.write(&samples.ok_or_else(|| io::Error::other("could not render waveform"))?)
             .await
     }
+
+    fn discard_after_abort(&mut self) -> io::Result<()> {
+        match self {
+            // A stopped write may have emitted only part of the PCM record.
+            Self::Virtual(cable) if cable.write_pending => Err(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "waveform record was interrupted. Reconnect the cable and host",
+            )),
+            Self::Virtual(_) => Ok(()),
+            #[cfg(feature = "audio-device")]
+            Self::Native(device) => device.discard_after_abort(),
+        }
+    }
 }
 
 async fn run(
     mut engine: Engine<'_>,
-    mut cable: Audio,
+    cable: &mut Audio,
     mut host: mpsc::Receiver<Request>,
-    stop: &mut tokio::sync::watch::Receiver<bool>,
+    mut aborts: mpsc::Receiver<oneshot::Sender<Reply>>,
 ) -> io::Result<()> {
     loop {
-        if *stop.borrow() {
-            if engine.session.is_some() {
-                engine.disconnect(&mut cable).await?;
-            }
-            return Ok(());
-        }
-        let expiry = async {
-            match engine.deadline {
-                Some(deadline) => tokio::time::sleep_until(deadline).await,
-                None => std::future::pending().await,
-            }
-        };
         tokio::select! {
-            result = stop.wait_for(|stopping| *stopping) => {
-                if result.is_err() { return Ok(()); }
-            },
-            request = host.recv() => match request {
-                Some(Request::Command(command, reply)) => { let _ = reply.send(engine.host_command(command, &mut cable).await?); }
-                Some(Request::Data(bytes, reply)) => { let _ = reply.send(engine.host_data(&bytes)); }
-                None => return Ok(()),
-            },
-            audio = cable.read() => engine.audio(&audio?, &mut cable).await?,
-            _ = expiry => engine.expire(&mut cable).await?,
-
+            biased;
+            abort = aborts.recv() => {
+                let Some(reply) = abort else { return Ok(()); };
+                cable.discard_after_abort()?;
+                engine.reset()?;
+                engine.notify("DISCONNECTED\r".into())?;
+                let _ = reply.send(Reply::Ok);
+            }
+            running = step(&mut engine, cable, &mut host) => {
+                if !running? { return Ok(()); }
+            }
         }
     }
+}
+
+async fn step(
+    engine: &mut Engine<'_>,
+    cable: &mut Audio,
+    host: &mut mpsc::Receiver<Request>,
+) -> io::Result<bool> {
+    let expiry = async {
+        match engine.deadline {
+            Some(deadline) => tokio::time::sleep_until(deadline).await,
+            None => std::future::pending().await,
+        }
+    };
+    tokio::select! {
+        request = host.recv() => match request {
+            Some(Request::Command(command, reply)) => match engine.accept_command(command, cable, reply)? {
+                Some(HostAction::Establish(action)) => engine.establish(Some(action), cable).await?,
+                Some(HostAction::Disconnect) => engine.disconnect(cable).await?,
+                None => {}
+            },
+            Some(Request::Data(bytes, reply)) => { let _ = reply.send(engine.host_data(&bytes)); }
+            None => return Ok(false),
+        },
+        audio = cable.read() => engine.audio(&audio?, cable).await?,
+        _ = expiry => engine.expire(cable).await?,
+    }
+    Ok(true)
 }
 
 pub async fn serve(args: &[String], wide: bool) -> Result<(), Box<dyn std::error::Error>> {
@@ -1641,7 +1695,7 @@ pub async fn serve(args: &[String], wide: bool) -> Result<(), Box<dyn std::error
     .await
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "audio-device"))]
 pub(super) async fn serve_winlink_test(
     call: &str,
     profile: &std::path::Path,
@@ -1687,7 +1741,7 @@ async fn serve_mode(
             _ = stop.wait_for(|stopping| *stopping) => return Ok(()),
             result = audio.accept() => result?,
         };
-        #[cfg(windows)]
+        #[cfg(all(windows, feature = "audio-device"))]
         if _service {
             super::windows_service::log_event("Waveform peer attached", false);
         }
@@ -1695,15 +1749,12 @@ async fn serve_mode(
             &mut listener,
             &local,
             &mode,
-            Audio::Virtual(Cable {
-                stream,
-                input: Vec::new(),
-            }),
+            Audio::Virtual(Cable::new(stream)),
             _service,
             &mut stop,
         )
         .await;
-        #[cfg(windows)]
+        #[cfg(all(windows, feature = "audio-device"))]
         if _service {
             super::windows_service::log_event(
                 "TNC or waveform connection ended. Waiting for a waveform peer.",
@@ -1734,16 +1785,18 @@ async fn serve_audio(
     listener: &mut Listener,
     local: &str,
     mode: &Mode,
-    audio: Audio,
+    mut audio: Audio,
     _service: bool,
     stop: &mut tokio::sync::watch::Receiver<bool>,
 ) -> io::Result<()> {
     let (send, host) = mpsc::channel(8);
+    let (abort, aborts) = mpsc::channel(1);
     let (notices, control_rx) = mpsc::channel(8);
     let (received, data_rx) = mpsc::channel(1);
     let port = Port {
         requests: send,
-        #[cfg(windows)]
+        aborts: abort,
+        #[cfg(all(windows, feature = "audio-device"))]
         report_attachment: std::sync::atomic::AtomicBool::new(_service),
     };
     let log_sessions = match &audio {
@@ -1787,10 +1840,19 @@ async fn serve_audio(
         notices,
         received,
     };
-    tokio::select! {
+    let result = tokio::select! {
+        biased;
+        // Drop the engine and its in-flight playback before returning. A
+        // forced stop must not queue a protocol disconnect on the audio route.
+        _ = stop.wait_for(|stopping| *stopping) => return Ok(()),
         result = listener.serve_one(&port, control_rx, data_rx) => result,
-        result = run(engine, audio, host, stop) => result,
+        result = run(engine, &mut audio, host, aborts) => result,
+    };
+    #[cfg(feature = "audio-device")]
+    if let Audio::Native(device) = &audio {
+        device.check_presentation()?;
     }
+    result
 }
 
 #[cfg(feature = "audio-device")]
@@ -1845,7 +1907,7 @@ pub(super) async fn serve_native(
             Ok(audio) => {
                 delay = Duration::from_secs(1);
                 super::station::notify_manager(&format!(
-                    "READY=1\nSTATUS=BW{bandwidth} transmit and receive ready"
+                    "READY=1\nSTATUS=BW{bandwidth} audio ready (external PTT)"
                 ));
                 match serve_audio(
                     &mut listener,
@@ -1859,6 +1921,15 @@ pub(super) async fn serve_native(
                 {
                     Ok(()) => continue,
                     Err(error) => {
+                        if error.get_ref().is_some_and(|cause| {
+                            cause.is::<super::station::PresentationUnconfirmed>()
+                        }) {
+                            super::station::notify_manager(&format!("STATUS=Faulted: {error}"));
+                            super::station::log(true, &error.to_string());
+                            drop(listener);
+                            let _ = stop.wait_for(|stopping| *stopping).await;
+                            return Ok(());
+                        }
                         super::station::log(true, &format!("BW{bandwidth} session ended: {error}"))
                     }
                 }
@@ -1890,10 +1961,7 @@ pub async fn bridge(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     };
     let port: u16 = port.parse()?;
     let stream = TcpStream::connect(SocketAddr::from(([127, 0, 0, 1], port))).await?;
-    let mut cable = Cable {
-        stream,
-        input: Vec::new(),
-    };
+    let mut cable = Cable::new(stream);
     let capture = Capture::start(Some(input), 0)?;
     let mut playback: Option<Playback> = None;
     let mut playback_until = None;
@@ -1951,5 +2019,74 @@ pub async fn bridge(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::{net::TcpSocket, sync::watch};
+
+    #[tokio::test]
+    async fn abort_cancels_a_blocked_waveform_write() {
+        timeout(Duration::from_secs(2), async {
+            let loopback = SocketAddr::from(([127, 0, 0, 1], 0));
+            let mut host = Listener::bind(loopback, loopback, IO_TIMEOUT)
+                .await
+                .unwrap();
+            let (command_address, data_address) = host.addresses().unwrap();
+
+            // Exhaust the virtual cable's transmit capacity without allowing
+            // the peer to read. A partially written record cannot be reused.
+            let server = TcpSocket::new_v4().unwrap();
+            server.set_send_buffer_size(1024).unwrap();
+            server.bind(loopback).unwrap();
+            let server = server.listen(1).unwrap();
+            let peer = TcpSocket::new_v4().unwrap();
+            peer.set_recv_buffer_size(1024).unwrap();
+            let _peer = peer.connect(server.local_addr().unwrap()).await.unwrap();
+            let (bridge, _) = server.accept().await.unwrap();
+            bridge.writable().await.unwrap();
+            loop {
+                match bridge.try_write(&[0; 8192]) {
+                    Ok(written) => assert!(written > 0),
+                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
+                    Err(error) => panic!("fill waveform cable: {error}"),
+                }
+            }
+
+            let (_stop, mut stopped) = watch::channel(false);
+            let server = async {
+                let bandwidth = Bandwidth::Hz2300;
+                let mode = Mode::Wide {
+                    bandwidth,
+                    waveform: Box::new(wide_level4::Waveform::new(bandwidth).unwrap()),
+                };
+                serve_audio(
+                    &mut host,
+                    "W1AW",
+                    &mode,
+                    Audio::Virtual(Cable::new(bridge)),
+                    false,
+                    &mut stopped,
+                )
+                .await
+            };
+            let client = async {
+                let mut command = TcpStream::connect(command_address).await.unwrap();
+                let mut data = TcpStream::connect(data_address).await.unwrap();
+                command.write_all(b"CONNECT W1AW N0CALL\r").await.unwrap();
+                let mut reply = [0; 3];
+                command.read_exact(&mut reply).await.unwrap();
+                assert_eq!(&reply, b"OK\r");
+                command.write_all(b"ABORT\r").await.unwrap();
+                assert_eq!(data.read(&mut [0]).await.unwrap(), 0);
+            };
+            let (result, ()) = tokio::join!(server, client);
+            let error = result.unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::ConnectionAborted);
+        })
+        .await
+        .unwrap();
     }
 }

@@ -133,7 +133,7 @@ pub struct RadioState {
     pub rf_power_fraction: Option<f64>,
     /// UTC RFC 3339 timestamp for this snapshot.
     pub observed_at_utc: String,
-    /// Linkwise-process-local write counter; external radio changes may not increment it.
+    /// Linkwise-process-local CAT revision; a write attempt advances it even if the outcome is uncertain.
     pub state_revision: u64,
     /// Per-field read failures; a partial snapshot may still be useful.
     pub field_errors: BTreeMap<String, String>,
@@ -305,14 +305,19 @@ pub trait RadioControlPort: Send + Sync {
 pub struct RigctldRadio {
     address: String,
     timeout: Duration,
-    command_lock: Arc<Mutex<()>>,
-    revision: Arc<Mutex<u64>>,
+    command_revision: Arc<Mutex<u64>>,
     writes_enabled: bool,
     min_frequency_hz: Option<u64>,
     max_frequency_hz: Option<u64>,
     max_power_fraction: Option<f64>,
     allowed_modes: Vec<String>,
     enabled_hamlib_controls: Vec<String>,
+}
+
+enum ReplyFormat {
+    Values(usize),
+    Status,
+    CapabilityDump,
 }
 
 impl RigctldRadio {
@@ -329,8 +334,7 @@ impl RigctldRadio {
                     .and_then(|v| v.parse().ok())
                     .unwrap_or(DEFAULT_TIMEOUT_MS),
             ),
-            command_lock: Arc::new(Mutex::new(())),
-            revision: Arc::new(Mutex::new(0)),
+            command_revision: Arc::new(Mutex::new(0)),
             writes_enabled: env::var("LINKWISE_RADIO_WRITES")
                 .is_ok_and(|v| v.eq_ignore_ascii_case("true")),
             min_frequency_hz: env::var("LINKWISE_MIN_FREQ_HZ")
@@ -359,18 +363,13 @@ impl RigctldRadio {
         }
     }
 
-    async fn command(&self, command: &str, multi_line: bool) -> Result<Vec<String>, RadioError> {
-        let _guard = self.command_lock.lock().await;
-        self.command_unlocked(command, multi_line).await
-    }
-
     async fn command_unlocked(
         &self,
         command: &str,
-        multi_line: bool,
+        format: ReplyFormat,
     ) -> Result<Vec<String>, RadioError> {
-        // Caller must hold `command_lock`; keeping this helper lock-free lets a
-        // multi-command write/readback sequence stay serialized as one unit.
+        // Normal CAT callers hold command_revision across each transaction.
+        // The release-only safety path uses its own connection without waiting.
         let operation = async {
             let mut stream = TcpStream::connect(&self.address)
                 .await
@@ -392,7 +391,9 @@ impl RigctldRadio {
                     .await
                     .map_err(|e| RadioError::Unavailable(e.to_string()))?;
                 if read == 0 {
-                    break;
+                    return Err(RadioError::Protocol(format!(
+                        "incomplete response to {command}"
+                    )));
                 }
                 let line = line.trim().to_owned();
                 if line.is_empty() {
@@ -402,35 +403,43 @@ impl RigctldRadio {
                     if line != "RPRT 0" {
                         return Err(RadioError::Protocol(format!("{command}: {line}")));
                     }
-                    break;
+                    return match format {
+                        ReplyFormat::Status => Ok(lines),
+                        ReplyFormat::CapabilityDump if !lines.is_empty() => Ok(lines),
+                        _ => Err(RadioError::Protocol(format!(
+                            "incomplete response to {command}"
+                        ))),
+                    };
+                }
+                if matches!(format, ReplyFormat::Status) {
+                    return Err(RadioError::Protocol(format!(
+                        "{command}: unexpected status {line}"
+                    )));
                 }
                 lines.push(line);
-                if !multi_line {
-                    break;
+                // Successful short-protocol getters have a fixed number of lines and no terminator.
+                if matches!(format, ReplyFormat::Values(expected) if lines.len() == expected) {
+                    return Ok(lines);
                 }
             }
-            if lines.is_empty() {
-                return Err(RadioError::Protocol(format!("empty response to {command}")));
-            }
-            Ok(lines)
         };
         timeout(self.timeout, operation)
             .await
             .map_err(|_| RadioError::Unavailable(format!("{command} timed out")))?
     }
 
-    async fn scalar(&self, command: &str) -> Result<String, RadioError> {
-        self.command(command, false)
+    async fn scalar_unlocked(&self, command: &str) -> Result<String, RadioError> {
+        self.command_unlocked(command, ReplyFormat::Values(1))
             .await?
             .into_iter()
             .next()
             .ok_or_else(|| RadioError::Protocol(format!("empty response to {command}")))
     }
 
-    async fn read_state(&self) -> RadioState {
+    async fn read_state_unlocked(&self, revision: u64) -> RadioState {
         let mut errors = BTreeMap::new();
-        let info = self.scalar("\\get_info").await.ok();
-        let frequency_hz = match self.scalar("f").await {
+        let info = self.scalar_unlocked("\\get_info").await.ok();
+        let frequency_hz = match self.scalar_unlocked("f").await {
             Ok(value) => value.parse().ok().or_else(|| {
                 errors.insert("frequency_hz".into(), "invalid frequency".into());
                 None
@@ -440,35 +449,42 @@ impl RigctldRadio {
                 None
             }
         };
-        let (mode, passband_hz) = match self.command("m", false).await {
+        let (mode, passband_hz) = match self.command_unlocked("m", ReplyFormat::Values(2)).await {
             Ok(values) => {
                 let mode = values.first().cloned();
                 let passband = values.get(1).and_then(|v| v.parse().ok());
-                if mode.is_none() {
-                    errors.insert("mode".into(), "missing mode".into());
+                if passband.is_none() {
+                    errors.insert("passband_hz".into(), "invalid passband".into());
                 }
                 (mode, passband)
             }
             Err(error) => {
                 errors.insert("mode".into(), error.to_string());
+                errors.insert("passband_hz".into(), error.to_string());
                 (None, None)
             }
         };
-        let ptt_asserted = match self.scalar("t").await {
-            Ok(value) => value.parse::<u8>().ok().map(|v| v != 0),
+        let ptt_asserted = match self.read_ptt_unlocked().await {
+            Ok(asserted) => Some(asserted),
             Err(error) => {
                 errors.insert("ptt_asserted".into(), error.to_string());
                 None
             }
         };
-        let rf_power_fraction = match self.scalar("l RFPOWER").await {
-            Ok(value) => value.parse().ok(),
+        let rf_power_fraction = match self.scalar_unlocked("l RFPOWER").await {
+            Ok(value) => value
+                .parse::<f64>()
+                .ok()
+                .filter(|power| power.is_finite())
+                .or_else(|| {
+                    errors.insert("rf_power_fraction".into(), "invalid RF power".into());
+                    None
+                }),
             Err(error) => {
                 errors.insert("rf_power_fraction".into(), error.to_string());
                 None
             }
         };
-        let revision = *self.revision.lock().await;
         RadioState {
             radio_info: info,
             frequency_hz,
@@ -500,13 +516,16 @@ impl RigctldRadio {
         }
     }
 
-    async fn discovered_tokens(&self, query: &str) -> Result<Vec<String>, RadioError> {
-        let _guard = self.command_lock.lock().await;
-        self.discovered_tokens_unlocked(query).await
+    async fn read_ptt_unlocked(&self) -> Result<bool, RadioError> {
+        self.scalar_unlocked("t")
+            .await?
+            .parse::<u8>()
+            .map(|value| value != 0)
+            .map_err(|error| RadioError::Protocol(error.to_string()))
     }
 
     async fn discovered_tokens_unlocked(&self, query: &str) -> Result<Vec<String>, RadioError> {
-        let line = self.command_unlocked(query, false).await?.join(" ");
+        let line = self.scalar_unlocked(query).await?;
         parse_discovered_tokens(query, &line)
     }
 
@@ -523,12 +542,11 @@ impl RigctldRadio {
             .iter()
             .any(|enabled| enabled.eq_ignore_ascii_case(control_id))
     }
-}
 
-#[async_trait]
-impl RadioControlPort for RigctldRadio {
-    async fn capabilities(&self) -> Result<RadioCapabilities, RadioError> {
-        let lines = self.command("1", true).await?;
+    async fn capabilities_unlocked(&self) -> Result<RadioCapabilities, RadioError> {
+        let lines = self
+            .command_unlocked("1", ReplyFormat::CapabilityDump)
+            .await?;
         let dump = lines.join("\n");
         let mut controls = Vec::new();
         for (id, description) in [
@@ -770,34 +788,18 @@ impl RadioControlPort for RigctldRadio {
         })
     }
 
-    async fn state(&self) -> Result<RadioState, RadioError> {
-        let state = self.read_state().await;
-        if state.frequency_hz.is_none() && state.mode.is_none() {
-            return Err(RadioError::Unavailable(
-                "no radio state fields could be read".into(),
-            ));
-        }
-        Ok(state)
-    }
-
-    async fn control(&self, control_id: &str) -> Result<ControlValue, RadioError> {
+    async fn control_unlocked(&self, control_id: &str) -> Result<ControlValue, RadioError> {
         match control_id {
             "frequency_hz" => self
-                .scalar("f")
+                .scalar_unlocked("f")
                 .await?
                 .parse::<u64>()
                 .map(ControlValue::FrequencyHz)
                 .map_err(|e| RadioError::Protocol(e.to_string())),
-            "vfo" => self.scalar("v").await.map(ControlValue::Text),
-            "mode" => self
-                .command("m", false)
-                .await?
-                .first()
-                .cloned()
-                .map(ControlValue::Mode)
-                .ok_or_else(|| RadioError::Protocol("mode missing".into())),
+            "vfo" => self.scalar_unlocked("v").await.map(ControlValue::Text),
+            "mode" => self.scalar_unlocked("m").await.map(ControlValue::Mode),
             "passband_hz" => self
-                .command("m", false)
+                .command_unlocked("m", ReplyFormat::Values(2))
                 .await?
                 .get(1)
                 .ok_or_else(|| RadioError::Protocol("passband missing".into()))?
@@ -805,7 +807,7 @@ impl RadioControlPort for RigctldRadio {
                 .map(ControlValue::PassbandHz)
                 .map_err(|error| RadioError::Protocol(error.to_string())),
             "split_vfo" => {
-                let values = self.command("s", true).await?;
+                let values = self.command_unlocked("s", ReplyFormat::Values(2)).await?;
                 let enabled = values
                     .first()
                     .ok_or_else(|| RadioError::Protocol("split state missing".into()))?
@@ -819,37 +821,37 @@ impl RadioControlPort for RigctldRadio {
                 Ok(ControlValue::SplitVfo { enabled, tx_vfo })
             }
             "antenna_selection" => self
-                .scalar("y")
+                .scalar_unlocked("y")
                 .await?
                 .parse::<u32>()
                 .map(ControlValue::AntennaIndex)
                 .map_err(|error| RadioError::Protocol(error.to_string())),
             "memory_channel" => self
-                .scalar("e")
+                .scalar_unlocked("e")
                 .await?
                 .parse::<u64>()
                 .map(ControlValue::Integer)
                 .map_err(|error| RadioError::Protocol(error.to_string())),
             "rit_hz" => self
-                .scalar("j")
+                .scalar_unlocked("j")
                 .await?
                 .parse::<i64>()
                 .map(ControlValue::SignedHertz)
                 .map_err(|error| RadioError::Protocol(error.to_string())),
             "xit_hz" => self
-                .scalar("z")
+                .scalar_unlocked("z")
                 .await?
                 .parse::<i64>()
                 .map(ControlValue::SignedHertz)
                 .map_err(|error| RadioError::Protocol(error.to_string())),
             "split_frequency_hz" => self
-                .scalar("i")
+                .scalar_unlocked("i")
                 .await?
                 .parse::<u64>()
                 .map(ControlValue::FrequencyHz)
                 .map_err(|error| RadioError::Protocol(error.to_string())),
             "split_mode" => {
-                let values = self.command("x", true).await?;
+                let values = self.command_unlocked("x", ReplyFormat::Values(2)).await?;
                 let mode = values
                     .first()
                     .ok_or_else(|| RadioError::Protocol("split mode missing".into()))?
@@ -862,17 +864,12 @@ impl RadioControlPort for RigctldRadio {
                 Ok(ControlValue::ModePassband { mode, passband_hz })
             }
             "rf_power_fraction" => self
-                .scalar("l RFPOWER")
+                .scalar_unlocked("l RFPOWER")
                 .await?
                 .parse::<f64>()
                 .map(ControlValue::RfPowerFraction)
                 .map_err(|e| RadioError::Protocol(e.to_string())),
-            "ptt" => self
-                .scalar("t")
-                .await?
-                .parse::<u8>()
-                .map(|value| ControlValue::PttState(value != 0))
-                .map_err(|e| RadioError::Protocol(e.to_string())),
+            "ptt" => self.read_ptt_unlocked().await.map(ControlValue::PttState),
             other => {
                 let (kind, name) = Self::parse_generic_id(other)
                     .ok_or_else(|| RadioError::Unsupported(other.into()))?;
@@ -882,18 +879,22 @@ impl RadioControlPort for RigctldRadio {
                     "parameter" => "p ?",
                     _ => return Err(RadioError::Unsupported(other.into())),
                 };
-                if !self.discovered_tokens(query).await?.contains(&name) {
+                if !self
+                    .discovered_tokens_unlocked(query)
+                    .await?
+                    .contains(&name)
+                {
                     return Err(RadioError::Unsupported(other.into()));
                 }
                 if kind == "level" || kind == "parameter" {
                     let command = if kind == "level" { "l" } else { "p" };
-                    self.scalar(&format!("{command} {name}"))
+                    self.scalar_unlocked(&format!("{command} {name}"))
                         .await?
                         .parse::<f64>()
                         .map(ControlValue::Number)
                         .map_err(|e| RadioError::Protocol(e.to_string()))
                 } else {
-                    self.scalar(&format!("u {name}"))
+                    self.scalar_unlocked(&format!("u {name}"))
                         .await?
                         .parse::<u8>()
                         .map(|value| ControlValue::Boolean(value != 0))
@@ -902,11 +903,35 @@ impl RadioControlPort for RigctldRadio {
             }
         }
     }
+}
+
+#[async_trait]
+impl RadioControlPort for RigctldRadio {
+    async fn capabilities(&self) -> Result<RadioCapabilities, RadioError> {
+        let _revision = self.command_revision.lock().await;
+        self.capabilities_unlocked().await
+    }
+
+    async fn state(&self) -> Result<RadioState, RadioError> {
+        let revision = self.command_revision.lock().await;
+        let state = self.read_state_unlocked(*revision).await;
+        if state.frequency_hz.is_none() && state.mode.is_none() {
+            return Err(RadioError::Unavailable(
+                "no radio state fields could be read".into(),
+            ));
+        }
+        Ok(state)
+    }
+
+    async fn control(&self, control_id: &str) -> Result<ControlValue, RadioError> {
+        let _revision = self.command_revision.lock().await;
+        self.control_unlocked(control_id).await
+    }
 
     async fn set_control(
         &self,
         control_id: &str,
-        value: ControlValue,
+        mut value: ControlValue,
         expected_revision: Option<u64>,
     ) -> Result<RadioState, RadioError> {
         self.require_writes_enabled()?;
@@ -919,23 +944,25 @@ impl RadioControlPort for RigctldRadio {
                 "{control_id} is not enabled in LINKWISE_ENABLED_HAMLIB_CONTROLS"
             )));
         }
-        let _guard = self.command_lock.lock().await;
-        let current_revision = *self.revision.lock().await;
-        if expected_revision.is_some_and(|expected| expected != current_revision) {
+        let mut revision = self.command_revision.lock().await;
+        if expected_revision.is_some_and(|expected| expected != *revision) {
             return Err(RadioError::PolicyDenied(format!(
-                "stale state revision; current revision is {current_revision}"
+                "stale state revision; current revision is {revision}"
             )));
         }
-        let ptt = self
-            .command_unlocked("t", false)
-            .await?
-            .first()
-            .cloned()
-            .ok_or_else(|| RadioError::Protocol("PTT state missing".into()))?;
-        if ptt.trim() != "0" {
+        if self.read_ptt_unlocked().await? {
             return Err(RadioError::PolicyDenied(
                 "radio is transmitting; control write denied".into(),
             ));
+        }
+        match &mut value {
+            ControlValue::Text(symbol)
+            | ControlValue::Mode(symbol)
+            | ControlValue::ModePassband { mode: symbol, .. }
+            | ControlValue::SplitVfo { tx_vfo: symbol, .. } => {
+                *symbol = symbol.trim().to_ascii_uppercase();
+            }
+            _ => {}
         }
         let expected_value = value.clone();
         let command = match (control_id, value) {
@@ -951,7 +978,6 @@ impl RadioControlPort for RigctldRadio {
                 format!("F {hz}")
             }
             ("vfo", ControlValue::Text(vfo)) => {
-                let vfo = vfo.trim().to_ascii_uppercase();
                 if !vfo.is_empty()
                     && vfo
                         .bytes()
@@ -966,7 +992,6 @@ impl RadioControlPort for RigctldRadio {
                 }
             }
             ("mode", ControlValue::Mode(mode)) => {
-                let mode = mode.trim().to_ascii_uppercase();
                 if self.allowed_modes.is_empty()
                     || !self.allowed_modes.iter().any(|allowed| allowed == &mode)
                 {
@@ -982,16 +1007,10 @@ impl RadioControlPort for RigctldRadio {
                         "passband exceeds safety bound".into(),
                     ));
                 }
-                let mode = self
-                    .command_unlocked("m", false)
-                    .await?
-                    .first()
-                    .cloned()
-                    .ok_or_else(|| RadioError::Protocol("mode missing".into()))?;
+                let mode = self.scalar_unlocked("m").await?;
                 format!("M {mode} {passband}")
             }
             ("split_vfo", ControlValue::SplitVfo { enabled, tx_vfo }) => {
-                let tx_vfo = tx_vfo.trim().to_ascii_uppercase();
                 if tx_vfo.is_empty()
                     || !tx_vfo
                         .bytes()
@@ -1013,10 +1032,8 @@ impl RadioControlPort for RigctldRadio {
                         ));
                     };
                     let tx_frequency = self
-                        .command_unlocked("i", false)
+                        .scalar_unlocked("i")
                         .await?
-                        .first()
-                        .ok_or_else(|| RadioError::Protocol("split frequency missing".into()))?
                         .parse::<u64>()
                         .map_err(|error| RadioError::Protocol(error.to_string()))?;
                     if tx_frequency < min || tx_frequency > max {
@@ -1067,7 +1084,6 @@ impl RadioControlPort for RigctldRadio {
                 format!("I {hz}")
             }
             ("split_mode", ControlValue::ModePassband { mode, passband_hz }) => {
-                let mode = mode.trim().to_ascii_uppercase();
                 if self.allowed_modes.is_empty()
                     || !self.allowed_modes.iter().any(|allowed| allowed == &mode)
                     || passband_hz > 100_000
@@ -1084,7 +1100,10 @@ impl RadioControlPort for RigctldRadio {
                         "power writes require LINKWISE_MAX_POWER_FRACTION".into(),
                     ));
                 };
-                let dump = self.command_unlocked("1", true).await?.join("\n");
+                let dump = self
+                    .command_unlocked("1", ReplyFormat::CapabilityDump)
+                    .await?
+                    .join("\n");
                 let (backend_min, backend_max) =
                     parse_capability_range(&dump, "Set level:", "RFPOWER").unwrap_or((0.0, 1.0));
                 if !value.is_finite()
@@ -1111,7 +1130,10 @@ impl RadioControlPort for RigctldRadio {
                 if !value.is_finite() {
                     return Err(RadioError::PolicyDenied("non-finite level value".into()));
                 }
-                let dump = self.command_unlocked("1", true).await?.join("\n");
+                let dump = self
+                    .command_unlocked("1", ReplyFormat::CapabilityDump)
+                    .await?
+                    .join("\n");
                 let Some((minimum, maximum)) = parse_capability_range(&dump, "Set level:", &name)
                 else {
                     return Err(RadioError::PolicyDenied(format!(
@@ -1167,34 +1189,10 @@ impl RadioControlPort for RigctldRadio {
             (other, _) => return Err(RadioError::Unsupported(other.into())),
         };
 
-        // The lock is held across write/readback so this adapter never interleaves CAT mutations.
-        let mut stream = timeout(self.timeout, TcpStream::connect(&self.address))
-            .await
-            .map_err(|_| RadioError::Unavailable("rigctld connect timed out".into()))?
-            .map_err(|e| RadioError::Unavailable(e.to_string()))?;
-        stream
-            .write_all(format!("{command}\n").as_bytes())
-            .await
-            .map_err(|e| RadioError::Unavailable(e.to_string()))?;
-        stream
-            .flush()
-            .await
-            .map_err(|e| RadioError::Unavailable(e.to_string()))?;
-        let mut reader = BufReader::new(stream);
-        let mut response = String::new();
-        timeout(self.timeout, reader.read_line(&mut response))
-            .await
-            .map_err(|_| RadioError::Unavailable("rigctld write timed out".into()))?
-            .map_err(|e| RadioError::Unavailable(e.to_string()))?;
-        if response.trim() != "RPRT 0" {
-            return Err(RadioError::Protocol(format!(
-                "write returned {}",
-                response.trim()
-            )));
-        }
-        *self.revision.lock().await = current_revision.saturating_add(1);
-        drop(_guard);
-        let actual = self.control(control_id).await?;
+        // A lost reply can hide an applied write. Invalidate prior revisions before sending it.
+        *revision = revision.saturating_add(1);
+        self.command_unlocked(&command, ReplyFormat::Status).await?;
+        let actual = self.control_unlocked(control_id).await?;
         let matches = match (&expected_value, &actual) {
             (ControlValue::RfPowerFraction(expected), ControlValue::RfPowerFraction(actual)) => {
                 (expected - actual).abs() <= 0.01
@@ -1206,7 +1204,7 @@ impl RadioControlPort for RigctldRadio {
                 "requested {expected_value:?}, read back {actual:?}"
             )));
         }
-        let state = self.read_state().await;
+        let state = self.read_state_unlocked(*revision).await;
         if state.field_errors.contains_key(control_id) {
             return Err(RadioError::ReadbackMismatch(format!(
                 "could not verify {control_id}"
@@ -1221,44 +1219,8 @@ impl RadioControlPort for RigctldRadio {
                 "PTT key-up is unavailable until the session authorization and one-use permit arbiter is configured".into(),
             ));
         }
-        let _guard = self.command_lock.lock().await;
-        let operation = async {
-            let mut stream = TcpStream::connect(&self.address)
-                .await
-                .map_err(|error| RadioError::Unavailable(error.to_string()))?;
-            stream
-                .write_all(b"T 0\n")
-                .await
-                .map_err(|error| RadioError::Unavailable(error.to_string()))?;
-            stream
-                .flush()
-                .await
-                .map_err(|error| RadioError::Unavailable(error.to_string()))?;
-            let mut response = String::new();
-            BufReader::new(stream)
-                .read_line(&mut response)
-                .await
-                .map_err(|error| RadioError::Unavailable(error.to_string()))?;
-            if response.trim() != "RPRT 0" {
-                return Err(RadioError::Protocol(format!(
-                    "PTT release returned {}",
-                    response.trim()
-                )));
-            }
-            Ok(())
-        };
-        timeout(self.timeout, operation)
-            .await
-            .map_err(|_| RadioError::Unavailable("PTT release timed out".into()))??;
-        drop(_guard);
-        let observed = self
-            .control("ptt")
-            .await
-            .ok()
-            .and_then(|value| match value {
-                ControlValue::PttState(value) => Some(value),
-                _ => None,
-            });
+        self.command_unlocked("T 0", ReplyFormat::Status).await?;
+        let observed = self.read_ptt_unlocked().await.ok();
         Ok(PttObservation {
             requested_action: PttAction::KeyDown,
             observed_ptt_asserted: observed,
@@ -1455,6 +1417,169 @@ impl RadioControlPort for SimulatedRadio {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::{io::AsyncReadExt, net::TcpListener, sync::oneshot};
+
+    async fn test_rig() -> (RigctldRadio, TcpListener) {
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let radio = RigctldRadio {
+            address: listener.local_addr().unwrap().to_string(),
+            timeout: Duration::from_secs(2),
+            command_revision: Arc::new(Mutex::new(0)),
+            writes_enabled: true,
+            min_frequency_hz: Some(7_000_000),
+            max_frequency_hz: Some(7_300_000),
+            max_power_fraction: None,
+            allowed_modes: vec!["USB".into()],
+            enabled_hamlib_controls: vec!["PASSBAND_HZ".into()],
+        };
+        (radio, listener)
+    }
+
+    async fn expect_command(listener: &TcpListener, expected: &str) -> TcpStream {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut stream = BufReader::new(stream);
+        let mut command = String::new();
+        stream.read_line(&mut command).await.unwrap();
+        assert_eq!(command.trim_end(), expected);
+        stream.into_inner()
+    }
+
+    async fn answer(listener: &TcpListener, expected: &str, response: &str) {
+        let mut stream = expect_command(listener, expected).await;
+        stream.write_all(response.as_bytes()).await.unwrap();
+        // rigctld keeps successful GET connections open, even without an RPRT line.
+        assert_eq!(stream.read(&mut [0; 1]).await.unwrap(), 0);
+    }
+
+    async fn answer_state(listener: &TcpListener, frequency: &str, mode: &str) {
+        answer(listener, "\\get_info", "Dummy\n").await;
+        answer(listener, "f", frequency).await;
+        answer(listener, "m", mode).await;
+        answer(listener, "t", "0\n").await;
+        answer(listener, "l RFPOWER", "0.25\n").await;
+    }
+
+    #[tokio::test]
+    async fn rigctld_reads_and_verifies_fixed_length_mode_responses() {
+        let (radio, listener) = test_rig().await;
+        let backend = tokio::spawn(async move {
+            answer(&listener, "m", "USB\n2400\n").await;
+            answer(&listener, "s", "1\nVFOB\n").await;
+            answer(&listener, "x", "USB\n1800\n").await;
+            answer(&listener, "t", "0\n").await;
+            answer(&listener, "m", "USB\n2400\n").await;
+            answer(&listener, "M USB 1800", "RPRT 0\n").await;
+            answer(&listener, "m", "USB\n1800\n").await;
+            answer_state(&listener, "7100000\n", "USB\n1800\n").await;
+        });
+
+        assert_eq!(
+            radio.control("passband_hz").await.unwrap(),
+            ControlValue::PassbandHz(2400)
+        );
+        assert_eq!(
+            radio.control("split_vfo").await.unwrap(),
+            ControlValue::SplitVfo {
+                enabled: true,
+                tx_vfo: "VFOB".into(),
+            }
+        );
+        assert_eq!(
+            radio.control("split_mode").await.unwrap(),
+            ControlValue::ModePassband {
+                mode: "USB".into(),
+                passband_hz: 1800,
+            }
+        );
+        let state = radio
+            .set_control("passband_hz", ControlValue::PassbandHz(1800), Some(0))
+            .await
+            .unwrap();
+        assert_eq!(state.mode.as_deref(), Some("USB"));
+        assert_eq!(state.passband_hz, Some(1800));
+        assert!(state.field_errors.is_empty());
+        backend.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rigctld_release_can_proceed_during_serialized_write_readback() {
+        let (radio, listener) = test_rig().await;
+        let (reading, readback_started) = oneshot::channel();
+        let backend = tokio::spawn(async move {
+            answer(&listener, "t", "0\n").await;
+            answer(&listener, "F 7100000", "RPRT 0\n").await;
+            let mut readback = expect_command(&listener, "f").await;
+            reading.send(()).unwrap();
+
+            answer(&listener, "T 0", "RPRT 0\n").await;
+            answer(&listener, "t", "1\n").await;
+            readback.write_all(b"7100000\n").await.unwrap();
+            answer_state(&listener, "7100000\n", "USB\n2400\n").await;
+
+            answer(&listener, "t", "0\n").await;
+            answer(&listener, "F 7200000", "RPRT 0\n").await;
+            answer(&listener, "f", "7200000\n").await;
+            answer_state(&listener, "7200000\n", "USB\n2400\n").await;
+        });
+        let first = tokio::spawn({
+            let radio = radio.clone();
+            async move {
+                radio
+                    .set_control("frequency_hz", ControlValue::FrequencyHz(7_100_000), None)
+                    .await
+                    .unwrap()
+            }
+        });
+        readback_started.await.unwrap();
+
+        let (second, release) = tokio::join!(
+            biased;
+            radio.set_control("frequency_hz", ControlValue::FrequencyHz(7_200_000), None),
+            radio.request_ptt(PttRequest {
+                action: PttAction::KeyDown,
+                session_id: None,
+                transmit_permit_id: None,
+            }),
+        );
+        let first = first.await.unwrap();
+        assert_eq!(first.frequency_hz, Some(7_100_000));
+        assert_eq!(first.state_revision, 1);
+        let second = second.unwrap();
+        assert_eq!(second.frequency_hz, Some(7_200_000));
+        assert_eq!(second.state_revision, 2);
+        let release = release.unwrap();
+        assert_eq!(release.observed_ptt_asserted, Some(true));
+        assert!(!release.release_confirmed);
+        backend.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rigctld_unacknowledged_write_invalidates_prior_revision() {
+        let (radio, listener) = test_rig().await;
+        let backend = tokio::spawn(async move {
+            answer(&listener, "t", "0\n").await;
+            drop(expect_command(&listener, "F 7100000").await);
+        });
+        let result = radio
+            .set_control(
+                "frequency_hz",
+                ControlValue::FrequencyHz(7_100_000),
+                Some(0),
+            )
+            .await;
+        assert!(matches!(result, Err(RadioError::Protocol(_))));
+        let result = radio
+            .set_control(
+                "frequency_hz",
+                ControlValue::FrequencyHz(7_200_000),
+                Some(0),
+            )
+            .await;
+        assert!(matches!(result, Err(RadioError::PolicyDenied(_))));
+        backend.await.unwrap();
+    }
 
     #[test]
     fn generic_hamlib_control_ids_are_allowlisted() {

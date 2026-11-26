@@ -1,8 +1,9 @@
 //! Exclusive loopback attachment for the legacy command/data streams.
-use std::{io, net::SocketAddr, time::Duration};
+use std::{future::Future, io, net::SocketAddr, time::Duration};
 
 use tokio::{
-    net::{TcpListener, TcpStream},
+    io::{DuplexStream, Join, copy, duplex, join},
+    net::{TcpListener, TcpStream, tcp::OwnedWriteHalf},
     sync::mpsc,
     time::timeout,
 };
@@ -10,6 +11,7 @@ use tokio::{
 use super::{Channel, ModemPort, control_stream, data_stream};
 
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
+const READ_BUFFER: usize = 8 * 1024;
 
 pub struct Listener {
     control: TcpListener,
@@ -81,8 +83,12 @@ impl Listener {
     ) -> io::Result<()> {
         let (control, data) = self.accept_pair().await?;
         let (channel, result) = {
-            let control = control_stream(control, port, notices, Some(WRITE_TIMEOUT), true);
-            let data = data_stream(data, port, received, Some(WRITE_TIMEOUT));
+            let control = read_ahead(control, |stream| {
+                control_stream(stream, port, notices, Some(WRITE_TIMEOUT), true)
+            });
+            let data = read_ahead(data, |stream| {
+                data_stream(stream, port, received, Some(WRITE_TIMEOUT))
+            });
             tokio::pin!(control, data);
             loop {
                 tokio::select! {
@@ -110,6 +116,24 @@ impl Listener {
     }
 }
 
+/// Keep polling the socket for EOF or reset while the protocol handler is
+/// awaiting a backend reply or a blocked write. Buffering remains bounded.
+async fn read_ahead<F>(
+    socket: TcpStream,
+    handle: impl FnOnce(Join<DuplexStream, OwnedWriteHalf>) -> F,
+) -> io::Result<()>
+where
+    F: Future<Output = io::Result<()>>,
+{
+    let (mut socket, writer) = socket.into_split();
+    let (reader, mut buffer) = duplex(READ_BUFFER);
+    tokio::select! {
+        biased;
+        result = copy(&mut socket, &mut buffer) => result.map(|_| ()),
+        result = handle(join(reader, writer)) => result,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,11 +145,16 @@ mod tests {
     struct Port {
         echo: mpsc::Sender<Vec<u8>>,
         closed: Mutex<Vec<Channel>>,
+        pending_command: Option<mpsc::Sender<()>>,
     }
 
     #[async_trait]
     impl ModemPort for Port {
         async fn command(&self, command: Command) -> Reply {
+            if let Some(entered) = &self.pending_command {
+                entered.send(()).await.unwrap();
+                return std::future::pending().await;
+            }
             match command {
                 Command::Version => Reply::Version("BENCH".into()),
                 _ => Reply::Wrong,
@@ -155,6 +184,7 @@ mod tests {
                 let port = Port {
                     echo,
                     closed: Mutex::new(Vec::new()),
+                    pending_command: None,
                 };
                 listener.serve_one(&port, notices, received).await.unwrap();
                 port.closed.into_inner().unwrap()
@@ -205,6 +235,7 @@ mod tests {
                 let port = Port {
                     echo,
                     closed: Mutex::new(Vec::new()),
+                    pending_command: None,
                 };
                 listener.serve_one(&port, notices, received).await
             });
@@ -218,6 +249,43 @@ mod tests {
             assert_eq!(reply, payload);
             drop((reader, writer));
             server.await.unwrap().unwrap();
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn command_eof_detaches_pair_during_a_pending_backend_reply() {
+        timeout(Duration::from_secs(2), async {
+            let address = SocketAddr::from(([127, 0, 0, 1], 0));
+            let mut listener = Listener::bind(address, address, Duration::from_secs(1))
+                .await
+                .unwrap();
+            let (control_address, data_address) = listener.addresses().unwrap();
+            let (_notice, notices) = mpsc::channel(1);
+            let (echo, received) = mpsc::channel(1);
+            let (entered, mut pending) = mpsc::channel(1);
+            let server = tokio::spawn(async move {
+                let port = Port {
+                    echo,
+                    closed: Mutex::new(Vec::new()),
+                    pending_command: Some(entered),
+                };
+                listener.serve_one(&port, notices, received).await.unwrap();
+                port.closed.into_inner().unwrap()
+            });
+
+            let mut control = TcpStream::connect(control_address).await.unwrap();
+            let mut data = TcpStream::connect(data_address).await.unwrap();
+            control.write_all(b"VERSION\r").await.unwrap();
+            assert_eq!(pending.recv().await, Some(()));
+            drop(control);
+
+            assert_eq!(data.read(&mut [0]).await.unwrap(), 0);
+            assert!(matches!(
+                server.await.unwrap().as_slice(),
+                [Channel::Control, Channel::Data]
+            ));
         })
         .await
         .unwrap();
