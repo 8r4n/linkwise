@@ -23,6 +23,33 @@ private MCP profile and virtual audio. Native ALSA, systemd and SELinux on the
 commissioned host, signed upgrade and recovery, and the authorized live
 gateway exchange have their own acceptance gates below.
 
+### Rocky ARM64 package verification
+
+The November 25, 2026 candidate from `e60a35c97eca32e097adda7a69b7d7be8024d8d6`
+built as `linkwise-modem-0.1.0-1.rockymail.aarch64.rpm`. The unsigned RPM SHA-256
+was `d5fa6d483e29528d73aa4daa7dd087d9ccc1de7cea23f7600e9ee763c675242d`.
+The pinned container ran the installed-binary smoke and rejected both an
+untrusted signer and a modified RPM. A booted Rocky 9.9 ARM64 guest with
+SELinux enforcing accepted the bench-signed copy through DNF with local
+signature checking. RPM file verification passed, the modem executable
+received the expected SELinux label, both policy modules loaded, and all
+three installed service units passed `systemd-analyze verify`. The managed
+BW500 MCP test passed using both installed executables. With FIPS disabled,
+the installed mail binary refused TLS startup.
+[RPM build and signature fixture](../../tools/rocky9-vm/build-rpm.sh) · [Installed-binary test](../../rust/tests/olm_station.rs)
+
+The guest then booted with kernel FIPS mode and the system FIPS policy
+active. With SELinux enforcing, the packaged SMTP and IMAP services accepted
+authenticated TLS 1.3 on IPv4 loopback using a fixture CA. The first
+attachment went from SMTP through virtual BW500 to the peer mailbox. A
+separate reply came back over BW500 and was retrieved from IMAP. Both
+attachment hashes matched and both modem sessions closed cleanly. In a
+separate service startup check, the packaged modem unit reported ready
+with the kernel ALSA loopback device, ran in the `linkwise_modem_t` SELinux
+domain, and bound both host ports on loopback. Production signing,
+cryptographic module coverage for the deployment, and commissioned radio
+operation remain release gates.
+
 ## Implementation and evidence
 
 | Requirements | Implemented and evidenced | Completion gate |

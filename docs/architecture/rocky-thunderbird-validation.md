@@ -7,12 +7,15 @@ the allowed client subnet, access policy, and maintenance topology before
 claiming host-level DNS, SMTP or other IP controls inapplicable. TCP
 submission and IMAP are now production interfaces requiring assessment.
 
-## Existing RPM and bench result
+For the current Rocky ARM64 candidate and packaged service evidence, see
+the [station integration status](station-integration-status.md#rocky-arm64-package-verification).
+
+## Initial assessment RPM and bench result
 
 The assessed Rocky ARM64 RPM contains the receive-only station candidate.
 Its installed binary exits 2 on the authenticated SMTP STARTTLS probe,
 reporting that TLS requires `mail-tls`. The embedded SMTP and IMAP servers
-bind to IPv4 loopback. The current production package therefore lacks the
+bind to IPv4 loopback. At that stage, the assessment RPM lacked the
 authenticated TLS client interface and network exposure required by this
 deployment. A separate ARM64 `mail-tls` build was tested on the same Rocky
 guest using a temporary SSH tunnel and bench CA.
