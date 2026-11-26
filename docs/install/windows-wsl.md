@@ -123,3 +123,19 @@ test -n "$rpm" && bash tools/rocky-wsl/build-image.sh "$rpm" "$output_dir"
 
 Use the `.wsl` image and `.wsl.sha256` file generated in the output
 directory. Retain the build revision and log with the artifacts.
+
+## November 25, 2026 build record
+
+The archives were assembled at `7c8ad67` from Rocky Linux 9.9 WSL bases.
+The ARM64 RPM was built natively from `da2578b`. The x64 RPM was
+cross-compiled from `20ae0a8` and packaged in an emulated Rocky x64
+container. Both RPMs used the same Rust source.
+
+```text
+7fe8b502c0397984783ddc5c0faf5e235c6bc95ecd703da088468b0b71c0d4ad  linkwise-rocky9-x64.wsl
+9ac000902c183f2754ddcd645d6d1c3075cae9f35494f7fc2f1281b5f650a4fc  linkwise-rocky9-arm64.wsl
+```
+
+Both finished archives passed SHA-256 verification. The installed binaries
+from each archive passed the managed BW500 abort, cleanup, and two-way
+attachment test in Linux. Windows import and first launch remain open.
