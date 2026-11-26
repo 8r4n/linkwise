@@ -1,0 +1,59 @@
+name: Rocky Linux server RPM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rust/**'
+      - 'rust-toolchain.toml'
+      - 'packaging/**'
+      - 'docs/install/rocky-server.md'
+      - 'docs/man/**'
+      - 'tools/rocky9-vm/**'
+      - 'tools/package-modem.py'
+      - 'tools/smoke-test-package.py'
+      - 'tools/test-modem-cli.py'
+      - 'tools/modem_licenses.py'
+      - 'tools/fetch-modem-profile.py'
+      - '.github/workflows/rocky-server.yml'
+  pull_request:
+    paths:
+      - 'rust/**'
+      - 'rust-toolchain.toml'
+      - 'packaging/**'
+      - 'docs/install/rocky-server.md'
+      - 'docs/man/**'
+      - 'tools/rocky9-vm/**'
+      - 'tools/package-modem.py'
+      - 'tools/smoke-test-package.py'
+      - 'tools/test-modem-cli.py'
+      - 'tools/modem_licenses.py'
+      - 'tools/fetch-modem-profile.py'
+      - '.github/workflows/rocky-server.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  arm64-server:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Build and verify the Rocky server candidate
+        run: |
+          evidence_dir="$RUNNER_TEMP/rocky-server"
+          mkdir -p "$evidence_dir"
+          bash tools/rocky9-vm/build-rpm.sh "$GITHUB_SHA" "$evidence_dir" server
+      - name: Upload candidate and build evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rocky9-arm64-server-candidate
+          path: |
+            ${{ runner.temp }}/rocky-server/build-source/installer-artifacts/*
+            ${{ runner.temp }}/rocky-server/build-revision.txt
+            ${{ runner.temp }}/rocky-server/rocky-rpm-build.log
+          if-no-files-found: error

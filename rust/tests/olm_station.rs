@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::{BufRead, BufReader, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{Arc, mpsc},
     thread,
@@ -549,9 +549,13 @@ struct Mcp {
 
 impl Mcp {
     fn start(fixture: &Fixture) -> Self {
+        Self::start_with_binary(fixture, Path::new(env!("CARGO_BIN_EXE_linkwise")))
+    }
+
+    fn start_with_binary(fixture: &Fixture, binary: &Path) -> Self {
         let process_temp = fixture.path("process-temp");
         fs::create_dir_all(&process_temp).unwrap();
-        let mut child = Command::new(env!("CARGO_BIN_EXE_linkwise"))
+        let mut child = Command::new(binary)
             .env("LINKWISE_RADIO_BACKEND", "simulated")
             .env("LINKWISE_OLM_CONFIG", fixture.path("station.json"))
             .env("LINKWISE_AUDIT_PATH", fixture.path("radio.jsonl"))
@@ -742,9 +746,37 @@ fn stdio_mcp_runs_a_shadow_session_with_radio_controls_gated() {
     mcp.close();
 }
 
+fn managed_test_binaries() -> (PathBuf, PathBuf) {
+    match (
+        std::env::var_os("LINKWISE_STATION_TEST_CLI"),
+        std::env::var_os("LINKWISE_STATION_TEST_MODEMD"),
+    ) {
+        (None, None) => (
+            env!("CARGO_BIN_EXE_linkwise").into(),
+            env!("CARGO_BIN_EXE_linkwise-modemd").into(),
+        ),
+        (Some(cli), Some(modem)) => {
+            let (cli, modem) = (PathBuf::from(cli), PathBuf::from(modem));
+            assert!(
+                cfg!(all(target_os = "linux", target_arch = "aarch64"))
+                    && cli == Path::new("/usr/bin/linkwise")
+                    && modem == Path::new("/usr/bin/linkwise-modemd"),
+                "installed overrides require /usr/bin/linkwise and /usr/bin/linkwise-modemd on Linux ARM64"
+            );
+            assert!(
+                cli.is_file() && modem.is_file(),
+                "installed executables are missing"
+            );
+            (cli, modem)
+        }
+        _ => panic!("set both LINKWISE_STATION_TEST_CLI and LINKWISE_STATION_TEST_MODEMD"),
+    }
+}
+
 #[test]
 #[ignore = "requires LINKWISE_BW500_PROFILE pointing to the reference waveform profile"]
 fn managed_virtual_bw500_mcp_reaps_aborted_pair_and_verifies_both_transfers() {
+    let (cli, modem) = managed_test_binaries();
     let waveform = std::env::var_os("LINKWISE_BW500_PROFILE")
         .expect("provide LINKWISE_BW500_PROFILE for the managed waveform test");
     let waveform = fs::canonicalize(waveform).unwrap();
@@ -754,7 +786,7 @@ fn managed_virtual_bw500_mcp_reaps_aborted_pair_and_verifies_both_transfers() {
         serde_json::from_slice(&fs::read(fixture.path("station.json")).unwrap()).unwrap();
     config["shadow"] = json!({
         "virtual_bw500": {
-            "modem_path": env!("CARGO_BIN_EXE_linkwise-modemd"),
+            "modem_path": modem,
             "waveform_profile": waveform,
             "local_call": "W1AW",
         },
@@ -766,7 +798,7 @@ fn managed_virtual_bw500_mcp_reaps_aborted_pair_and_verifies_both_transfers() {
     });
     fixture.write("station.json", &config);
 
-    let mut mcp = Mcp::start(&fixture);
+    let mut mcp = Mcp::start_with_binary(&fixture, &cli);
     let process_temp = fixture.path("process-temp");
     let private_directory_exists = || fs::read_dir(&process_temp).unwrap().next().is_some();
     mcp.initialize();

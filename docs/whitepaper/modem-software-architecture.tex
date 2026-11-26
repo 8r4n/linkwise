@@ -183,14 +183,12 @@ payload comparisons, recovery evidence, and distinct modem/client outcomes.
 Native hardware measurements still require the corresponding device adapter.
 \end{enumerate}
 
-Only after these shared contracts stabilize should platform work supply
-macOS audio/permissions and launch-agent integration, Linux audio/device
-permissions and user-service integration, and Windows audio/device access
-and background-process packaging. Foreground operation comes first on each
-platform. A system service is optional and requires qualification in its
-actual execution context; it is not evidence of audio readiness. Each native
-adapter must satisfy the same fault/completion contract and undergo device
-and inhibited/conducted PTT qualification before operational RF use.
+The production qualification baseline is Rocky Linux 9 ARM64 with ALSA,
+systemd, and SELinux. Verify the installed RPM in that execution context,
+including audio-device permissions and service isolation. Other platforms
+have individual foreground and service qualification for their native audio
+backends. Each native adapter must satisfy the same fault/completion contract
+and pass inhibited or conducted PTT qualification before operational RF use.
 
 \subsection{ChatGPT Agent and Codex as the orchestrating agents}
 ChatGPT Agent or Codex is the decision-making orchestrator: it observes station

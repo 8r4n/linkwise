@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -14,11 +15,23 @@ import tempfile
 PACKAGE = "linkwise-modem"
 INSTALLER_ID = "io.github.8r4n.linkwise.modem"
 GUIDES = ("Install.md", "Station-setup.md", "LICENSE", "THIRD-PARTY-NOTICES.txt")
+ROCKY_SERVICE_FILES = tuple(map(Path, (
+    "/usr/lib/systemd/system/linkwise-modem.service",
+    "/usr/lib/systemd/user/linkwise-modem.service",
+    "/usr/lib/systemd/system/linkwise-mail-smtp.service",
+    "/usr/lib/systemd/system/linkwise-mail-imap.service",
+    "/usr/lib/systemd/system-preset/80-linkwise-modem.preset",
+    "/usr/lib/systemd/user-preset/80-linkwise-modem.preset",
+    "/usr/share/selinux/packages/linkwise_modem.pp",
+    "/usr/share/selinux/packages/linkwise_modem_ports.cil",
+)))
+MANAGED_BW500_TEST = "managed_virtual_bw500_mcp_reaps_aborted_pair_and_verifies_both_transfers"
 
 
-def run(*args, capture=False):
+def run(*args, capture=False, env=None, timeout=None):
     return subprocess.run(
-        args, check=True, text=True, stdout=subprocess.PIPE if capture else None
+        args, check=True, text=True, stdout=subprocess.PIPE if capture else None,
+        env=env, timeout=timeout,
     ).stdout
 
 
@@ -36,7 +49,60 @@ def verify_checksum(package):
         raise RuntimeError(f"SHA-256 mismatch for {package}")
 
 
-def smoke(package, version, station):
+def validate_rocky_bw500(package, profile):
+    if package.suffix != ".rpm" or platform.system() != "Linux" or platform.machine() != "aarch64":
+        raise RuntimeError("--rocky-bw500-profile requires the Rocky Linux 9 ARM64 server RPM")
+    release = {}
+    for line in Path("/etc/os-release").read_text(encoding="utf-8").splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key in {"ID", "VERSION_ID"}:
+            release[key], = shlex.split(value)
+    if release.get("ID") != "rocky" or release.get("VERSION_ID", "").split(".")[0] != "9":
+        raise RuntimeError("--rocky-bw500-profile requires a Rocky Linux 9 test environment")
+    metadata = run("rpm", "-qp", "--queryformat", "%{NAME}\t%{RELEASE}\t%{ARCH}", package, capture=True)
+    if metadata != f"{PACKAGE}\t1.rockymail\taarch64":
+        raise RuntimeError("--rocky-bw500-profile requires linkwise-modem release 1.rockymail.aarch64")
+    profile = profile.resolve(strict=True)
+    if not profile.is_file():
+        raise RuntimeError("The BW500 waveform profile must be a file")
+    return profile
+
+
+def smoke_rocky_bw500(cli, modem, profile):
+    import grp
+    import pwd
+
+    owners = run("rpm", "-qf", "--queryformat", "%{NAME}\n",
+                 cli, modem, *ROCKY_SERVICE_FILES, capture=True)
+    if set(owners.splitlines()) != {PACKAGE}:
+        raise RuntimeError("The Rocky executables, units, presets, and SELinux files must belong to linkwise-modem")
+    run("rpm", "-V", "--noscripts", PACKAGE)
+    account = pwd.getpwnam("linkwise-mail")
+    group = grp.getgrnam("linkwise-mail")
+    if (account.pw_uid == 0 or group.gr_gid == 0 or account.pw_gid != group.gr_gid
+            or account.pw_dir != "/var/lib/linkwise-mail" or Path(account.pw_shell).name != "nologin"):
+        raise RuntimeError("The RPM did not install the expected non-login mail service identity")
+
+    try:
+        report = run(
+            "cargo", "test", "--locked", "--release", "--target", "aarch64-unknown-linux-gnu",
+            "--features", "audio-device,rocky-mail-tls",
+            "--manifest-path", Path(__file__).resolve().parents[1] / "rust/Cargo.toml",
+            "--test", "olm_station", MANAGED_BW500_TEST, "--", "--ignored", "--exact",
+            capture=True, timeout=480,
+            env=dict(os.environ, LINKWISE_BW500_PROFILE=str(profile),
+                     LINKWISE_STATION_TEST_CLI=str(cli), LINKWISE_STATION_TEST_MODEMD=str(modem)),
+        )
+    except subprocess.CalledProcessError as error:
+        print(error.stdout or "", end="")
+        raise
+    print(report, end="")
+    if f"test {MANAGED_BW500_TEST} ... ok" not in report.splitlines():
+        raise RuntimeError("The required managed BW500 MCP test did not run successfully")
+    print("Installed Rocky RPM passed the radio-free managed BW500 MCP smoke test.")
+
+
+def smoke(package, version, station, rocky_bw500_profile=None):
     system = platform.system()
     suffix = package.suffix
     if system == "Darwin" and suffix == ".pkg":
@@ -88,6 +154,8 @@ def smoke(package, version, station):
         if system == "Linux":
             man_pages = tuple(page.with_suffix(page.suffix + ".gz") for page in man_pages)
         installed_files += man_pages
+    if rocky_bw500_profile is not None:
+        installed_files += ROCKY_SERVICE_FILES
     mac_app = Path("/Applications/Linkwise Station.app")
     if system == "Darwin" and mac_app.exists():
         raise RuntimeError("Use a clean test host without the Linkwise Station app")
@@ -111,6 +179,8 @@ def smoke(package, version, station):
         run(modem, "--help")
         run(modem, "--check-config", station)
         run(modem, "--simulate")
+        if rocky_bw500_profile is not None:
+            smoke_rocky_bw500(cli, modem, rocky_bw500_profile)
         if system == "Windows":
             run("sc.exe", "qc", "LinkwiseModem")
             run("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
@@ -131,12 +201,17 @@ def smoke(package, version, station):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("package", type=Path)
+    parser.add_argument("--rocky-bw500-profile", type=Path,
+                        help="test the installed Rocky Linux 9 ARM64 server RPM over managed virtual BW500")
     args = parser.parse_args()
     package = args.package.resolve()
     version = re.fullmatch(r"linkwise-modem[-_](\d+\.\d+\.\d+)[-_].+", package.name)
     if not version:
         parser.error(f"unrecognized Linkwise package filename: {package.name}")
     verify_checksum(package)
+    rocky_bw500_profile = args.rocky_bw500_profile
+    if rocky_bw500_profile is not None:
+        rocky_bw500_profile = validate_rocky_bw500(package, rocky_bw500_profile)
     configuration = json.dumps(
         {
             "version": 1,
@@ -148,7 +223,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="linkwise-station-") as directory:
         station = Path(directory) / "station.json"
         station.write_text(configuration, encoding="utf-8")
-        smoke(package, version[1], station)
+        smoke(package, version[1], station, rocky_bw500_profile)
         if station.read_text(encoding="utf-8") != configuration:
             raise RuntimeError("Uninstall modified the station configuration")
     print(f"Package smoke test passed: {package.name}")

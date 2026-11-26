@@ -156,6 +156,8 @@ while autonomous operation is active.
 
 Linkwise is in the research and foundation stage.
 
+The production build targets the [Rocky Linux 9 ARM64 server RPM](docs/install/rocky-server.md).
+
 - The Rust crate contains an initial stdio MCP radio-control server, a typed
   radio-control port, a `rigctld` adapter, and a non-transmitting simulator
   with in-memory frequency, mode, and power controls.

@@ -8,6 +8,21 @@ delivery, and local cleanup. The live station release still requires a native
 device and client binding, hardware transmit qualification, and a Winlink
 gateway exchange.
 
+## Production baseline
+
+The production target is the Rocky Linux 9 ARM64 server RPM built with
+`audio-device,rocky-mail-tls`. That build uses ALSA for station audio, systemd
+for the modem and mail services, and Rocky's system OpenSSL provider for mail
+TLS. The Rocky server candidate uses the `1.rockymail` RPM release suffix.
+The receive-only Rocky assessment RPM and the stock Windows VARA reference
+bench each supply separate qualification evidence. [Rocky server guide](../install/rocky-server.md) · [Rocky RPM workflow](../../.github/workflows/rocky-server.yml)
+
+Collect the build commit, RPM checksum, installed binary versions, and
+managed BW500 smoke result on Rocky ARM64. The installed-binary smoke uses a
+private MCP profile and virtual audio. Native ALSA, systemd and SELinux on the
+commissioned host, signed upgrade and recovery, and the authorized live
+gateway exchange have their own acceptance gates below.
+
 ## Implementation and evidence
 
 | Requirements | Implemented and evidenced | Completion gate |
@@ -39,8 +54,8 @@ audio input, USB radio, or CAT serial interface. The documented UTM reference
 guest and stock VARA/Winlink Express installation were unavailable there.
 Virtual waveform and local P2P fixtures were available. [Reference VM setup](../testing/utm-test-environments.md)
 
-1. **Reference modem and client.** Freeze the candidate build and waveform
-   profile hash. Provide access to a Windows bench with stock VARA HF 4.9.1,
+1. **Reference modem and client.** Freeze the Rocky server candidate and
+   waveform profile hash. Provide access to a Windows reference peer with stock VARA HF 4.9.1,
    a calibrated VB-CABLE/WASAPI route, the command/DATA/audio bridge, and the
    named Winlink Express build. Keep the reference routing isolated and have
    both caller and responder roles available. Save command transcripts,

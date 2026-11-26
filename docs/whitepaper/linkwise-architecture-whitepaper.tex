@@ -867,7 +867,15 @@ active or past decision.
 \end{description}
 
 \subsection{Deployment}
-The baseline installation is one operator workstation running the AI host, OLM, radio/modem/client adapters, and local persistence. The radio attaches via CAT/USB plus audio/PTT. Internet is used for RMS and optional propagation evidence, but PTT watchdog, release, emergency stop, radio lease, and transmit timeout are local. MCP, rigctld, and modem command ports are loopback-bound by default. Remote deployment requires authenticated transport and explicit security review.
+The production baseline is the Rocky Linux 9 ARM64 server RPM. The station
+design locates OLM, radio/modem/client adapters, and persistent state on the
+station host. The radio attaches via CAT/USB plus audio/PTT. Internet access
+supports RMS and optional propagation evidence. The PTT watchdog, release,
+emergency stop, radio lease, and transmit timeout remain local to the station.
+The stock VARA reference peer provides a separate interoperability fixture.
+MCP runs over local stdio in the current implementation. Radio and modem
+control endpoints are local by default. Remote deployment requires
+authenticated transport and explicit security review.
 
 \subsection{Evidence model}
 Every item is tagged as \evidence{DOCUMENTED}, \evidence{MEASURED},
