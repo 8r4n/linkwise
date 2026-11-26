@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { packagesFor, releaseManifest, repository } from "../src/releases.mjs";
 import { locales, loadMessages, pages, pagePath } from "../../docs/i18n/locales.mjs";
@@ -41,6 +42,36 @@ assert.ok(issueTemplate.includes("label: Steps to reproduce"));
 const xml = await readFile(dist + "/sitemap.xml", "utf8");
 const reference = catalog().flatMap(({ paths }) => paths);
 const origin = "https://8r4n.github.io/linkwise";
+
+const hfEntry = dist + "/hf-simulation/index.html";
+const hfPage = await readFile(hfEntry, "utf8").catch(error => {
+  if (error.code !== "ENOENT" || process.env.GITHUB_ACTIONS === "true") throw error;
+});
+if (hfPage) {
+  assert.match(hfPage, /data-mode="browser"/);
+  const wasm = await WebAssembly.compile(await readFile(dist + "/hf-simulation/bw500_browser.wasm"));
+  const names = WebAssembly.Module.exports(wasm).map(({ name }) => name);
+  for (const name of ["memory", "lw_encode_len", "lw_decode", "lw_propagate", "lw_set_mode", "lw_payload_capacity"]) {
+    assert.ok(names.includes(name), name);
+  }
+  const { exports: modem } = await WebAssembly.instantiate(wasm);
+  const payload = Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8, 9);
+  for (const bandwidth of [500, 2300, 2750]) {
+    assert.equal(modem.lw_set_mode(bandwidth), 1);
+    new Uint8Array(modem.memory.buffer, modem.lw_payload_ptr(), payload.length).set(payload);
+    const count = modem.lw_encode_len(payload.length);
+    assert.equal(count, bandwidth === 500 ? 258048 : 210432);
+    assert.equal(modem.lw_decode(count), 1);
+    assert.deepEqual(new Uint8Array(modem.memory.buffer, modem.lw_payload_ptr(), payload.length), payload);
+  }
+  for (const asset of ["browser-worker.js", "data/path-inputs.mjs", "data/stations.mjs", "vendor/Cesium.js", "vendor/sigplot.js"]) {
+    assert.ok((await stat(dist + "/hf-simulation/" + asset)).size > 0, asset);
+  }
+  const demos = await readFile(dist + "/demos/index.html", "utf8");
+  assert.ok(demos.includes('href="/linkwise/hf-simulation/"'));
+  execFileSync(process.execPath, ["--test", "../tools/hf-live/test_station_messaging.mjs",
+    "../tools/hf-live/test_radio_policy.mjs"], { stdio: "inherit" });
+}
 
 async function checkHtml(path, code, dir) {
   const html = await readFile(dist + path + "index.html", "utf8");

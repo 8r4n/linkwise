@@ -2,13 +2,20 @@
 
 **Document ID:** LINKWISE-DES-SIM-001  
 **Version:** 0.1, proposed  
-**Status:** Research-based design proposal; simulator not implemented
+**Status:** Research-based proposal for production station-policy evaluation
 
 The [adaptive network implementation plan](adaptive-network-implementation-plan.md)
 extends this station/gateway design to durable multi-hop forwarding, shared-channel
 contact scheduling, and global-network evaluation. Its companion
 [research and evidence review](adaptive-network-research-and-evidence.md) records
 the current implementation boundary and calibration-data limitations.
+
+The [live HF simulator](../../tools/hf-live/README.md) exercises a narrower path
+today. Autonomous synthetic stations exchange native BW500 bursts through
+a bench-calibrated Watterson channel and stream TX/RX samples and outcomes
+to a Cesium globe. A shared-medium option models same-band overlap. An
+optional P.533 path baseline and NOAA updates support propagation experiments.
+The production MCP loop and field qualification remain proposed here.
 
 ## 1. Objective and evaluation question
 

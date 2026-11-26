@@ -1,4 +1,5 @@
 ---
+import { existsSync } from "node:fs";
 import DemoVideo from "./DemoVideo.astro";
 import { acquisitionEvidence, audioSamples, capabilities, laterCWResults, matchedReplay, trialsPerLevel } from "../project-content.mjs";
 import { repository } from "../releases.mjs";
@@ -6,6 +7,7 @@ const { page, locale, t, project, base, link } = Astro.props;
 const reference = path => `${base}/reference/${locale.code}/${path}/`;
 const media = name => `${base}/media/${name}`;
 const decibels = value => value > 0 ? `+${value}` : String(value).replace("-", "−");
+const browserHF = existsSync("public/hf-simulation/bw500_browser.wasm");
 ---
 <article class="wrap section project-page">
   <h1>{project[page]}</h1>
@@ -41,9 +43,15 @@ const decibels = value => value > 0 ? `+${value}` : String(value).replace("-", "
     {page === "demos" && <>
       <p class="lede">Watch the modem decode audio and follow the chat and mail workflows each bench demonstrated.</p>
       <nav class="jump" aria-label="Demos">
+        {browserHF && <a href="#browser-hf">Browser HF simulation</a>}
         <a href="#hf-routing-results">HF routing experiment</a><a href="#three-hf-links">Three HF links</a><a href="#waveform">Waveform</a><a href="#winlink">Winlink Express</a><a href="#chat-and-mail">Chat and mail</a>
         <a href="#rocky-live-usb">Rocky Live USB</a><a href="#briefing">Study briefing</a>
       </nav>
+      {browserHF && <section class="project-section" id="browser-hf">
+        <h2>Browser HF simulation</h2>
+        <p>Watch 48 simulated stations exchange BW500, BW2300 or BW2750 bursts. Compare transmitted and received waveforms in SigPlot, or use the station console to send encrypted chat and email across the simulated HF channel.</p>
+        <p class="media-links"><a href={base + "/hf-simulation/"}>Open the interactive HF globe</a></p>
+      </section>}
       <section class="project-section" id="hf-routing-results">
         <h2>HF routing experiment</h2>
         <p>Follow a message across European gateways, then compare five routing policies in 2,700 simulation runs. With the commissioned traffic load and no injected fault, every policy missed every deadline in the 1,000-node scenario.</p>

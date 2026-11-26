@@ -2,6 +2,9 @@
 
 Replay the Rust network simulator on an interactive Cesium globe. A mint arrow shows a successful transfer in the current slot. A dashed orange line shows a failed call. A gold curve shows the selected RF circuit. Each network hop ends at a station. A single circuit can contain several skywave hops.
 
+The [live HF simulator](../tools/hf-live/README.md) uses the same local Cesium
+distribution to show packet attempts from a running GNU Radio process.
+
 ## Run locally
 
 From the repository root, run the following, then open **http://127.0.0.1:8743** in a browser with WebGL 2. The first command downloads the pinned CesiumJS 1.130.0 distribution and validates its SHA-512 digest. All subsequent playback uses local imagery, software, forecasts and weather data. The viewer uses JavaScript ES modules directly.

@@ -21,6 +21,38 @@ In the repository's Pages settings, select **GitHub Actions** as the source.
 The website workflow checks pull requests and deploys from main. A manual run
 or the scheduled rebuild also refreshes the public release snapshot.
 
+## Browser HF simulation
+
+GitHub Pages serves `/linkwise/hf-simulation/` as static assets. Each visitor's
+Web Worker runs the 48-station scheduler, the Linkwise modem built for
+WebAssembly, and the modeled HF channel. The globe and SigPlot stay on the
+main browser thread. The three choices use BW500 level-1 and BW2300/BW2750
+level-4 DATA waveforms. The station console encrypts chat and email between
+ephemeral station keys with ECDH P-256 and AES-256-GCM. Authenticated messages
+appear in the simulated inbox after their modem frames arrive. The simulated
+station chooses a frequency and transmit power, listens for a clear channel,
+and backs off or retunes when delivery fails. Marginal paths and interference
+can exhaust the retry budget. This is a frame-level simulation with
+browser-local mail delivery.
+
+The Pages build prepares the assets automatically. For local development,
+install the Rust WASM target and prepare the page before running Astro.
+
+```sh
+rustup target add wasm32-unknown-unknown --toolchain stable
+npm run build:hf
+npm run build
+npm run check
+node --test ../tools/hf-live/test_station_messaging.mjs
+```
+
+Set `LINKWISE_HF_FORECAST` to a monthly cache exported by
+`tools/hf-live/path_forecast.py` to include a P.533/P.372 path baseline.
+`LINKWISE_HF_REFRESH_WEATHER=1` stages a timestamped NOAA snapshot.
+GitHub Actions tries both during the scheduled Pages build, and the browser
+can refresh NOAA directly and fall back to its staged inputs or scenario.
+Visitors run independent simulations while their pages are open.
+
 Create a tag such as `v0.1.0-preview` on the reviewed release commit. The
 installer workflow checks all eight packages and checksum sidecars before
 publishing a GitHub prerelease. The website build uses only complete public
