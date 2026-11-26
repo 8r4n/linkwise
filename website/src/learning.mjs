@@ -1,6 +1,6 @@
 import { MISSION_CATALOG } from "../../tools/hf-live/web/learning-data.mjs";
 
-export const learningDescription = "Follow a signal from audio samples to a decoded message in four hands-on HF missions. See how channel conditions and station choices affect the outcome.";
+export const learningDescription = "Learn how HF signals travel and decode through four hands-on modem missions. Then compare antenna gain, heading, and reception in Antenna Lab.";
 
 const descriptions = {
   "read-burst": "Follow one transmission from sender to receiver. Compare its transmitted and received spectra and check the decode result.",

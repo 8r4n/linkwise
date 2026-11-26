@@ -86,8 +86,11 @@ pdftoppm -r 106 -png lab-notes/figures/kiwisdr-beacon-map-dsp.pdf docs/testing/f
 
 After deployment, submit `https://8r4n.github.io/linkwise/sitemap.xml` in a
 verified Search Console URL-prefix property for `https://8r4n.github.io/linkwise/`.
-Inspect the home, VarAC, and operator guide URLs there to check discovery and
-indexing. A hostname-wide crawler policy belongs at
+Inspect the homepage, VarAC guide, and HF simulator for indexing and their
+Google-selected canonicals. Record impressions, clicks, and average position by
+landing page for `Linkwise HF modem`, `VarAC BW500`, and `HF propagation simulator`.
+After the updated pages are recrawled, compare 28-day reporting windows.
+A hostname-wide crawler policy belongs at
 `https://8r4n.github.io/robots.txt`, separately from the project deployment.
 
 ## Translations

@@ -45,16 +45,35 @@ assert.ok(issueTemplate.includes("label: Steps to reproduce"));
 const xml = await readFile(dist + "/sitemap.xml", "utf8");
 const reference = catalog().flatMap(({ paths }) => paths);
 const origin = "https://8r4n.github.io/linkwise";
+const simulatorPath = "/hf-simulation/";
+const articlePath = "/research/antenna-gain/";
 const iconName = "github-invertocat-white.svg";
 assert.deepEqual(await readFile(dist + "/" + iconName),
   await readFile(new URL("../../tools/hf-live/web/" + iconName, import.meta.url)));
 
-const hfEntry = dist + "/hf-simulation/index.html";
+const hfEntry = dist + simulatorPath + "index.html";
 const hfPage = await readFile(hfEntry, "utf8").catch(error => {
   if (error.code !== "ENOENT" || process.env.GITHUB_ACTIONS === "true") throw error;
 });
+const simulatorLink = (hfPage ? "/linkwise" : origin) + simulatorPath;
+const expectedPaths = locales.flatMap(({ code }) => pages.map(page => pagePath(code, page)));
+expectedPaths.push(articlePath);
+if (hfPage) expectedPaths.push(simulatorPath);
+const sitemapUrls = Array.from(xml.matchAll(/<loc>([^<]+)<\/loc>/g), ([, url]) => url);
+assert.equal(new Set(sitemapUrls).size, sitemapUrls.length, "Sitemap contains duplicate URLs");
+assert.deepEqual(sitemapUrls.sort(), expectedPaths.map(path => origin + path).sort());
+
+const nativeDashboard = await readFile(new URL("../../tools/hf-live/web/index.html", import.meta.url), "utf8");
+assert.match(nativeDashboard, /<title>Linkwise \| Live HF simulation<\/title>/);
+assert.match(nativeDashboard, /<h1>Live HF simulation<\/h1>/);
 if (hfPage) {
   assert.match(hfPage, /data-mode="browser"/);
+  assert.match(hfPage, /<title>HF Propagation and Antenna Simulator \| Linkwise<\/title>/);
+  assert.match(hfPage, /<h1>HF Propagation and Antenna Simulator<\/h1>/);
+  assert.ok(hfPage.includes('name="description" content="Explore HF propagation and antenna gain in a browser simulator. Run 48 stations, compare antenna patterns, and inspect transmitted and received HF modem signals."'));
+  assert.ok(hfPage.includes("Run a 48-station HF network in your browser. Explore shortwave propagation, compare antenna gain and orientation, and inspect transmitted and received modem signals."));
+  assert.deepEqual(Array.from(hfPage.matchAll(/<link rel="canonical" href="([^"]+)"/g), ([, url]) => url),
+    [origin + simulatorPath]);
   assert.ok(hfPage.includes(`href="${repository}" aria-label="Linkwise on GitHub"`));
   assert.match(hfPage, /<img src="\.\/github-invertocat-white\.svg" alt="" /);
   const wasm = await WebAssembly.compile(await readFile(dist + "/hf-simulation/bw500_browser.wasm"));
@@ -94,8 +113,6 @@ if (hfPage) {
     assert.deepEqual(await readFile(dist + "/hf-simulation/" + asset),
       await readFile(new URL("../../tools/hf-live/web/" + asset, import.meta.url)), asset);
   }
-  const demos = await readFile(dist + "/demos/index.html", "utf8");
-  assert.ok(demos.includes('href="/linkwise/hf-simulation/"'));
   execFileSync(process.execPath, ["--test", "../tools/hf-live/test_station_messaging.mjs",
     "../tools/hf-live/test_radio_policy.mjs"], { stdio: "inherit" });
   execFileSync(process.execPath, ["../tools/hf-live/test_training_scenarios.mjs", dist + "/hf-simulation"],
@@ -107,7 +124,7 @@ if (hfPage) {
 execFileSync(process.execPath, ["--test", "../tools/hf-live/test_learning.mjs",
   "../tools/hf-live/test_antenna_lab.mjs", "../tools/hf-live/test_antenna_runtime.mjs"], { stdio: "inherit" });
 
-async function checkHtml(path, code, dir) {
+async function checkHtml(path, code, dir, alternateLocales = locales) {
   const html = await readFile(dist + path + "index.html", "utf8");
   assert.ok(html.includes('<html lang="' + code + '" dir="' + dir + '">'), path);
   assert.ok(html.includes('rel="canonical" href="' + origin + path + '"'), path);
@@ -115,13 +132,22 @@ async function checkHtml(path, code, dir) {
   assert.ok(html.includes(`href="${repository}" lang="en" aria-label="Linkwise on GitHub"`), path);
   assert.ok(html.includes(`<img src="/linkwise/${iconName}" alt=""`), path);
   assert.ok(html.includes('href="/linkwise' + pagePath(code, "learn") + '"'), path);
-  for (const { code: alternate } of locales) {
+  for (const { code: alternate } of alternateLocales) {
     assert.ok(html.includes('rel="alternate" hreflang="' + alternate + '"'), path + alternate);
   }
   for (const [, target] of html.matchAll(/(?:href|src|poster)="\/linkwise\/([^"#?]+)(?:[?#][^"]*)?"/g)) {
     await stat(dist + "/" + (target.endsWith("/") ? target + "index.html" : target));
   }
   return html;
+}
+
+const article = await checkHtml(articlePath, "en", "ltr", [{ code: "en" }]);
+assert.match(article, /<title>HF Antenna Gain Test on 20 m \| Linkwise<\/title>/);
+assert.ok(article.includes('name="description" content="See five matched BW500 antenna trials on a simulated 20 m Cairo–Athens link. Compare directional EIRP, measured SINR, and frame recovery at 1 W."'));
+assert.deepEqual(Array.from(article.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)"/g),
+  ([, code, url]) => [code, url]), ["en", "x-default"].map(code => [code, origin + articlePath]));
+for (const query of ["lab=antenna", "mission=read-burst"]) {
+  assert.ok(article.includes(`href="${simulatorLink}?${query}"`), query);
 }
 
 const completeReferences = [
@@ -154,12 +180,18 @@ for (const { code, dir = "ltr" } of locales) {
   for (const page of pages) {
     const path = pagePath(code, page);
     const html = await checkHtml(path, code, dir);
-    assert.ok(xml.includes("<loc>" + origin + path + "</loc>"));
+    if (code === "en" && ["", "demos", "learn"].includes(page)) {
+      assert.ok(html.includes(`href="${simulatorLink}"`), path);
+    }
+    if (code === "en" && ["learn", "research"].includes(page)) {
+      assert.ok(html.includes(`href="/linkwise${articlePath}"`), path);
+    }
     if (page === "" || page === "guide") {
       assert.ok(html.includes('href="/linkwise' + pagePath(code, "varac") + '"'), path);
     }
     if (page === "") {
-      assert.ok(html.includes("<title>" + varac.siteTitle + " | Linkwise</title>"), path);
+      const title = code === "en" ? "Linkwise HF Modem | Open-Source Amateur Radio" : varac.siteTitle + " | Linkwise";
+      assert.ok(html.includes(`<title>${title}</title>`), path);
       assert.ok(html.includes(`data-release-status="${manifest.status}"`), path);
       assert.ok(html.includes('href="/linkwise' + pagePath(code, "demos") + '"'), path);
       assert.ok(html.includes('href="/linkwise' + pagePath(code, "capabilities") + '#station"'), path);
@@ -204,6 +236,7 @@ for (const { code, dir = "ltr" } of locales) {
       assert.ok(html.includes("/docs/architecture/station-integration-status.md/") && html.includes(repository + "/blob/main/docs/whitepaper/README.md"), path);
     }
     if (page === "demos") {
+      if (code === "en") assert.match(html, /<title>HF Modem and Propagation Demos \| Linkwise<\/title>/);
       for (const anchor of ["waveform", "winlink", "chat-and-mail", "rocky-live-usb", "briefing"]) {
         assert.ok(html.includes(`id="${anchor}"`), path + "#" + anchor);
       }
@@ -211,15 +244,15 @@ for (const { code, dir = "ltr" } of locales) {
       assert.ok(html.includes("/linkwise/media/robustness-briefing-transcript.md"), path);
     }
     if (page === "learn") {
+      if (code === "en") assert.match(html, /<title>Learn HF Radio With Linkwise \| Hands-On Missions<\/title>/);
       assert.ok(html.includes("data-learning-progress") && html.includes("data-learning-badge"), path);
-      const simulator = hfPage ? "/linkwise/hf-simulation/" : origin + "/hf-simulation/";
       assert.equal(Array.from(html.matchAll(/data-learning-mission="/g)).length, 4, path);
       assert.ok(html.includes("data-antenna-lab-launch") && html.includes("data-antenna-lab-progress"), path);
-      assert.ok(html.includes(`href="${simulator}?lab=antenna"`), path);
-      assert.ok(html.includes(`href="${simulator}?antennas=1"`), path);
+      assert.ok(html.includes(`href="${simulatorLink}?lab=antenna"`), path);
+      assert.ok(html.includes(`href="${simulatorLink}?antennas=1"`), path);
       for (const id of Object.keys(MISSION_CATALOG)) {
         assert.ok(html.includes(`data-learning-mission="${id}"`), path + id);
-        assert.ok(html.includes(`href="${simulator}?mission=${id}"`), path + id);
+        assert.ok(html.includes(`href="${simulatorLink}?mission=${id}"`), path + id);
       }
     }
     if (page === "research") {

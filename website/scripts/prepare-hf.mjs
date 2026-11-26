@@ -11,6 +11,10 @@ const page = join(root, "website/public/hf-simulation");
 const vendor = join(page, "vendor");
 const sigplot = join(root, "rust/demo-ui/public/vendor");
 const python = process.env.LINKWISE_HF_PYTHON || "python3";
+const title = "HF Propagation and Antenna Simulator";
+const description = "Explore HF propagation and antenna gain in a browser simulator. Run 48 stations, compare antenna patterns, and inspect transmitted and received HF modem signals.";
+const introduction = "Run a 48-station HF network in your browser. Explore shortwave propagation, compare antenna gain and orientation, and inspect transmitted and received modem signals.";
+const canonical = "https://8r4n.github.io/linkwise/hf-simulation/";
 
 function run(program, args, env = process.env) {
   execFileSync(program, args, { cwd: root, env, stdio: "inherit" });
@@ -37,14 +41,23 @@ for (const filename of await readdir(web)) {
 }
 await cp(join(web, "training-data"), join(page, "training-data"), { recursive: true });
 await copyFile(join(source, "antenna-profiles.json"), join(page, "antenna-profiles.json"));
-const html = await readFile(join(web, "index.html"), "utf8");
-const start = '<html lang="en">';
-if (!html.includes(start)) throw new Error("HF dashboard HTML is missing its browser mode entry point");
-await writeFile(join(page, "index.html"), html.replace(start, '<html lang="en" data-mode="browser">')
-  .replace("<title>Linkwise | Live HF simulation</title>", "<title>Linkwise | Browser HF simulation</title>"));
 await copyFile(join(target, "wasm32-unknown-unknown/release/linkwise_hf_browser.wasm"), join(page, "bw500_browser.wasm"));
 
 const data = [join(source, "site-inputs/build.py"), "--output", join(page, "data")];
 if (process.env.LINKWISE_HF_FORECAST) data.push("--forecast", process.env.LINKWISE_HF_FORECAST);
 if (process.env.LINKWISE_HF_REFRESH_WEATHER === "1") data.push("--refresh-weather");
 run(python, data);
+
+let html = await readFile(join(web, "index.html"), "utf8");
+for (const [source, replacement] of [
+  ['<html lang="en">', '<html lang="en" data-mode="browser">'],
+  ["<title>Linkwise | Live HF simulation</title>", `<title>${title} | Linkwise</title>
+    <meta name="description" content="${description}">
+    <link rel="canonical" href="${canonical}">`],
+  ["<h1>Live HF simulation</h1>", `<h1>${title}</h1>
+          <p>${introduction}</p>`],
+]) {
+  if (!html.includes(source)) throw new Error(`HF dashboard HTML is missing ${source}`);
+  html = html.replace(source, replacement);
+}
+await writeFile(join(page, "index.html"), html);

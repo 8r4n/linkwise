@@ -1,0 +1,123 @@
+---
+import { existsSync } from "node:fs";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { repository } from "../../releases.mjs";
+import { locales, loadMessages } from "../../../../docs/i18n/locales.mjs";
+
+const title = "HF Antenna Gain Test on 20 m";
+const description = "See five matched BW500 antenna trials on a simulated 20 m Cairo–Athens link. Compare directional EIRP, measured SINR, and frame recovery at 1 W.";
+const locale = locales.find(({ code }) => code === "en");
+const t = loadMessages(locale.code);
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const simulationPath = base + "/hf-simulation/";
+const browserHF = existsSync("public/hf-simulation/index.html")
+  && existsSync("public/hf-simulation/bw500_browser.wasm");
+const simulation = browserHF ? simulationPath : new URL(simulationPath, Astro.site).href;
+const evidence = repository + "/blob/66e9043323f4c34a6ca5098061c677b754f8abcc/tools/hf-live/";
+const transmit = [
+  { label: "Dipole", eirp: "2.34535", sinr: "+12.30", outcome: "Verified" },
+  { label: "Aligned Yagi", eirp: "5.49288", sinr: "+15.99", outcome: "Verified" },
+  { label: "Yagi 90° off axis", eirp: "0.05493", sinr: "−4.01", outcome: "Failed" },
+];
+const receive = [
+  { label: "Dipole", eirp: "5.49288", sinr: "+12.30", outcome: "Verified" },
+  { label: "Active receiving loop", eirp: "5.49288", sinr: "+3.10", outcome: "Verified" },
+];
+---
+<BaseLayout {title} {description} {locale} {t} page="research" singleLanguage>
+  <article class="wrap section project-page">
+    <p class="antenna-back"><a href={base + "/research/"}>Linkwise research</a></p>
+    <h1>HF antenna gain test on 20 m</h1>
+    <p class="lede">At 1 W of conducted power, pointing a modeled Yagi 90° away from the receiver reduced directional EIRP from 5.49288 W to 0.05493 W. The receiver measured +15.99 dB SINR when aligned and −4.01 dB off axis. The Linkwise BW500 decoder recovered the exact frame bytes in the aligned trial. The off-axis frame failed verification.</p>
+
+    <section class="project-section" aria-labelledby="matched-results">
+      <h2 id="matched-results">Five matched BW500 trials</h2>
+      <p>In the transmit comparison, Athens keeps the same aligned receive Yagi. Cairo uses a dipole at the path bearing, a Yagi at the path bearing, and then the same Yagi 90° off axis.</p>
+      <p>In the receive comparison, Cairo keeps its aligned Yagi. Athens switches between a dipole and an active receiving loop at the same modeled heading. Transmit EIRP stays at 5.49288 W, while measured SINR changes by 9.20 dB. Both frames verify on this fixture.</p>
+      {[
+        { id: "tx-evidence", caption: "Transmit comparison with the same receiving Yagi", header: "Transmit setup", rows: transmit },
+        { id: "rx-evidence", caption: "Receive comparison with the same transmitting Yagi", header: "Receive port", rows: receive },
+      ].map(({ id, caption, header, rows }) => <div class="table-region antenna-trials" role="region" aria-labelledby={id} tabindex="0">
+        <table class="project-table">
+          <caption id={id}>{caption}</caption>
+          <thead><tr>
+            <th scope="col">{header}</th>
+            <th scope="col"><abbr title="Equivalent isotropic radiated power">EIRP</abbr> (W)</th>
+            <th scope="col"><abbr title="Signal-to-interference-plus-noise ratio">SINR</abbr> (dB)</th>
+            <th scope="col">Frame</th>
+          </tr></thead>
+          <tbody>{rows.map(row => <tr>
+            <th scope="row">{row.label}</th><td>{row.eirp}</td><td>{row.sinr}</td>
+            <td class={row.outcome === "Failed" ? "antenna-failed" : "verified"}>{row.outcome}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>)}
+      <p>EIRP uses the transmitting antenna’s gain toward Athens and its feedline loss. The receive port affects the signal entering the decoder.</p>
+    </section>
+
+    <section class="project-section" aria-labelledby="frozen-setting">
+      <h2 id="frozen-setting">Frozen test conditions</h2>
+      <dl class="antenna-fixture">
+        <div><dt>Path</dt><dd>Cairo (SIM-022) to Athens (SIM-038), 1,121 km</dd></div>
+        <div><dt>Channel</dt><dd>20 m, modeled center 14.100 MHz</dd></div>
+        <div><dt>Archive epoch</dt><dd><time datetime="2026-11-26T05:36:00Z">26 November 2026 at 05:36 UTC</time></dd></div>
+        <div><dt>Modem</dt><dd>Linkwise BW500 level 1, built as WebAssembly</dd></div>
+        <div><dt>Trial input</dt><dd>Fixture version 1, seed 42, one fixed nine-byte payload</dd></div>
+        <div><dt>Conducted TX power</dt><dd>1 W for every trial</dd></div>
+      </dl>
+      <p>The browser worker verifies the checksums of the archived P.533 forecast and NOAA space-weather inputs. Missing or mismatched inputs stop the lab. The worker waits for the simulated antenna settings to settle before restarting the same RF time and reusing the same fading and background-noise seeds. The modeled path bearings are 323.95° true at Cairo and 139.73° true at Athens. The pattern model evaluates both at a representative 25.07° elevation.</p>
+      <p>Every trial transmits the same 258,048 encoder samples at 48 kHz for 5.376 seconds. The moderate Watterson channel applies fading. The receiver scales the wanted samples by the modeled gain and loss, then adds the fixed background noise. Only the preset burst is on the channel during each trial, so measured SNR equals SINR in the receiver’s 300–3300 Hz measurement band. A verified frame matches the original payload byte for byte.</p>
+      <p class="media-links">
+        <a href={evidence + "web/training-data/antenna-v1/README.md"}>Archived forecast and weather inputs</a>
+        <a href={evidence + "antenna-profiles.md"}>Antenna patterns and link budget</a>
+        <a href={evidence + "test_antenna_lab_worker.mjs"}>Worker verification test</a>
+      </p>
+    </section>
+
+    <section class="project-section" aria-labelledby="reproduce">
+      <h2 id="reproduce">Reproduce the comparison</h2>
+      <ol class="result-list">
+        <li>Complete <a href={simulation + "?mission=read-burst"}>Read a burst</a> in the same browser. The lesson shows how to match the transmitted and received views of one burst.</li>
+        <li>Open <a href={simulation + "?lab=antenna"}>Antenna Lab</a>. Run the dipole, aligned Yagi, and off-axis Yagi under <strong>Compare transmit antennas and bearings</strong>.</li>
+        <li>Run the receive dipole and active loop under <strong>Switch receive ports</strong>. Compare their received SINR and their shared transmit EIRP.</li>
+        <li>Use <strong>Inspect received burst</strong> on any trial, including the failed off-axis frame. SigPlot opens the decoder input for that attempt. Its readback retains the antenna settings and decode result.</li>
+      </ol>
+      <p>These runs measure one deterministic simulated path with illustrative antenna patterns and an exact-byte decoder check. Field antenna gain and on-air reliability require measurements of the installed antennas and radio path.</p>
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  .antenna-back { margin-block-end: .8rem; }
+  .antenna-trials { margin-block: 1rem; }
+  .antenna-trials caption {
+    background: var(--card);
+    border-block-end: 1px solid var(--border);
+    text-align: start;
+    font-weight: 700;
+    padding: .72rem .85rem;
+  }
+  .antenna-trials table { table-layout: fixed; font-variant-numeric: tabular-nums; }
+  .antenna-trials :is(th, td) { overflow-wrap: anywhere; }
+  .antenna-trials thead th:first-child { width: 38%; }
+  .antenna-trials td { white-space: nowrap; }
+  .antenna-trials :is(th, td):nth-child(2),
+  .antenna-trials :is(th, td):nth-child(3) { text-align: end; }
+  .antenna-trials abbr { text-decoration: none; }
+  .antenna-failed { font-weight: 700; }
+  .antenna-fixture {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .8rem 1.6rem;
+    max-width: 57rem;
+    margin-block: 1rem 1.3rem;
+  }
+  .antenna-fixture div { border-block-start: 1px solid var(--border); padding-block-start: .55rem; }
+  .antenna-fixture dt { color: var(--muted); font-size: .9rem; }
+  .antenna-fixture dd { margin-inline-start: 0; }
+  @media (max-width: 600px) {
+    .antenna-fixture { grid-template-columns: minmax(0, 1fr); }
+    .antenna-trials thead th:first-child { width: 32%; }
+    .antenna-trials :is(th, td) { padding: .44rem .32rem; line-height: 1.3; font-size: .88rem; }
+  }
+</style>
