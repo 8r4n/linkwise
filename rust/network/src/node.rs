@@ -8,6 +8,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     io::{Read, Write},
     net::{TcpListener, TcpStream},
+    path::PathBuf,
     thread,
     time::{Duration, Instant},
 };
@@ -26,6 +27,7 @@ struct Config {
     slots: u64,
     slot_ms: u64,
     peers: Vec<Peer>,
+    control_socket: Option<PathBuf>,
 }
 type Routes = BTreeMap<String, Vec<String>>;
 #[derive(Serialize, Deserialize)]
@@ -141,7 +143,7 @@ impl Router<'_> {
                 .min_by_key(|r| (r.expires, r.id.clone()));
             stream.write_all(&[selected.is_some() as u8])?;
             if let Some(row) = selected {
-                link::send(self.station, &row.id, &mut stream, now)?;
+                link::send(self.station, &row.id, &mut stream, bp7::dtn_time_now)?;
                 println!("forwarded {} to {}", row.id, peer.name);
             }
         } else {
@@ -183,6 +185,17 @@ pub fn serve(st: &Station, name: &str, config: &str, seconds: u64) -> Result<()>
     }
     let listener = TcpListener::bind(addr(&cfg.listen)?)?;
     listener.set_nonblocking(true)?;
+    st.prune(bp7::dtn_time_now)?;
+    let run = || run(st, name, &cfg, listener, seconds);
+    #[cfg(unix)]
+    if let Some(socket) = &cfg.control_socket {
+        return crate::control::with_listener(socket, st, run);
+    }
+    ensure!(cfg.control_socket.is_none(), "queue socket requires Unix");
+    run()
+}
+
+fn run(st: &Station, name: &str, cfg: &Config, listener: TcpListener, seconds: u64) -> Result<()> {
     println!("listening {}", listener.local_addr()?);
     std::io::stdout().flush()?;
     let mut router = Router {
@@ -194,10 +207,9 @@ pub fn serve(st: &Station, name: &str, config: &str, seconds: u64) -> Result<()>
     let start = Instant::now();
     let mut previous = None;
     let mut last_gc = Instant::now();
-    st.prune(bp7::dtn_time_now())?;
     while seconds == 0 || start.elapsed() < Duration::from_secs(seconds) {
         if last_gc.elapsed() >= Duration::from_secs(60) {
-            st.prune(bp7::dtn_time_now())?;
+            st.prune(bp7::dtn_time_now)?;
             last_gc = Instant::now();
         }
         if let Ok((mut socket, _)) = listener.accept() {

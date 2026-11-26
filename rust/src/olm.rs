@@ -1,0 +1,1418 @@
+//! Local Winlink inventory and non-transmitting station coordination.
+
+mod inventory;
+mod journal;
+mod virtual_bench;
+
+use crate::radio::{
+    ControlValue, PttAction, PttRequest, RadioControlPort, RadioError, SimulatedRadio,
+};
+use chrono::{DateTime, TimeDelta, Utc};
+use inventory::{Config, Snapshot, exclusions, fingerprint, forecasts, read_json};
+use journal::{Journal, Record};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io,
+    path::Path,
+    sync::Arc,
+    time::Duration,
+};
+use tokio::{
+    sync::{Mutex, watch},
+    task::JoinHandle,
+    time::Instant,
+};
+use uuid::Uuid;
+
+pub use inventory::{Channel, Forecast, InventorySummary};
+pub use virtual_bench::{AttachmentProof, VirtualPhase, VirtualProof};
+use virtual_bench::{CLEANUP_GRACE, VirtualBench, VirtualProgress};
+
+const RANKER: &str = "voacap-prior-v1";
+const PAGE_LIMIT: usize = 100;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("{0}")]
+    Invalid(&'static str),
+    #[error("{0}")]
+    Denied(&'static str),
+    #[error("{0}")]
+    Busy(&'static str),
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Radio(#[from] RadioError),
+}
+
+type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct Candidate {
+    pub channel_id: String,
+    pub channel: Channel,
+    pub rank: Option<usize>,
+    pub exclusions: Vec<String>,
+    pub forecast: Option<Forecast>,
+    pub switching_penalty_bp: u16,
+    pub utility_bp: Option<i32>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct Ranking {
+    id: Uuid,
+    evaluated_at: DateTime<Utc>,
+    snapshot_id: Option<String>,
+    method: String,
+    decision: Decision,
+    forecast_warning: Option<String>,
+    entries: Vec<Candidate>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum Decision {
+    Select { channel_id: String },
+    Wait { reason: String },
+    NoRoute,
+}
+
+#[derive(Serialize)]
+pub struct RankingPage {
+    ranking_id: Uuid,
+    profile_id: String,
+    evaluated_at: DateTime<Utc>,
+    snapshot_id: Option<String>,
+    method: String,
+    decision: Decision,
+    forecast_warning: Option<String>,
+    total: usize,
+    offset: usize,
+    entries: Vec<Candidate>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct Preparation {
+    pub prepared_id: Uuid,
+    pub channel_id: String,
+    pub state_revision: u64,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct Authorization {
+    pub grant_id: Uuid,
+    pub prepared_id: Uuid,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    Active,
+    Completed,
+    Failed,
+    TimedOut,
+    Aborted,
+    Interrupted,
+    ReleaseUnconfirmed,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Execution {
+    #[default]
+    ScriptedShadow,
+    VirtualBw500,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct Attempt {
+    pub attempt_id: Uuid,
+    pub ranking_id: Uuid,
+    pub channel_id: String,
+    pub gateway: String,
+    pub inventory_snapshot_id: String,
+    pub state_revision: u64,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub outcome: Outcome,
+    pub simulated: bool,
+    #[serde(default)]
+    pub execution: Execution,
+    pub scenario_id: String,
+    pub modem_connected: Option<bool>,
+    pub client_transfer: Option<bool>,
+    pub cms_accepted: Option<bool>,
+    pub recipient_delivered: Option<bool>,
+    pub release_confirmed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub virtual_proof: Option<VirtualProof>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub virtual_cleanup_confirmed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostic: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct Metrics {
+    pub from: DateTime<Utc>,
+    pub to: DateTime<Utc>,
+    pub attempted: usize,
+    pub modem_connected: usize,
+    pub modem_outcome_known: usize,
+    pub client_transfer_confirmed: usize,
+    pub client_outcome_known: usize,
+    pub simulated: bool,
+}
+
+#[derive(Serialize)]
+pub struct GatewayChannels {
+    pub inventory: InventorySummary,
+    pub gateway: String,
+    pub total: usize,
+    pub offset: usize,
+    pub channels: Vec<Channel>,
+}
+
+#[derive(Serialize)]
+pub struct StationStatus {
+    pub profile_id: String,
+    pub shadow: bool,
+    pub execution: Option<Execution>,
+    pub inhibited: bool,
+    pub closing: bool,
+    pub prepared: Option<Preparation>,
+    pub active_attempt_id: Option<Uuid>,
+    pub virtual_phase: Option<VirtualPhase>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct Scenario {
+    version: u8,
+    channels: BTreeMap<String, ScenarioResult>,
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ScenarioResult {
+    duration_ms: u32,
+    modem_connected: bool,
+    client_transfer: bool,
+    release_confirmed: bool,
+}
+
+impl Scenario {
+    fn load(path: &Path) -> Result<Self> {
+        let scenario: Self = read_json(path)?;
+        if scenario.version != 1
+            || scenario.channels.values().any(|result| {
+                !(1..=600_000).contains(&result.duration_ms)
+                    || (result.client_transfer && !result.modem_connected)
+            })
+        {
+            return Err(Error::Invalid("invalid shadow scenario version or outcome"));
+        }
+        Ok(scenario)
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "type", content = "data", rename_all = "snake_case")]
+enum Event {
+    Inventory(Snapshot),
+    Collection {
+        snapshot_id: Option<String>,
+        error: Option<String>,
+    },
+    Ranking(Ranking),
+    Preparing {
+        id: Uuid,
+        ranking_id: Uuid,
+        channel_id: String,
+    },
+    Prepared {
+        id: Uuid,
+        ranking_id: Uuid,
+        channel_id: String,
+        state_revision: u64,
+    },
+    Authorized {
+        id: Uuid,
+        prepared_id: Uuid,
+    },
+    Started {
+        prepared_id: Uuid,
+        grant_id: Uuid,
+        attempt: Attempt,
+    },
+    Attempt(Attempt),
+    ReleasedOnRestart,
+}
+
+struct Prepared {
+    view: Preparation,
+    ranking_id: Uuid,
+    snapshot_id: String,
+    dial_hz: u64,
+    deadline: Instant,
+    grant: Option<(Authorization, Instant)>,
+}
+
+struct Active {
+    id: Uuid,
+    cancel: watch::Sender<bool>,
+    done: watch::Receiver<Option<std::result::Result<(), String>>>,
+    virtual_progress: Option<Arc<VirtualProgress>>,
+}
+
+#[derive(Default)]
+struct State {
+    inventory: Option<Snapshot>,
+    refresh_error: Option<String>,
+    rankings: BTreeMap<Uuid, u64>,
+    attempts: BTreeMap<Uuid, Attempt>,
+    starts: BTreeMap<Uuid, (Uuid, Uuid)>,
+    prepared: Option<Prepared>,
+    active: Option<Active>,
+    inhibited: bool,
+    closing: bool,
+}
+
+struct Local {
+    state: State,
+    journal: Journal,
+}
+
+pub struct Olm {
+    config: Config,
+    profile_id: String,
+    shadow: Option<Shadow>,
+    local: Mutex<Local>,
+}
+
+struct Shadow {
+    radio: Arc<SimulatedRadio>,
+    backend: ShadowBackend,
+    scenario_id: String,
+}
+
+enum ShadowBackend {
+    Scripted(Scenario),
+    Virtual(VirtualBench),
+}
+
+impl ShadowBackend {
+    fn execution(&self) -> Execution {
+        match self {
+            Self::Scripted(_) => Execution::ScriptedShadow,
+            Self::Virtual(_) => Execution::VirtualBw500,
+        }
+    }
+}
+
+struct Completion {
+    outcome: Outcome,
+    modem_connected: Option<bool>,
+    client_transfer: Option<bool>,
+    release_confirmed: bool,
+    virtual_proof: Option<VirtualProof>,
+    virtual_cleanup_confirmed: Option<bool>,
+    diagnostic: Option<String>,
+}
+
+impl Completion {
+    fn scripted(outcome: Outcome, scenario: Option<ScenarioResult>) -> Self {
+        Self {
+            outcome,
+            modem_connected: scenario.map(|s| s.modem_connected),
+            client_transfer: scenario.map(|s| s.client_transfer),
+            release_confirmed: scenario.is_none_or(|s| s.release_confirmed),
+            virtual_proof: None,
+            virtual_cleanup_confirmed: None,
+            diagnostic: None,
+        }
+    }
+}
+
+impl Olm {
+    pub fn open(path: &Path, simulated: Option<Arc<SimulatedRadio>>) -> Result<Arc<Self>> {
+        let config = Config::load(path)?;
+        let profile_id = fingerprint(&config)?;
+        let shadow = config
+            .shadow
+            .as_ref()
+            .map(|cfg| {
+                let radio = simulated.ok_or(Error::Denied(
+                    "shadow execution requires the simulated radio backend",
+                ))?;
+                let (backend, scenario_id) = if let Some(path) = &cfg.scenario_path {
+                    let scenario = Scenario::load(path)?;
+                    let scenario_id = fingerprint(&scenario)?;
+                    (ShadowBackend::Scripted(scenario), scenario_id)
+                } else {
+                    let settings = cfg
+                        .virtual_bw500
+                        .as_ref()
+                        .expect("validated shadow backend");
+                    let bench = VirtualBench::open(settings)?;
+                    let scenario_id = fingerprint(&(
+                        "managed-virtual-bw500-v1",
+                        &settings.local_call,
+                        bench.profile_sha256(),
+                    ))?;
+                    (ShadowBackend::Virtual(bench), scenario_id)
+                };
+                Ok::<_, Error>(Shadow {
+                    radio,
+                    backend,
+                    scenario_id,
+                })
+            })
+            .transpose()?;
+        let mut state = State::default();
+        let mut journal = Journal::open(&config.journal_dir, |sequence, record: Record<Event>| {
+            if record.profile_id != profile_id {
+                return Ok(());
+            }
+            match record.event {
+                Event::Inventory(snapshot) => {
+                    snapshot.verify_fingerprint()?;
+                    state.inventory = Some(snapshot);
+                    state.refresh_error = None;
+                }
+                Event::Collection { error, .. } => state.refresh_error = error,
+                Event::Ranking(ranking) => {
+                    state.rankings.insert(ranking.id, sequence);
+                }
+                Event::Started {
+                    prepared_id,
+                    grant_id,
+                    attempt,
+                } => {
+                    state
+                        .starts
+                        .insert(grant_id, (prepared_id, attempt.attempt_id));
+                    state.attempts.insert(attempt.attempt_id, attempt);
+                }
+                Event::Attempt(attempt) => {
+                    state.inhibited |= attempt.outcome == Outcome::ReleaseUnconfirmed;
+                    state.attempts.insert(attempt.attempt_id, attempt);
+                }
+                Event::ReleasedOnRestart => state.inhibited = false,
+                _ => {}
+            }
+            Ok(())
+        })?;
+        let now = Utc::now();
+        for attempt in state
+            .attempts
+            .values_mut()
+            .filter(|attempt| attempt.outcome == Outcome::Active)
+        {
+            attempt.outcome = Outcome::Interrupted;
+            attempt.ended_at = Some(now);
+            journal.append(&profile_id, now, Event::Attempt(attempt.clone()))?;
+        }
+        // Restart builds a fresh, no-device radio. Live execution must reconcile real hardware here.
+        if state.inhibited && shadow.is_some() {
+            journal.append(&profile_id, now, Event::ReleasedOnRestart)?;
+            state.inhibited = false;
+        }
+        Ok(Arc::new(Self {
+            config,
+            profile_id,
+            shadow,
+            local: Mutex::new(Local { state, journal }),
+        }))
+    }
+
+    pub fn is_shadow(&self) -> bool {
+        self.shadow.is_some()
+    }
+
+    pub fn start_refresh(self: &Arc<Self>) -> JoinHandle<()> {
+        let service = self.clone();
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(service.config.refresh_seconds.into()));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                let _ = service.refresh().await;
+            }
+        })
+    }
+
+    pub async fn refresh(&self) -> Result<InventorySummary> {
+        let mut local = self.local.lock().await;
+        self.refresh_locked(&mut local, Utc::now())?;
+        Ok(self.summary(&local.state, Utc::now()))
+    }
+
+    fn refresh_locked(&self, local: &mut Local, now: DateTime<Utc>) -> Result<()> {
+        let snapshot = Snapshot::load(&self.config, now).and_then(|snapshot| {
+            if !snapshot.complete()
+                && local
+                    .state
+                    .inventory
+                    .as_ref()
+                    .is_some_and(Snapshot::complete)
+            {
+                return Err(Error::Invalid("source returned a partial inventory"));
+            }
+            if local
+                .state
+                .inventory
+                .as_ref()
+                .is_some_and(|old| snapshot.as_of() < old.as_of())
+            {
+                return Err(Error::Invalid("source inventory moved backwards in time"));
+            }
+            Ok(snapshot)
+        });
+        let result = self.store_refresh(local, snapshot, now);
+        if let Err(error) = &result {
+            local.state.inhibited = true;
+            local.state.refresh_error = Some(format!("inventory journal failed: {error}"));
+        }
+        result
+    }
+
+    fn store_refresh(
+        &self,
+        local: &mut Local,
+        snapshot: Result<Snapshot>,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        match snapshot {
+            Ok(snapshot) => {
+                if local
+                    .state
+                    .inventory
+                    .as_ref()
+                    .is_none_or(|old| old.id != snapshot.id)
+                {
+                    local.journal.append(
+                        &self.profile_id,
+                        now,
+                        Event::Inventory(snapshot.clone()),
+                    )?;
+                    local.state.inventory = Some(snapshot);
+                } else if local.state.refresh_error.is_some() {
+                    local.journal.append(
+                        &self.profile_id,
+                        now,
+                        Event::Collection {
+                            snapshot_id: Some(snapshot.id),
+                            error: None,
+                        },
+                    )?;
+                }
+                local.state.refresh_error = None;
+            }
+            Err(error) => {
+                let status = error.to_string();
+                let previous = local.state.refresh_error.replace(status.clone());
+                if previous.as_ref() != Some(&status) {
+                    local.journal.append(
+                        &self.profile_id,
+                        now,
+                        Event::Collection {
+                            snapshot_id: local.state.inventory.as_ref().map(|s| s.id.clone()),
+                            error: Some(status),
+                        },
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn inventory(&self) -> InventorySummary {
+        self.summary(&self.local.lock().await.state, Utc::now())
+    }
+
+    pub async fn gateway_channels(
+        &self,
+        gateway: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<GatewayChannels> {
+        if gateway.is_empty()
+            || gateway.len() > 16
+            || !gateway
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        {
+            return Err(Error::Invalid("invalid gateway callsign"));
+        }
+        let gateway = gateway.to_ascii_uppercase();
+        let local = self.local.lock().await;
+        let matching = local
+            .state
+            .inventory
+            .as_ref()
+            .into_iter()
+            .flat_map(Snapshot::channels)
+            .filter(|channel| channel.gateway == gateway);
+        Ok(GatewayChannels {
+            inventory: self.summary(&local.state, Utc::now()),
+            total: matching.clone().count(),
+            offset,
+            channels: matching
+                .skip(offset)
+                .take(limit.clamp(1, PAGE_LIMIT))
+                .cloned()
+                .collect(),
+            gateway,
+        })
+    }
+
+    pub async fn status(&self) -> StationStatus {
+        let local = self.local.lock().await;
+        let state = &local.state;
+        StationStatus {
+            profile_id: self.profile_id.clone(),
+            shadow: self.is_shadow(),
+            execution: self
+                .shadow
+                .as_ref()
+                .map(|shadow| shadow.backend.execution()),
+            inhibited: state.inhibited,
+            closing: state.closing,
+            prepared: state
+                .prepared
+                .as_ref()
+                .filter(|p| Instant::now() < p.deadline)
+                .map(|p| p.view.clone()),
+            active_attempt_id: state.active.as_ref().map(|a| a.id),
+            virtual_phase: state
+                .active
+                .as_ref()
+                .and_then(|a| a.virtual_progress.as_ref())
+                .map(|progress| progress.phase()),
+        }
+    }
+
+    fn summary(&self, state: &State, now: DateTime<Utc>) -> InventorySummary {
+        state.inventory.as_ref().map_or_else(
+            || InventorySummary {
+                snapshot_id: None,
+                source: None,
+                source_as_of: None,
+                retrieved_at: None,
+                known_gateways: None,
+                known_channels: None,
+                freshly_reported_gateways: None,
+                eligible_channels: None,
+                stale: true,
+                complete: false,
+                refresh_error: state.refresh_error.clone(),
+                evaluated_at: now,
+            },
+            |snapshot| {
+                snapshot.summary(&self.config, now, state.refresh_error.clone(), |channel| {
+                    self.supports_channel(channel)
+                })
+            },
+        )
+    }
+
+    pub async fn rank(
+        &self,
+        ranking_id: Option<Uuid>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<RankingPage> {
+        let mut local = self.local.lock().await;
+        if let Some(id) = ranking_id {
+            return Ok(self.page(&self.load_ranking(&local, id)?, offset, limit));
+        }
+        let now = Utc::now();
+        self.refresh_locked(&mut local, now)?;
+        let ranking = self.build_ranking(&local.state, now);
+        let result = self.page(&ranking, offset, limit);
+        let sequence = local
+            .journal
+            .append(&self.profile_id, now, Event::Ranking(ranking))?;
+        local.state.rankings.insert(result.ranking_id, sequence);
+        Ok(result)
+    }
+
+    fn load_ranking(&self, local: &Local, id: Uuid) -> Result<Ranking> {
+        let sequence = local
+            .state
+            .rankings
+            .get(&id)
+            .ok_or(Error::Invalid("unknown ranking ID"))?;
+        let record: Record<Event> = local.journal.load(*sequence)?;
+        match record.event {
+            Event::Ranking(ranking) if ranking.id == id && record.profile_id == self.profile_id => {
+                Ok(ranking)
+            }
+            _ => Err(Error::Invalid("invalid station ranking record")),
+        }
+    }
+
+    fn page(&self, r: &Ranking, offset: usize, limit: usize) -> RankingPage {
+        RankingPage {
+            ranking_id: r.id,
+            profile_id: self.profile_id.clone(),
+            evaluated_at: r.evaluated_at,
+            snapshot_id: r.snapshot_id.clone(),
+            method: r.method.clone(),
+            decision: r.decision.clone(),
+            forecast_warning: r.forecast_warning.clone(),
+            total: r.entries.len(),
+            offset,
+            entries: r
+                .entries
+                .iter()
+                .skip(offset)
+                .take(limit.clamp(1, PAGE_LIMIT))
+                .cloned()
+                .collect(),
+        }
+    }
+
+    fn build_ranking(&self, state: &State, now: DateTime<Utc>) -> Ranking {
+        let mut ranking = Ranking {
+            id: Uuid::new_v4(),
+            evaluated_at: now,
+            snapshot_id: state.inventory.as_ref().map(|s| s.id.clone()),
+            method: RANKER.into(),
+            decision: Decision::Wait {
+                reason: "inventory_unavailable".into(),
+            },
+            forecast_warning: None,
+            entries: Vec::new(),
+        };
+        let Some(snapshot) = &state.inventory else {
+            return ranking;
+        };
+        let (mut forecasts, forecast_warning) = match &self.config.forecast_path {
+            Some(path) => match forecasts(path, now) {
+                Ok(forecasts) => (forecasts, None),
+                Err(error) => (BTreeMap::new(), Some(error.to_string())),
+            },
+            None => (BTreeMap::new(), Some("forecast_source_unconfigured".into())),
+        };
+        ranking.forecast_warning = forecast_warning;
+        let (mut cooled, mut last_success) = (BTreeSet::new(), None);
+        if let Some(shadow) = &self.config.shadow {
+            for attempt in state.attempts.values() {
+                let Some(ended) = attempt.ended_at else {
+                    continue;
+                };
+                if attempt.outcome == Outcome::Completed {
+                    if last_success.is_none_or(|last: &Attempt| last.ended_at < attempt.ended_at) {
+                        last_success = Some(attempt);
+                    }
+                } else if cooling(ended, now, shadow.cooldown_seconds) {
+                    cooled.insert(&attempt.channel_id);
+                }
+            }
+        }
+        for channel in snapshot.channels() {
+            let id = channel.id();
+            let mut reasons = exclusions(
+                channel,
+                snapshot,
+                &self.config,
+                now,
+                state.refresh_error.is_some(),
+            );
+            if !self.supports_channel(channel) {
+                reasons.push("managed_bw500_peer_unsupported");
+            }
+            if cooled.contains(&id) {
+                reasons.push("previous_attempt_in_cooldown");
+            }
+            let forecast = forecasts.remove(&id);
+            let penalty = self
+                .config
+                .shadow
+                .as_ref()
+                .filter(|_| {
+                    forecast.is_some() && last_success.is_some_and(|last| last.channel_id != id)
+                })
+                .map_or(0, |shadow| shadow.switch_cost_bp);
+            ranking.entries.push(Candidate {
+                channel_id: id,
+                channel: channel.clone(),
+                rank: None,
+                exclusions: reasons.into_iter().map(str::to_owned).collect(),
+                utility_bp: forecast
+                    .as_ref()
+                    .map(|f| i32::from(f.reliability_bp) - i32::from(penalty)),
+                forecast,
+                switching_penalty_bp: penalty,
+            });
+        }
+        ranking.entries.sort_by(|a, b| {
+            b.exclusions
+                .is_empty()
+                .cmp(&a.exclusions.is_empty())
+                .then(b.utility_bp.cmp(&a.utility_bp))
+                .then(b.channel.reported_at.cmp(&a.channel.reported_at))
+                .then(a.channel_id.cmp(&b.channel_id))
+        });
+        for (index, entry) in ranking
+            .entries
+            .iter_mut()
+            .take_while(|entry| entry.exclusions.is_empty())
+            .enumerate()
+        {
+            entry.rank = Some(index + 1);
+        }
+        ranking.decision = if let Some(first) = ranking.entries.first().filter(|e| e.rank.is_some())
+        {
+            Decision::Select {
+                channel_id: first.channel_id.clone(),
+            }
+        } else if snapshot.stale(&self.config, now)
+            || !snapshot.complete()
+            || state.refresh_error.is_some()
+        {
+            Decision::Wait {
+                reason: "inventory_stale_or_partial".into(),
+            }
+        } else if ranking
+            .entries
+            .iter()
+            .any(|entry| entry.exclusions == ["previous_attempt_in_cooldown"])
+        {
+            Decision::Wait {
+                reason: "channel_cooldown".into(),
+            }
+        } else {
+            Decision::NoRoute
+        };
+        ranking
+    }
+
+    pub async fn prepare(&self, ranking_id: Uuid, channel_id: &str) -> Result<Preparation> {
+        let radio = &self
+            .shadow
+            .as_ref()
+            .ok_or(Error::Denied(
+                "station execution is available only in shadow mode",
+            ))?
+            .radio;
+        let cfg = self
+            .config
+            .shadow
+            .as_ref()
+            .expect("configured shadow profile");
+        let mut local = self.local.lock().await;
+        let now = Utc::now();
+        if local.state.closing {
+            return Err(Error::Denied("station service is closing"));
+        }
+        if local.state.active.is_some()
+            || local
+                .state
+                .prepared
+                .as_ref()
+                .is_some_and(|p| Instant::now() < p.deadline)
+        {
+            return Err(Error::Busy("station lease is held"));
+        }
+        if local.state.inhibited {
+            return Err(Error::Denied("station is inhibited"));
+        }
+        self.refresh_locked(&mut local, now)?;
+        let ranking = self.load_ranking(&local, ranking_id)?;
+        let candidate = ranking
+            .entries
+            .iter()
+            .find(|entry| entry.channel_id == channel_id && entry.rank.is_some())
+            .ok_or(Error::Denied("channel was ineligible in this ranking"))?;
+        let snapshot_id = ranking
+            .snapshot_id
+            .as_deref()
+            .ok_or(Error::Invalid("ranking has no inventory"))?;
+        let channel = self.verify_candidate(&local.state, now, snapshot_id, channel_id)?;
+        if candidate.channel != *channel {
+            return Err(Error::Denied(
+                "ranking channel differs from current inventory",
+            ));
+        }
+        let dial_hz = channel
+            .dial_hz
+            .ok_or(Error::Invalid("missing dial frequency"))?;
+        let snapshot_id = snapshot_id.to_owned();
+        let before = radio.state().await?;
+        if before.ptt_asserted != Some(false) {
+            return Err(Error::Denied("receive state unconfirmed"));
+        }
+        // Shadow uses one USB profile with no RF power. Direct MCP writes are disabled in this mode.
+        if before.mode.as_deref() != Some("USB") || before.rf_power_fraction != Some(0.0) {
+            return Err(Error::Denied(
+                "simulated radio is outside the shadow profile",
+            ));
+        }
+        let id = Uuid::new_v4();
+        local.journal.append(
+            &self.profile_id,
+            now,
+            Event::Preparing {
+                id,
+                ranking_id,
+                channel_id: channel_id.into(),
+            },
+        )?;
+        let readback = radio
+            .set_control(
+                "frequency_hz",
+                ControlValue::FrequencyHz(dial_hz),
+                Some(before.state_revision),
+            )
+            .await?;
+        if readback.frequency_hz != Some(dial_hz)
+            || readback.mode.as_deref() != Some("USB")
+            || readback.ptt_asserted != Some(false)
+            || readback.rf_power_fraction != Some(0.0)
+        {
+            local.state.inhibited = true;
+            return Err(Error::Denied("simulated configuration readback mismatch"));
+        }
+        let view = Preparation {
+            prepared_id: id,
+            channel_id: channel_id.into(),
+            state_revision: readback.state_revision,
+            expires_at: Utc::now() + TimeDelta::seconds(cfg.prepare_seconds.into()),
+        };
+        local.journal.append(
+            &self.profile_id,
+            now,
+            Event::Prepared {
+                id,
+                ranking_id,
+                channel_id: channel_id.into(),
+                state_revision: readback.state_revision,
+            },
+        )?;
+        local.state.prepared = Some(Prepared {
+            view: view.clone(),
+            ranking_id,
+            snapshot_id,
+            dial_hz,
+            deadline: Instant::now() + Duration::from_secs(cfg.prepare_seconds.into()),
+            grant: None,
+        });
+        Ok(view)
+    }
+
+    fn verify_candidate<'a>(
+        &self,
+        state: &'a State,
+        now: DateTime<Utc>,
+        snapshot_id: &str,
+        channel_id: &str,
+    ) -> Result<&'a Channel> {
+        let snapshot = state
+            .inventory
+            .as_ref()
+            .filter(|s| s.id == snapshot_id)
+            .ok_or(Error::Denied(
+                "current inventory differs from the prepared snapshot",
+            ))?;
+        let channel = snapshot
+            .channels()
+            .iter()
+            .find(|c| c.id() == channel_id)
+            .ok_or(Error::Denied("channel has disappeared from the inventory"))?;
+        if !self.supports_channel(channel) {
+            return Err(Error::Denied("managed BW500 cannot attach this peer"));
+        }
+        if !exclusions(
+            channel,
+            snapshot,
+            &self.config,
+            now,
+            state.refresh_error.is_some(),
+        )
+        .is_empty()
+        {
+            return Err(Error::Denied(
+                "candidate failed current freshness or eligibility checks",
+            ));
+        }
+        if let Some(cfg) = &self.config.shadow
+            && state.attempts.values().any(|a| {
+                a.channel_id == channel_id
+                    && a.outcome != Outcome::Completed
+                    && a.ended_at
+                        .is_some_and(|ended| cooling(ended, now, cfg.cooldown_seconds))
+            })
+        {
+            return Err(Error::Denied("channel is in cooldown"));
+        }
+        Ok(channel)
+    }
+
+    fn supports_channel(&self, channel: &Channel) -> bool {
+        match self.shadow.as_ref().map(|shadow| &shadow.backend) {
+            Some(ShadowBackend::Virtual(bench)) => bench.supports_peer(&channel.gateway),
+            _ => true,
+        }
+    }
+
+    async fn verify_prepared<'a>(
+        &self,
+        state: &'a State,
+        now: DateTime<Utc>,
+        prepared_id: Uuid,
+    ) -> Result<&'a Prepared> {
+        let radio = &self
+            .shadow
+            .as_ref()
+            .ok_or(Error::Denied(
+                "station execution is available only in shadow mode",
+            ))?
+            .radio;
+        let prepared = state
+            .prepared
+            .as_ref()
+            .filter(|p| p.view.prepared_id == prepared_id && Instant::now() < p.deadline)
+            .ok_or(Error::Denied(
+                "prepared handle is missing, consumed, or expired",
+            ))?;
+        if state.closing || state.inhibited || state.active.is_some() {
+            return Err(Error::Denied("station is busy, inhibited, or closing"));
+        }
+        self.verify_candidate(state, now, &prepared.snapshot_id, &prepared.view.channel_id)?;
+        let readback = radio.state().await?;
+        if readback.state_revision != prepared.view.state_revision
+            || readback.frequency_hz != Some(prepared.dial_hz)
+            || readback.mode.as_deref() != Some("USB")
+            || readback.rf_power_fraction != Some(0.0)
+            || readback.ptt_asserted != Some(false)
+        {
+            return Err(Error::Denied("prepared radio configuration changed"));
+        }
+        Ok(prepared)
+    }
+
+    pub async fn authorize(&self, prepared_id: Uuid) -> Result<Authorization> {
+        let mut local = self.local.lock().await;
+        let now = Utc::now();
+        self.refresh_locked(&mut local, now)?;
+        let prepared = self.verify_prepared(&local.state, now, prepared_id).await?;
+        if let Some((grant, deadline)) = &prepared.grant {
+            if Instant::now() < *deadline {
+                return Ok(grant.clone());
+            }
+            return Err(Error::Denied(
+                "authorization expired; prepare a fresh attempt",
+            ));
+        }
+        let cfg = self
+            .config
+            .shadow
+            .as_ref()
+            .expect("configured shadow profile");
+        let issued = Instant::now();
+        let duration = Duration::from_secs(cfg.grant_seconds.into())
+            .min(prepared.deadline.saturating_duration_since(issued));
+        let grant = Authorization {
+            grant_id: Uuid::new_v4(),
+            prepared_id,
+            expires_at: now
+                + TimeDelta::from_std(duration).expect("bounded authorization lifetime"),
+        };
+        local.journal.append(
+            &self.profile_id,
+            now,
+            Event::Authorized {
+                id: grant.grant_id,
+                prepared_id,
+            },
+        )?;
+        local
+            .state
+            .prepared
+            .as_mut()
+            .expect("verified preparation")
+            .grant = Some((grant.clone(), issued + duration));
+        Ok(grant)
+    }
+
+    pub async fn start(self: &Arc<Self>, prepared_id: Uuid, grant_id: Uuid) -> Result<Attempt> {
+        let mut local = self.local.lock().await;
+        if let Some(&(previous_prepared, attempt_id)) = local.state.starts.get(&grant_id) {
+            if prepared_id != previous_prepared {
+                return Err(Error::Denied(
+                    "authorization belongs to a different prepared handle",
+                ));
+            }
+            return local
+                .state
+                .attempts
+                .get(&attempt_id)
+                .cloned()
+                .ok_or(Error::Invalid("missing attempt for accepted authorization"));
+        }
+        let now = Utc::now();
+        self.refresh_locked(&mut local, now)?;
+        let prepared = self.verify_prepared(&local.state, now, prepared_id).await?;
+        if !prepared.grant.as_ref().is_some_and(|(grant, deadline)| {
+            grant.grant_id == grant_id && Instant::now() < *deadline
+        }) {
+            return Err(Error::Denied(
+                "authorization is missing, mismatched, or expired",
+            ));
+        }
+        let shadow = self.shadow.as_ref().expect("verified shadow configuration");
+        let cfg = self
+            .config
+            .shadow
+            .as_ref()
+            .expect("configured shadow profile");
+        let snapshot = local.state.inventory.as_ref().expect("verified inventory");
+        let channel = snapshot
+            .channels()
+            .iter()
+            .find(|c| c.id() == prepared.view.channel_id)
+            .expect("verified channel");
+        let attempt = Attempt {
+            attempt_id: Uuid::new_v4(),
+            ranking_id: prepared.ranking_id,
+            channel_id: channel.id(),
+            gateway: channel.gateway.clone(),
+            inventory_snapshot_id: snapshot.id.clone(),
+            state_revision: prepared.view.state_revision,
+            started_at: now,
+            ended_at: None,
+            outcome: Outcome::Active,
+            simulated: true,
+            execution: shadow.backend.execution(),
+            scenario_id: shadow.scenario_id.clone(),
+            modem_connected: None,
+            client_transfer: None,
+            cms_accepted: None,
+            recipient_delivered: None,
+            release_confirmed: None,
+            virtual_proof: None,
+            virtual_cleanup_confirmed: None,
+            diagnostic: None,
+        };
+        local.journal.append(
+            &self.profile_id,
+            now,
+            Event::Started {
+                prepared_id,
+                grant_id,
+                attempt: attempt.clone(),
+            },
+        )?;
+        let (cancel, canceled) = watch::channel(false);
+        let (complete, done) = watch::channel(None);
+        let virtual_progress = (attempt.execution == Execution::VirtualBw500)
+            .then(|| Arc::new(VirtualProgress::default()));
+        local.state.active = Some(Active {
+            id: attempt.attempt_id,
+            cancel,
+            done,
+            virtual_progress: virtual_progress.clone(),
+        });
+        local.state.prepared = None;
+        local
+            .state
+            .starts
+            .insert(grant_id, (prepared_id, attempt.attempt_id));
+        local
+            .state
+            .attempts
+            .insert(attempt.attempt_id, attempt.clone());
+        let limit = Duration::from_secs(cfg.session_seconds.into());
+        let service = self.clone();
+        let operation = attempt.clone();
+        let started = Instant::now();
+        tokio::spawn(async move {
+            let mut cleanup_cancel = canceled.clone();
+            let run = service.run(
+                &operation,
+                started,
+                limit,
+                canceled,
+                virtual_progress.as_deref(),
+            );
+            tokio::pin!(run);
+            let result = if operation.execution == Execution::VirtualBw500 {
+                tokio::select! {
+                    biased;
+                    result = &mut run => result,
+                    _ = cleanup_deadline(started + limit, &mut cleanup_cancel) => {
+                        let diagnostic = "managed modem cleanup exceeded its grace period";
+                        service.inhibit_for_cleanup(operation.attempt_id, diagnostic).await;
+                        let _ = complete.send(Some(Err(diagnostic.into())));
+                        run.await
+                    }
+                }
+            } else {
+                run.await
+            };
+            let finished = service
+                .finish(operation.attempt_id, result)
+                .await
+                .map(|_| ())
+                .map_err(|error| error.to_string());
+            let _ = complete.send(Some(finished));
+        });
+        Ok(attempt)
+    }
+
+    async fn inhibit_for_cleanup(&self, id: Uuid, diagnostic: &str) {
+        let mut local = self.local.lock().await;
+        local.state.inhibited = true;
+        if let Some(attempt) = local.state.attempts.get_mut(&id) {
+            attempt.diagnostic = Some(diagnostic.into());
+        }
+    }
+
+    async fn run(
+        &self,
+        attempt: &Attempt,
+        started: Instant,
+        limit: Duration,
+        mut canceled: watch::Receiver<bool>,
+        virtual_progress: Option<&VirtualProgress>,
+    ) -> Completion {
+        let shadow = self.shadow.as_ref().expect("admitted shadow session");
+        match &shadow.backend {
+            ShadowBackend::Scripted(scenario) => {
+                let scripted = scenario.channels.get(&attempt.channel_id).copied();
+                let duration =
+                    scripted.map_or(limit, |s| Duration::from_millis(s.duration_ms.into()));
+                let completed = match scripted.filter(|_| duration < limit) {
+                    Some(s) => Completion::scripted(
+                        if s.client_transfer {
+                            Outcome::Completed
+                        } else {
+                            Outcome::Failed
+                        },
+                        Some(s),
+                    ),
+                    None => Completion::scripted(Outcome::TimedOut, None),
+                };
+                tokio::select! {
+                    biased;
+                    _ = canceled.wait_for(|cancel| *cancel) => Completion::scripted(Outcome::Aborted, None),
+                    _ = tokio::time::sleep_until(started + duration.min(limit)) => completed,
+                }
+            }
+            ShadowBackend::Virtual(bench) => {
+                let report = bench
+                    .run(
+                        attempt.attempt_id,
+                        &attempt.gateway,
+                        started + limit,
+                        canceled,
+                        virtual_progress.expect("managed virtual progress"),
+                    )
+                    .await;
+                Completion {
+                    outcome: report.outcome,
+                    modem_connected: report.modem_connected.then_some(true),
+                    client_transfer: report.proof.is_some().then_some(true),
+                    release_confirmed: report.cleanup_confirmed,
+                    virtual_proof: report.proof,
+                    virtual_cleanup_confirmed: Some(report.cleanup_confirmed),
+                    diagnostic: report.diagnostic,
+                }
+            }
+        }
+    }
+
+    async fn finish(&self, id: Uuid, completion: Completion) -> Result<Attempt> {
+        // Release is independent of journal completion. The shadow adapter never keys a device.
+        let radio = &self
+            .shadow
+            .as_ref()
+            .ok_or(Error::Denied(
+                "station execution is available only in shadow mode",
+            ))?
+            .radio;
+        let released = radio
+            .request_ptt(PttRequest {
+                action: PttAction::KeyDown,
+                session_id: None,
+                transmit_permit_id: None,
+            })
+            .await
+            .is_ok_and(|release| release.release_confirmed)
+            && completion.release_confirmed;
+        let mut local = self.local.lock().await;
+        let mut attempt = local
+            .state
+            .attempts
+            .get(&id)
+            .cloned()
+            .ok_or(Error::Invalid("unknown attempt ID"))?;
+        if local
+            .state
+            .active
+            .as_ref()
+            .is_none_or(|active| active.id != id)
+        {
+            return Ok(attempt);
+        }
+        attempt.ended_at = Some(Utc::now());
+        attempt.release_confirmed = Some(released);
+        attempt.modem_connected = completion.modem_connected;
+        attempt.client_transfer = completion.client_transfer;
+        attempt.virtual_proof = completion.virtual_proof;
+        attempt.virtual_cleanup_confirmed = completion.virtual_cleanup_confirmed;
+        attempt.diagnostic = completion.diagnostic.or(attempt.diagnostic);
+        attempt.outcome = if !released {
+            Outcome::ReleaseUnconfirmed
+        } else {
+            completion.outcome
+        };
+        let result = local.journal.append(
+            &self.profile_id,
+            attempt.ended_at.expect("terminal attempt time"),
+            Event::Attempt(attempt.clone()),
+        );
+        if let Err(error) = &result {
+            attempt.diagnostic = Some(format!(
+                "terminal operation could not be journaled: {error}"
+            ));
+        }
+        local.state.inhibited |= !released || result.is_err();
+        local.state.active = None;
+        local.state.attempts.insert(id, attempt.clone());
+        result?;
+        Ok(attempt)
+    }
+
+    pub async fn abort(&self, attempt_id: Uuid) -> Result<Attempt> {
+        let mut done = {
+            let local = self.local.lock().await;
+            let Some(active) = local
+                .state
+                .active
+                .as_ref()
+                .filter(|active| active.id == attempt_id)
+            else {
+                return local
+                    .state
+                    .attempts
+                    .get(&attempt_id)
+                    .cloned()
+                    .ok_or(Error::Invalid("unknown attempt ID"));
+            };
+            let _ = active.cancel.send(true);
+            active.done.clone()
+        };
+        let result = {
+            let result = done.wait_for(Option::is_some).await.map_err(|_| {
+                io::Error::other("station operation ended before recording cleanup")
+            })?;
+            (*result).clone()
+        };
+        if let Some(Err(error)) = result {
+            return Err(io::Error::other(error).into());
+        }
+        self.attempt(attempt_id).await
+    }
+
+    pub async fn shutdown(&self) -> Result<()> {
+        let active = {
+            let mut local = self.local.lock().await;
+            local.state.closing = true;
+            local.state.prepared = None;
+            local.state.active.as_ref().map(|active| active.id)
+        };
+        if let Some(id) = active {
+            self.abort(id).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn attempt(&self, id: Uuid) -> Result<Attempt> {
+        let local = self.local.lock().await;
+        let mut attempt = local
+            .state
+            .attempts
+            .get(&id)
+            .cloned()
+            .ok_or(Error::Invalid("unknown attempt ID"))?;
+        if local
+            .state
+            .active
+            .as_ref()
+            .filter(|active| active.id == id)
+            .and_then(|active| active.virtual_progress.as_ref())
+            .is_some_and(|progress| progress.was_connected())
+        {
+            attempt.modem_connected = Some(true);
+        }
+        Ok(attempt)
+    }
+
+    pub async fn history(&self, from: DateTime<Utc>, limit: usize) -> Vec<Attempt> {
+        let local = self.local.lock().await;
+        let mut attempts = local
+            .state
+            .attempts
+            .values()
+            .filter(|attempt| attempt.started_at >= from)
+            .collect::<Vec<_>>();
+        attempts.sort_unstable_by_key(|attempt| {
+            std::cmp::Reverse((attempt.started_at, attempt.attempt_id))
+        });
+        attempts
+            .into_iter()
+            .take(limit.clamp(1, PAGE_LIMIT))
+            .cloned()
+            .collect()
+    }
+
+    pub async fn metrics(&self, from: DateTime<Utc>) -> Metrics {
+        let now = Utc::now();
+        let mut m = Metrics {
+            from,
+            to: now,
+            attempted: 0,
+            modem_connected: 0,
+            modem_outcome_known: 0,
+            client_transfer_confirmed: 0,
+            client_outcome_known: 0,
+            simulated: self.is_shadow(),
+        };
+        let local = self.local.lock().await;
+        for a in local
+            .state
+            .attempts
+            .values()
+            .filter(|a| from <= a.started_at && a.started_at <= now)
+        {
+            m.attempted += 1;
+            m.modem_connected += usize::from(a.modem_connected == Some(true));
+            m.modem_outcome_known += usize::from(a.modem_connected.is_some());
+            m.client_transfer_confirmed += usize::from(a.client_transfer == Some(true));
+            m.client_outcome_known += usize::from(a.client_transfer.is_some());
+        }
+        m
+    }
+}
+
+fn cooling(ended: DateTime<Utc>, now: DateTime<Utc>, seconds: u32) -> bool {
+    now - ended < TimeDelta::seconds(seconds.into())
+}
+
+async fn cleanup_deadline(deadline: Instant, canceled: &mut watch::Receiver<bool>) {
+    tokio::select! {
+        _ = canceled.wait_for(|cancel| *cancel) => {},
+        _ = tokio::time::sleep_until(deadline) => {},
+    }
+    tokio::time::sleep(CLEANUP_GRACE).await;
+}

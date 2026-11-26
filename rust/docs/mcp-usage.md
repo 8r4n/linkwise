@@ -1,11 +1,9 @@
 # Using the Linkwise radio MCP server
 
-This guide is for an MCP client or AI system that needs to observe or request
-radio-control changes. The server currently implements radio observation and a
-limited CAT control surface. It does not implement the modem, a transmit
-session/permit arbiter, or an active PTT watchdog. Treat runtime tool schemas
-and `radio_get_controls` as authoritative for a particular backend; examples
-below illustrate the value shapes.
+The stdio server exposes typed radio observation, backend-dependent CAT
+controls, and optional station inventory and shadow sessions. Physical key-up
+remains disabled. Use `radio_get_controls` and MCP tool discovery for the
+capabilities of the installed backend.
 
 ## Recommended call sequence
 
@@ -92,6 +90,7 @@ Common non-`ok` statuses include:
 | `unsupported` | The backend/control does not expose the requested operation or value. | Choose a listed supported control; do not emulate it. |
 | `unavailable` | The backend could not be reached or responded before timeout. | Report the interruption; retry only after checking current state and avoiding duplicate actuation. |
 | `readback_mismatch` | Observed value did not match the requested value. | Treat radio state as uncertain; read state and the specific control before any further action. |
+| `ptt_release_unconfirmed` | The backend accepted the release request and could not verify receive state. | Treat transmitter state as unknown and check the station independently. |
 | `audit_failure` | An action could not be recorded or its completion could not be logged. | Treat outcome as uncertain. Read state before any retry. |
 | `failed` | Protocol or other adapter error. | Include the returned error and correlation ID; refresh state before retrying a write. |
 
@@ -162,3 +161,150 @@ extension invocation, typed parameter enums, some non-control rig operations,
 external-controller revision tracking, and transmit authorization/watchdog
 remain incomplete. Modem and Winlink operations are not implemented by this
 MCP server.
+
+## Station inventory and shadow operation
+
+Set `LINKWISE_OLM_CONFIG` to the installed station JSON file. Relative paths
+inside the profile resolve beside that file. The process running MCP reads
+from those paths and holds an exclusive lock on the journal directory. Keep
+that directory and the configured import files under the station owner's
+control.
+
+```json
+{
+  "version": 1,
+  "inventory_path": "inventory.json",
+  "forecast_path": null,
+  "journal_dir": "journal",
+  "refresh_seconds": 15,
+  "inventory_max_age_seconds": 3600,
+  "report_max_age_seconds": 7200,
+  "service_codes": ["PUBLIC"],
+  "dial_ranges": [{ "min_hz": 7000000, "max_hz": 7300000 }],
+  "shadow": {
+    "scenario_path": "scenario.json",
+    "prepare_seconds": 20,
+    "grant_seconds": 10,
+    "session_seconds": 30,
+    "cooldown_seconds": 60,
+    "switch_cost_bp": 200
+  }
+}
+```
+
+With `shadow: null`, the station serves inventory and rankings. To exercise
+session operations, leave `LINKWISE_RADIO_BACKEND` at `simulated` and supply the
+`shadow` block. The shadow station owns all simulated tuning and keeps RF
+power at zero. It can use scripted outcomes or run two virtual BW500 modems
+with a private B2F attachment fixture.
+
+The inventory is a version 1 JSON object with `source`, RFC 3339 `as_of`,
+`complete`, and `channels`. Each channel supplies `gateway`, `protocol`,
+`service_code`, `dial_hz`, `center_hz`, `bandwidth_hz`, and RFC 3339
+`reported_at`. Supply `null` for fields the source cannot establish. At least
+one frequency must be known to identify the channel. The initial session
+profile uses `VARA-HF`, an explicit 500 Hz bandwidth, and USB. Source time,
+equipment scope, and reported gateway freshness are separate checks. Publish
+new imports by writing a temporary file in the same directory and renaming it
+over the old one.
+
+```json
+{
+  "version": 1,
+  "source": "shadow fixture",
+  "as_of": "2026-11-25T20:00:00Z",
+  "complete": true,
+  "channels": [{
+    "gateway": "TEST-1",
+    "protocol": "VARA-HF",
+    "service_code": "PUBLIC",
+    "dial_hz": 7100000,
+    "center_hz": 7101500,
+    "bandwidth_hz": 500,
+    "reported_at": "2026-11-25T20:00:00Z"
+  }]
+}
+```
+
+Set both timestamps to the fixture's actual UTC time for a fresh shadow run.
+For a real import, preserve the publisher's snapshot and report times. Pat's
+CLI listing omits the source and report times this contract requires. Import
+from a commissioned publisher with documented fields. [Pat RMS listing implementation](https://github.com/la5nta/pat/blob/v1.0.1/cli/rmslist.go#L55-L81)
+
+Use the channel ID from `link_rank_gateways` to key the shadow scenario.
+For the example inventory, `scenario.json` is as follows.
+
+```json
+{
+  "version": 1,
+  "channels": {
+    "TEST-1/VARA-HF/PUBLIC/7100000/7101500/500": {
+      "duration_ms": 500,
+      "modem_connected": true,
+      "client_transfer": true,
+      "release_confirmed": true
+    }
+  }
+}
+```
+
+An omitted scenario channel times out. For the managed virtual BW500 backend,
+replace `scenario_path` with the following field in the `shadow` block. Point
+`modem_path` at the trusted local build of `linkwise-modemd` and use the pinned
+profile returned by `python3 tools/fetch-modem-profile.py`.
+
+```json
+"virtual_bw500": {
+  "modem_path": "/path/to/linkwise-modemd",
+  "waveform_profile": "/path/to/bw500-level4.json",
+  "local_call": "N0CALL"
+}
+```
+
+The managed backend requires a distinct BW500-compatible peer callsign in the
+inventory. It starts two one-shot modem processes on ephemeral loopback ports.
+The station associates all command, DATA, and virtual audio sockets before
+starting the P2P exchange. A completed result includes both fixture attachment
+hashes and the waveform profile hash. The receipt and release fields describe
+the loopback session and simulated station. CMS and recipient status remain
+unknown. `link_get_status` reports attachment, peer connection, and cleanup
+progress. The session budget bounds the exchange. Abort and timeout allow a
+five-second cleanup grace period. If cleanup is still unconfirmed, the station
+reports a fault and inhibits new preparations.
+
+To supply forecasts, set
+`forecast_path` to a version 1 object with a `forecasts` array. Each record
+has `channel_id`, `model` (`VOACAP`), `model_revision`, `inputs_id`,
+`issued_at`, `valid_from`, `valid_until`, and `reliability_bp` (0–10,000).
+The latest issue valid at evaluation time contributes to ranking. An entry
+without a forecast has unknown utility and falls back to report recency.
+
+1. Call `winlink_refresh_inventory` or read the scheduled result using
+   `winlink_get_inventory_summary`. Use `winlink_get_gateway_channels` for
+   a callsign's channel records.
+2. Call `link_rank_gateways`. Inspect `decision`, exclusions, and the returned
+   `ranking_id`. Pass that ID back with `offset` and `limit` to page the
+   immutable ranking later, including after restart.
+3. In shadow mode, call `link_prepare_candidate` with `ranking_id` and
+   `channel_id`, then `link_request_session_authorization` with the returned
+   `prepared_id`. A new inventory snapshot or changed radio revision
+   invalidates preparation.
+4. Call `link_start_session` with `prepared_id` and `grant_id`. The tool
+   returns an `attempt_id` before the terminal result is available. A retry
+   with the same pair returns the original attempt, including after restart.
+5. Read `link_get_status`, `link_get_session`, `link_get_history`, or
+   `link_get_metrics`. Use `link_abort_session` to cancel the current attempt.
+   A simulated release fault inhibits further preparation for the running
+   process. The journal records interrupted attempts on restart. It retains
+   identifiers and stage outcomes without message bodies.
+
+Run the station regression on generated fixtures with
+`cargo test --locked --manifest-path rust/Cargo.toml --test olm_station`.
+Run the managed waveform case with the pinned profile.
+
+```sh
+LINKWISE_BW500_PROFILE=$(python3 tools/fetch-modem-profile.py) \
+  cargo test --locked --manifest-path rust/Cargo.toml --test olm_station managed_virtual_bw500 -- --ignored
+```
+See the [station integration status](../../docs/architecture/station-integration-status.md)
+for the actual modem, live RMS/CMS, and hardware acceptance gates.

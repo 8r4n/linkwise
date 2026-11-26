@@ -1,6 +1,7 @@
 //! Winlink Open B2F message envelopes.
 
 pub mod compression;
+pub mod host_session;
 pub mod imap;
 
 pub mod mailbox;

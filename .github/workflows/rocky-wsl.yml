@@ -1,0 +1,90 @@
+name: Rocky Linux WSL images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rocky-wsl.yml'
+      - 'LICENSE'
+      - 'docs/install/**'
+      - 'docs/man/**'
+      - 'packaging/**'
+      - 'rust/**'
+      - 'rust-toolchain.toml'
+      - 'tools/rocky-wsl/**'
+      - 'tools/rocky9-vm/build-rpm.sh'
+      - 'tools/rocky9-vm/signing-check.sh'
+      - 'tools/package-modem.py'
+      - 'tools/modem_licenses.py'
+      - 'tools/smoke-test-package.py'
+      - 'tools/test-modem-cli.py'
+      - 'tools/fetch-modem-profile.py'
+  pull_request:
+    paths:
+      - '.github/workflows/rocky-wsl.yml'
+      - 'LICENSE'
+      - 'docs/install/**'
+      - 'docs/man/**'
+      - 'packaging/**'
+      - 'rust/**'
+      - 'rust-toolchain.toml'
+      - 'tools/rocky-wsl/**'
+      - 'tools/rocky9-vm/build-rpm.sh'
+      - 'tools/rocky9-vm/signing-check.sh'
+      - 'tools/package-modem.py'
+      - 'tools/modem_licenses.py'
+      - 'tools/smoke-test-package.py'
+      - 'tools/test-modem-cli.py'
+      - 'tools/fetch-modem-profile.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: Rocky WSL ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x64, runner: ubuntu-24.04}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Build Rocky RPM and WSL image
+        shell: bash
+        env:
+          IMAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/rocky-wsl-rpm"
+          output_dir="$RUNNER_TEMP/rocky-wsl-image"
+          mkdir -p "$evidence_dir" "$output_dir"
+          bash tools/rocky9-vm/build-rpm.sh "$GITHUB_SHA" "$evidence_dir" wsl
+
+          shopt -s nullglob
+          rpms=("$evidence_dir"/build-source/installer-artifacts/*.rpm)
+          if (( ${#rpms[@]} != 1 )) || [[ ! -s ${rpms[0]:-} ]]; then
+            echo 'Expected exactly one nonempty Linkwise RPM.' >&2
+            exit 1
+          fi
+          bash tools/rocky-wsl/build-image.sh "${rpms[0]}" "$output_dir"
+
+          cd "$output_dir"
+          image="linkwise-rocky9-$IMAGE_ARCH.wsl"
+          test -s "$image"
+          test -s "$image.sha256"
+          [[ "$(cat "$image.sha256")" == "$(sha256sum "$image")" ]]
+      - name: Upload WSL image and checksum
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linkwise-rocky9-wsl-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/rocky-wsl-image/linkwise-rocky9-${{ matrix.arch }}.wsl
+            ${{ runner.temp }}/rocky-wsl-image/linkwise-rocky9-${{ matrix.arch }}.wsl.sha256
+          if-no-files-found: error

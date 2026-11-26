@@ -38,6 +38,7 @@ jobs:
       - run: cargo audit --file rust/Cargo.lock
       - run: python3 tools/modem_licenses.py
       - run: cargo test --locked --manifest-path rust/Cargo.toml --bin linkwise
+      - run: cargo test --locked --manifest-path rust/Cargo.toml --test olm_station
 
   native:
     needs: dependency-audit

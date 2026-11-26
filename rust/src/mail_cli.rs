@@ -3,24 +3,22 @@
 use std::{
     ffi::OsString,
     fs::File,
-    io::{self, BufRead, BufReader, Read, Write},
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream as BlockingTcp},
+    io::{self, Read, Write},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     time::Duration,
 };
 
 use linkwise::winlink::{
+    host_session::{self, Connection},
     mailbox::DirectoryMailbox,
-    session::{self, Role, Settings},
+    session::{Role, Settings},
 };
-use tokio::{net::TcpStream, runtime::Handle, time::timeout};
+use tokio::{net::TcpStream, sync::watch, time::timeout};
 
-use crate::{frame_cli::Failure, session_cli::Control};
+use crate::frame_cli::Failure;
 
 const MESSAGE_LIMIT: usize = 1024 * 1024;
 const COMPRESSED_LIMIT: usize = 2 * MESSAGE_LIMIT;
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(90);
-const IO_TIMEOUT: Duration = Duration::from_secs(120);
-const CHUNK: usize = 1024;
 
 pub(crate) async fn run(args: &[OsString]) -> Result<(), Failure> {
     if args.get(1).is_some_and(|arg| arg == "--pki") {
@@ -242,7 +240,7 @@ async fn exchange(
     peer: String,
     command_port: u16,
     data_port: u16,
-    mut mailbox: DirectoryMailbox,
+    mailbox: DirectoryMailbox,
 ) -> io::Result<()> {
     let (control, data) = timeout(Duration::from_secs(5), async {
         tokio::try_join!(
@@ -251,148 +249,19 @@ async fn exchange(
         )
     })
     .await??;
-    let mut control = Control::new(control);
-    let (source, target) = if caller {
-        (&local, &peer)
-    } else {
-        (&peer, &local)
-    };
-    timeout(CONNECT_TIMEOUT, async {
-        control.command(&format!("MYCALL {local}")).await?;
-        control.command("COMPRESSION OFF").await?;
-        if caller {
-            control.command("P2P SESSION").await?;
-            control
-                .command(&format!("CONNECT {source} {target}"))
-                .await?;
-        } else {
-            control.command("LISTEN ON").await?;
-        }
-        loop {
-            let line = control.line().await?;
-            let mut words = line.split_ascii_whitespace();
-            match words.next() {
-                Some("CONNECTED") => {
-                    return if words.next() == Some(source) && words.next() == Some(target) {
-                        Ok(())
-                    } else {
-                        Err(io::Error::other("unexpected modem peer"))
-                    };
-                }
-                Some("DISCONNECTED") => {
-                    return Err(io::Error::other("modem disconnected before B2F"));
-                }
-                _ => {}
-            }
-        }
-    })
-    .await??;
-
-    let data = data.into_std()?;
-    data.set_nonblocking(false)?;
-    data.set_read_timeout(Some(IO_TIMEOUT))?;
-    data.set_write_timeout(Some(IO_TIMEOUT))?;
-    let runtime = Handle::current();
-    let (result, mut control, disconnected, _data) = tokio::task::spawn_blocking(move || {
-        let mut stream = Data {
-            socket: BufReader::new(data),
-            pending: Vec::with_capacity(CHUNK),
-            control,
-            runtime,
-            disconnected: false,
-        };
-        let role = if caller { Role::Caller } else { Role::Listener };
-        let result = session::exchange(
-            &mut stream,
-            role,
-            Settings {
-                local_call: &local,
-                peer_call: &peer,
-                max_message_bytes: MESSAGE_LIMIT,
-                max_compressed_bytes: COMPRESSED_LIMIT,
-            },
-            &mut mailbox,
-        );
-        (result, stream.control, stream.disconnected, stream.socket)
-    })
+    let (_continue_running, stop) = watch::channel(false);
+    host_session::exchange(
+        Connection { control, data },
+        if caller { Role::Caller } else { Role::Listener },
+        Settings {
+            local_call: &local,
+            peer_call: &peer,
+            max_message_bytes: MESSAGE_LIMIT,
+            max_compressed_bytes: COMPRESSED_LIMIT,
+        },
+        mailbox,
+        stop,
+        |_| {},
+    )
     .await
-    .map_err(io::Error::other)?;
-    if !disconnected {
-        let teardown = timeout(CONNECT_TIMEOUT, async {
-            if caller || result.is_err() {
-                control.request("DISCONNECT").await?;
-            }
-            loop {
-                match control.line().await?.as_str() {
-                    "DISCONNECTED" => return Ok(()),
-                    "WRONG" => return Err(io::Error::other("modem rejected disconnect")),
-                    _ => {}
-                }
-            }
-        })
-        .await;
-        if result.is_ok() {
-            teardown??;
-        }
-    }
-    result
-}
-
-struct Data {
-    socket: BufReader<BlockingTcp>,
-    pending: Vec<u8>,
-    control: Control,
-    runtime: Handle,
-    disconnected: bool,
-}
-
-impl Read for Data {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.socket.read(buf)
-    }
-}
-
-impl BufRead for Data {
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        self.socket.fill_buf()
-    }
-
-    fn consume(&mut self, count: usize) {
-        self.socket.consume(count);
-    }
-}
-
-impl Write for Data {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if self.pending.len() == CHUNK {
-            self.flush()?;
-        }
-        let count = bytes.len().min(CHUNK - self.pending.len());
-        self.pending.extend_from_slice(&bytes[..count]);
-        Ok(count)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        if self.pending.is_empty() {
-            return Ok(());
-        }
-        self.socket.get_mut().write_all(&self.pending)?;
-        let count = self.pending.len();
-        let result = self
-            .runtime
-            .block_on(timeout_in_runtime(&mut self.control, count));
-        if result
-            .as_ref()
-            .is_err_and(|error| error.kind() == io::ErrorKind::ConnectionAborted)
-        {
-            self.disconnected = true;
-        }
-        result?;
-        self.pending.clear();
-        Ok(())
-    }
-}
-
-async fn timeout_in_runtime(control: &mut Control, count: usize) -> io::Result<()> {
-    timeout(IO_TIMEOUT, control.acknowledged(count)).await?
 }

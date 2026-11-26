@@ -692,7 +692,13 @@ a Winlink service, reserves spectrum, or authorizes transmission.
 
 \landscapeplantuml{build/diagrams/Linkwise_Propagation_Evidence_Flow}{Proposed propagation evidence flow: independent collection, normalization, persistent analysis snapshots, candidate links, MCP queries, and policy-mediated sessions.}{fig:propagation-evidence-flow}
 
-The current Rust radio-control MCP prototype is a limited implementation slice; its verified scope and remaining gaps are recorded in the lab-notes chronicle. It does not implement the complete autonomous link manager described here.
+The Rust MCP service now supports station-file imports, durable gateway
+rankings, and a shadow station lifecycle with simulated radio readback,
+bounded authorization, and recorded outcomes. A managed radio-free BW500
+profile binds a station attempt to two waveform modems and a real B2F
+peer exchange. The native radio path, physical transmit control, and
+Winlink gateway qualification remain release gates. The implementation status is tracked in
+\path{docs/architecture/station-integration-status.md}.
 
 \subsection{Layered software design}
 ChatGPT Agent or Codex supplies the external decision-making orchestration.
@@ -861,7 +867,15 @@ active or past decision.
 \end{description}
 
 \subsection{Deployment}
-The baseline installation is one operator workstation running the AI host, OLM, radio/modem/client adapters, and local persistence. The radio attaches via CAT/USB plus audio/PTT. Internet is used for RMS and optional propagation evidence, but PTT watchdog, release, emergency stop, radio lease, and transmit timeout are local. MCP, rigctld, and modem command ports are loopback-bound by default. Remote deployment requires authenticated transport and explicit security review.
+The production baseline is the Rocky Linux 9 ARM64 server RPM. The station
+design locates OLM, radio/modem/client adapters, and persistent state on the
+station host. The radio attaches via CAT/USB plus audio/PTT. Internet access
+supports RMS and optional propagation evidence. The PTT watchdog, release,
+emergency stop, radio lease, and transmit timeout remain local to the station.
+The stock VARA reference peer provides a separate interoperability fixture.
+MCP runs over local stdio in the current implementation. Radio and modem
+control endpoints are local by default. Remote deployment requires
+authenticated transport and explicit security review.
 
 \subsection{Evidence model}
 Every item is tagged as \evidence{DOCUMENTED}, \evidence{MEASURED},

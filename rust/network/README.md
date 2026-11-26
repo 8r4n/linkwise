@@ -15,11 +15,26 @@ target/debug/linkwise-network simulate global-100 17 1
 target/debug/linkwise-network scenario global-30 > scenario.json
 target/debug/linkwise-network simulate scenario.json 17 30
 python3 tests/autonomous.py target/debug/linkwise-network
+python3 tests/autonomous.py target/debug/linkwise-network --live-queue
 ```
 
-The Python fixture shows complete station profiles and how to commission a topology, submit binary data, run the daemons, read the result, and check the destination receipt. A running station owns its database exclusively. Stop it before submitting or reading through the CLI. The manual send and listen commands assume a trusted local byte stream. The modem fixture accepts the network binary, an existing linkwise-modemd binary, and a BW500 level-4 profile as positional arguments.
+The Python fixture shows complete station profiles and how to commission a topology, submit binary data, run the daemons, read the result, and check the destination receipt. The manual `send` and `listen` commands assume a trusted local byte stream. The modem fixture accepts the network binary, an existing `linkwise-modemd` binary, and a BW500 level-4 profile as positional arguments.
 
 For the independent codec check, build tests/interop with its own lockfile, export a queued A-to-B bundle with `export DB A ID`, then run the interop binary with that file and an output filename. Import its output with `import DB A FILE` and use `read DB A ID` to retrieve the four binary bytes 00 ff 0a 0d.
+
+## Submit and read while a station is running
+
+On Unix, add an optional `control_socket` path to the station profile. Put the socket in a directory accessible only to the station owner, such as one created with `mkdir -m 700 /path/to/private`. The same OS account can invoke these commands while `serve` owns the database.
+
+```sh
+linkwise-network queue /path/to/private/A.sock submit request-1 F message.bin 300
+linkwise-network queue /path/to/private/A.sock list
+linkwise-network queue /path/to/private/F.sock read BUNDLE_ID > received.bin
+```
+
+The submission returns a bundle ID once the queue entry commits. Reuse the same request ID, destination, bytes, and lifetime if the response was lost. Reusing a request ID for a different submission returns an error. The request ID is retained until the bundle expiry plus the seven-day receipt retention window. `list` shows queue state and whether a destination receipt reached the source. `read` returns the destination's committed payload bytes. The original database CLI commands remain available when the daemon is stopped.
+
+`serve` removes its socket on normal exit. After a forced stop, remove the stale socket file once the previous daemon has exited. The socket protocol uses one length-prefixed JSON command and reply per connection. The `queue` CLI handles binary input and output.
 
 ## Observed behavior
 

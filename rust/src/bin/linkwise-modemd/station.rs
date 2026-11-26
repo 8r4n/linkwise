@@ -126,6 +126,12 @@ const AUDIO_RATE: usize = 48_000;
 const BURST_EDGE: usize = AUDIO_RATE / 10;
 const HISTORY_LIMIT: usize = AUDIO_RATE * 6 + 2 * BURST_EDGE;
 
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "native playback was interrupted before its presentation estimate elapsed. Restart the modem after checking the audio and external PTT route"
+)]
+pub(super) struct PresentationUnconfirmed;
+
 pub(super) struct NativeAudio {
     capture: Capture,
     output_name: String,
@@ -136,6 +142,7 @@ pub(super) struct NativeAudio {
     history: VecDeque<f32>,
     position: u64,
     completed: VecDeque<Range<u64>>,
+    playback_pending: bool,
 }
 
 impl NativeAudio {
@@ -156,6 +163,7 @@ impl NativeAudio {
             history: VecDeque::with_capacity(HISTORY_LIMIT),
             position: 0,
             completed: VecDeque::new(),
+            playback_pending: false,
         };
         playback::check_output(&output.name, output.channel).map_err(|error| {
             io::Error::other(format!("Check output {:?}: {error}", output.name))
@@ -232,6 +240,7 @@ impl NativeAudio {
             Playback::start(&self.output_name, self.output_channel, burst).map_err(|error| {
                 io::Error::other(format!("Open output {:?}: {error}", self.output_name))
             })?;
+        self.playback_pending = true;
         // Ignore input during our own burst, including samples queued before
         // transmission. The stream remains open across half-duplex turns.
         loop {
@@ -247,12 +256,33 @@ impl NativeAudio {
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
+        self.playback_pending = false;
+        self.reset_capture();
+        Ok(())
+    }
+
+    pub(super) fn check_presentation(&self) -> io::Result<()> {
+        // Dropping the write future stops its CPAL stream. The device may
+        // still present queued frames, and external PTT state is unknown.
+        if self.playback_pending {
+            return Err(io::Error::other(PresentationUnconfirmed));
+        }
+        Ok(())
+    }
+
+    pub(super) fn discard_after_abort(&mut self) -> io::Result<()> {
+        self.check_presentation()?;
+        while self.capture_block()?.is_some() {}
+        self.reset_capture();
+        Ok(())
+    }
+
+    fn reset_capture(&mut self) {
         self.detector = BurstDetector::new(AUDIO_RATE as u32);
         self.bw500_detector = self.bw500_detector.as_ref().map(|_| Acquisition::default());
         self.history.clear();
         self.completed.clear();
         self.position = 0;
-        Ok(())
     }
 }
 

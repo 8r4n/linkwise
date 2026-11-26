@@ -6,11 +6,12 @@ use bp7::{
 use redb::{Database, ReadableTable, TableDefinition, WriteTransaction};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{path::Path, time::Duration};
+use std::{collections::BTreeSet, path::Path, time::Duration};
 
 const CONFIG: TableDefinition<&str, &str> = TableDefinition::new("station_v1");
 const ROWS: TableDefinition<&str, &[u8]> = TableDefinition::new("objects_v1");
 const WIRE: TableDefinition<&str, &[u8]> = TableDefinition::new("wire_v1");
+const SUBMISSIONS: TableDefinition<&str, &[u8]> = TableDefinition::new("submissions_v1");
 pub const LIMIT: usize = 64 * 1024;
 const MAX_OBJECTS: u64 = 4096;
 const MAX_LIFETIME: u64 = 7 * 86400 * 1000;
@@ -49,6 +50,14 @@ pub struct Row {
     pub ingress: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct Submission {
+    id: String,
+    destination: String,
+    hash: String,
+    ttl: u64,
+}
+
 pub struct Station {
     db: Database,
     name: String,
@@ -68,6 +77,7 @@ impl Station {
             config.insert("name", name)?;
             tx.open_table(ROWS)?;
             tx.open_table(WIRE)?;
+            tx.open_table(SUBMISSIONS)?;
         }
         tx.commit()?;
         Ok(Self {
@@ -116,18 +126,60 @@ impl Station {
         tab.insert("clock", now.to_string().as_str())?;
         Ok(())
     }
-    pub fn submit(&self, dest: &str, data: &[u8], now: u64, ttl: u64) -> Result<String> {
+    pub fn submit(
+        &self,
+        dest: &str,
+        data: &[u8],
+        clock: impl FnOnce() -> u64,
+        ttl: u64,
+        request_id: Option<&str>,
+    ) -> Result<String> {
         ensure!(
             dest != self.name && data.len() <= LIMIT - 1024,
             "invalid destination or payload size"
         );
         let tx = self.db.begin_write()?;
+        let submission = if let Some(key) = request_id {
+            ensure!(
+                (1..=64).contains(&key.len())
+                    && key
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"-_".contains(&byte)),
+                "invalid submission request ID"
+            );
+            let hash = digest(data);
+            let table = tx.open_table(SUBMISSIONS)?;
+            if let Some(existing) = table.get(key)? {
+                let original: Submission = serde_json::from_slice(existing.value())?;
+                ensure!(
+                    original.destination == dest && original.hash == hash && original.ttl == ttl,
+                    "submission request ID already used for different data"
+                );
+                return Ok(original.id);
+            }
+            Some((key, hash))
+        } else {
+            None
+        };
+        // Sample wall time after acquiring the writer so concurrent callers cannot
+        // report a false clock regression by taking transactions out of order.
+        let now = clock();
         Self::check_clock(&tx, now)?;
         let mut body = vec![0];
         body.extend_from_slice(data);
         let mut b = self.make(&tx, dest, body, now, ttl)?;
         let id = b.id();
         self.record(&tx, &mut b, now, false)?;
+        if let Some((key, hash)) = submission {
+            let record = Submission {
+                id: id.clone(),
+                destination: dest.to_owned(),
+                hash,
+                ttl,
+            };
+            tx.open_table(SUBMISSIONS)?
+                .insert(key, serde_json::to_vec(&record)?.as_slice())?;
+        }
         tx.commit()?;
         Ok(id)
     }
@@ -216,7 +268,7 @@ impl Station {
             .insert(id.as_str(), b.to_cbor().as_slice())?;
         Ok(())
     }
-    pub fn receive(&self, wire: &[u8], now: u64) -> Result<String> {
+    pub fn receive(&self, wire: &[u8], clock: impl FnOnce() -> u64) -> Result<String> {
         ensure!(wire.len() <= LIMIT, "oversize bundle");
         let mut b = Bundle::try_from(wire)?;
         ensure!(b.validate().is_ok() && b.crc_valid(), "invalid BP bundle");
@@ -240,6 +292,7 @@ impl Station {
             "invalid hop count"
         );
         let tx = self.db.begin_write()?;
+        let now = clock();
         Self::check_clock(&tx, now)?;
         self.record(&tx, &mut b, now, true)?;
         tx.commit()?;
@@ -262,8 +315,9 @@ impl Station {
             .value()
             .to_vec())
     }
-    pub fn outgoing(&self, id: &str, now: u64) -> Result<Vec<u8>> {
+    pub fn outgoing(&self, id: &str, clock: impl FnOnce() -> u64) -> Result<Vec<u8>> {
         let tx = self.db.begin_write()?;
+        let now = clock();
         Self::check_clock(&tx, now)?;
         tx.commit()?;
         let row = self
@@ -300,20 +354,20 @@ impl Station {
         Ok(())
     }
     pub fn read_payload(&self, id: &str) -> Result<Vec<u8>> {
-        let row = self
-            .list()?
-            .into_iter()
-            .find(|r| r.id == id)
-            .context("unknown object")?;
+        let tx = self.db.begin_read()?;
+        let rows = tx.open_table(ROWS)?;
+        let row: Row = serde_json::from_slice(rows.get(id)?.context("unknown object")?.value())?;
         if row.state != "delivered" || row.receipt {
             bail!("not a delivered data object")
         }
-        let b = Bundle::try_from(self.bytes(id)?)?;
+        let wire = tx.open_table(WIRE)?;
+        let b = Bundle::try_from(wire.get(id)?.context("no retained wire object")?.value())?;
         Ok(b.payload().context("missing payload")?[1..].to_vec())
     }
-    pub fn prune(&self, now: u64) -> Result<usize> {
-        let mut expired = Vec::new();
+    pub fn prune(&self, clock: impl FnOnce() -> u64) -> Result<usize> {
+        let mut expired = BTreeSet::new();
         let tx = self.db.begin_write()?;
+        let now = clock();
         Self::check_clock(&tx, now)?;
         {
             let mut rows = tx.open_table(ROWS)?;
@@ -321,13 +375,27 @@ impl Station {
                 let (_, v) = item?;
                 let row: Row = serde_json::from_slice(v.value())?;
                 if row.expires.saturating_add(MAX_LIFETIME) <= now {
-                    expired.push(row.id);
+                    expired.insert(row.id);
                 }
             }
             let mut wire = tx.open_table(WIRE)?;
             for id in &expired {
                 rows.remove(id.as_str())?;
                 wire.remove(id.as_str())?;
+            }
+        }
+        if !expired.is_empty() {
+            let mut submissions = tx.open_table(SUBMISSIONS)?;
+            let mut expired_requests = Vec::new();
+            for entry in submissions.iter()? {
+                let (key, value) = entry?;
+                let record: Submission = serde_json::from_slice(value.value())?;
+                if expired.contains(&record.id) {
+                    expired_requests.push(key.value().to_owned());
+                }
+            }
+            for key in expired_requests {
+                submissions.remove(key.as_str())?;
             }
         }
         tx.commit()?;
@@ -383,23 +451,23 @@ mod tests {
         let dir = tempfile::tempdir()?;
         let a = Station::open(&dir.path().join("a"), "A")?;
         let path = dir.path().join("b");
-        let id = a.submit("B", &[0, 255], 100, 20)?;
-        let wire = a.outgoing(&id, 101)?;
+        let id = a.submit("B", &[0, 255], || 100, 20, None)?;
+        let wire = a.outgoing(&id, || 101)?;
         {
             let b = Station::open(&path, "B")?;
-            b.receive(&wire, 102)?;
+            b.receive(&wire, || 102)?;
         }
         let b = Station::open(&path, "B")?;
-        b.receive(&wire, 103)?;
+        b.receive(&wire, || 103)?;
         assert_eq!(b.list()?.len(), 2);
         assert_eq!(b.read_payload(&id)?, [0, 255]);
         let receipt = b.list()?.into_iter().find(|r| r.receipt).unwrap();
         a.finish(&id)?;
-        a.receive(&b.outgoing(&receipt.id, 104)?, 105)?;
+        a.receive(&b.outgoing(&receipt.id, || 104)?, || 105)?;
         assert!(a.list()?[0].confirmed);
-        assert!(b.receive(&wire, 101).is_err());
-        assert!(b.receive(&wire, 121).is_err());
-        assert!(b.receive(&wire[..8], 122).is_err());
+        assert!(b.receive(&wire, || 101).is_err());
+        assert!(b.receive(&wire, || 121).is_err());
+        assert!(b.receive(&wire[..8], || 122).is_err());
         Ok(())
     }
     #[test]
@@ -415,6 +483,38 @@ mod tests {
         assert!(b.partial("two")?.is_empty());
         assert!(b.checkpoint("one", &[4]).is_err());
         assert!(b.checkpoint("two", &vec![0; LIMIT + 1]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn submission_retry_survives_restart_and_rejects_different_content() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("a");
+        let a = Station::open(&path, "A")?;
+        let id = a.submit("B", b"payload", || 100, 20, Some("request-1"))?;
+        drop(a);
+
+        let a = Station::open(&path, "A")?;
+        let replay = a.submit("B", b"payload", || 101, 20, Some("request-1"))?;
+        assert_eq!(replay, id);
+        assert!(
+            a.submit("B", b"different", || 102, 20, Some("request-1"))
+                .is_err()
+        );
+        assert!(
+            a.submit("C", b"payload", || 102, 20, Some("request-1"))
+                .is_err()
+        );
+        assert!(
+            a.submit("B", b"payload", || 102, 21, Some("request-1"))
+                .is_err()
+        );
+        assert_eq!(a.list()?.len(), 1);
+
+        let after_retention = 120 + MAX_LIFETIME;
+        assert_eq!(a.prune(|| after_retention)?, 1);
+        let new_id = a.submit("B", b"payload", || after_retention, 20, Some("request-1"))?;
+        assert_ne!(new_id, id);
         Ok(())
     }
 }

@@ -33,7 +33,7 @@ cms = { version = "0.2", default-features = false, features = ["std"], optional 
 der = { version = "0.7", optional = true }
 x509-cert = { version = "0.2", default-features = false, features = ["std"], optional = true }
 tempfile = "3"
-fs2 = { version = "0.4", optional = true }
+fs2 = "0.4"
 async-trait = "0.1"
 base64 = "=0.23.1"
 flate2 = "1"
@@ -50,9 +50,9 @@ rustfft = "6"
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = { version = "0.10", optional = true }
+sha2 = "0.10"
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync", "signal"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "process", "time", "sync", "signal"] }
 tokio-stream = { version = "0.1.19", optional = true }
 uuid = { version = "1", features = ["v4", "serde"] }
 mail-parser = "=0.11.4"
@@ -71,8 +71,8 @@ libc = "0.2"
 rustix = { version = "1.1", features = ["fs"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-service = "0.8.1"
-windows-sys = { version = "0.61", features = ["Win32_Security", "Win32_System_EventLog"] }
+windows-service = { version = "0.8.1", optional = true }
+windows-sys = { version = "0.61", features = ["Win32_Security", "Win32_System_EventLog"], optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
@@ -81,9 +81,9 @@ tokio = { version = "1", features = ["test-util"] }
 tokio-openssl = { version = "0.6", optional = true }
 
 [features]
-audio-device = ["dep:cpal"]
-demo = ["dep:axum", "dep:sha2", "dep:tokio-stream"]
+audio-device = ["dep:cpal", "dep:windows-service", "dep:windows-sys"]
+demo = ["dep:axum", "dep:tokio-stream"]
 rocky-mail-tls = ["dep:openssl", "dep:tokio-openssl"]
 pqc-chat = ["secure-transfer", "dep:openssl", "dep:openssl-sys", "dep:foreign-types"]
 mail-tls = ["dep:rustls", "rustls/ring", "rustls/tls12", "dep:tokio-rustls"]
-secure-transfer = ["dep:aws-lc-rs", "dep:rustls", "rustls/fips", "dep:tokio-rustls", "dep:webpki", "dep:x509-cert", "dep:cms", "dep:der", "dep:fs2", "dep:image", "dep:pdf-writer", "dep:qrcode", "dep:rqrr", "tokio/fs", "tokio/io-std"]
+secure-transfer = ["dep:aws-lc-rs", "dep:rustls", "rustls/fips", "dep:tokio-rustls", "dep:webpki", "dep:x509-cert", "dep:cms", "dep:der", "dep:image", "dep:pdf-writer", "dep:qrcode", "dep:rqrr", "tokio/fs", "tokio/io-std"]

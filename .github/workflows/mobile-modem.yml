@@ -28,6 +28,10 @@ jobs:
           persist-credentials: false
       - run: |
           cargo test --locked --manifest-path rust/Cargo.toml --lib winlink::
+      - name: Verify the managed BW500 station through MCP
+        run: |
+          LINKWISE_BW500_PROFILE=$(python3 tools/fetch-modem-profile.py) \
+            cargo test --locked --manifest-path rust/Cargo.toml --test olm_station managed_virtual_bw500 -- --ignored
       - run: |
           rustup target add aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android
           for target in aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android; do

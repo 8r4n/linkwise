@@ -1,3 +1,5 @@
+#[cfg(unix)]
+mod control;
 mod link;
 mod node;
 mod replay;
@@ -14,7 +16,12 @@ use std::{
     path::Path,
     time::Duration,
 };
-const USAGE: &str = "linkwise-network simulate six|N|global-N|scenario.json [seed] [runs]\n  replay six|global-N SEED [FORECAST_JSON]\n  scenario six|N|global-N\n  submit DB NODE DEST FILE TTL_SECONDS\n  list DB NODE | read DB NODE ID | prune DB NODE\n  send DB NODE ID LOOPBACK_ADDR | listen DB NODE LOOPBACK_ADDR\n  serve DB NODE PROFILE_JSON SECONDS (0 for continuous)\n  receive-stream DB NODE CONNECTED_DATA_ADDR";
+const USAGE: &str = "linkwise-network simulate six|N|global-N|scenario.json [seed] [runs]\n  replay six|global-N SEED [FORECAST_JSON]\n  scenario six|N|global-N\n  submit DB NODE DEST FILE TTL_SECONDS\n  list DB NODE | read DB NODE ID | prune DB NODE\n  send DB NODE ID LOOPBACK_ADDR | listen DB NODE LOOPBACK_ADDR\n  serve DB NODE PROFILE_JSON SECONDS (0 for continuous)\n  receive-stream DB NODE CONNECTED_DATA_ADDR\n  queue SOCKET submit REQUEST_ID DEST FILE TTL_SECONDS | queue SOCKET list | queue SOCKET read ID (Unix)";
+
+fn ttl_millis(seconds: u64) -> Result<u64> {
+    seconds.checked_mul(1000).context("lifetime overflow")
+}
+
 fn scenario(arg: &str) -> Result<sim::Scenario> {
     if let Some(n) = arg.strip_prefix("global-") {
         return sim::global(n.parse()?);
@@ -79,6 +86,10 @@ fn main() -> Result<()> {
             );
         }
         ["scenario", arg] => println!("{}", serde_json::to_string_pretty(&scenario(arg)?)?),
+        #[cfg(unix)]
+        ["queue", socket, args @ ..] => control::command(Path::new(socket), args)?,
+        #[cfg(not(unix))]
+        ["queue", ..] => bail!("queue socket requires Unix"),
         ["simulate", arg, rest @ ..] if rest.len() <= 2 => {
             let s = scenario(arg)?;
             let seed = rest
@@ -114,25 +125,24 @@ fn main() -> Result<()> {
             let now = bp7::dtn_time_now;
             match (*command, rest) {
                 ("serve", [config, seconds]) => node::serve(&st, node, config, seconds.parse()?)?,
-                ("export", [id]) => std::io::stdout().write_all(&st.outgoing(id, now())?)?,
+                ("export", [id]) => std::io::stdout().write_all(&st.outgoing(id, now)?)?,
                 ("import", [file]) => {
-                    println!("{}", st.receive(&bounded(file, spool::LIMIT)?, now())?)
+                    println!("{}", st.receive(&bounded(file, spool::LIMIT)?, now)?)
                 }
                 ("submit", [dest, file, ttl]) => println!(
                     "{}",
                     st.submit(
                         dest,
                         &bounded(file, spool::LIMIT - 1024)?,
-                        now(),
-                        ttl.parse::<u64>()?
-                            .checked_mul(1000)
-                            .context("lifetime overflow")?
+                        now,
+                        ttl_millis(ttl.parse()?)?,
+                        None,
                     )?
                 ),
                 ("list", []) => println!("{}", serde_json::to_string_pretty(&st.list()?)?),
-                ("prune", []) => println!("{}", st.prune(now())?),
+                ("prune", []) => println!("{}", st.prune(now)?),
                 ("read", [id]) => std::io::stdout().write_all(&st.read_payload(id)?)?,
-                ("send", [id, address]) => link::send(&st, id, &mut connect(address)?, now())?,
+                ("send", [id, address]) => link::send(&st, id, &mut connect(address)?, now)?,
                 ("listen", [address]) => {
                     let server = TcpListener::bind(addr(address)?)?;
                     println!("{}", server.local_addr()?);

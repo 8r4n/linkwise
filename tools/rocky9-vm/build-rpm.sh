@@ -5,22 +5,57 @@ repo=$(git -C "$here" rev-parse --show-toplevel)
 revision=${1:?"Git revision"}
 work=${2:?"absolute evidence directory"}
 profile=${3:-server}
+container_runtime=${LINKWISE_CONTAINER_RUNTIME:-docker}
 case "$profile" in
-    server) rpm_flags=--mail-tls ;;
+    server|wsl) rpm_flags=--mail-tls ;;
     assessment) rpm_flags= ;;
-    *) echo 'Expected server or assessment profile' >&2; exit 2 ;;
+    *) echo 'Expected server, assessment, or wsl profile' >&2; exit 2 ;;
 esac
+target_arch=aarch64
+if [[ $profile == wsl ]]; then
+    target_arch=${LINKWISE_BUILD_ARCH:-$(uname -m)}
+fi
+case "$target_arch" in
+    aarch64)
+        platform=linux/arm64
+        image_digest=d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6
+        ;;
+    x86_64)
+        platform=linux/amd64
+        # Use the architecture-specific manifest on mixed-architecture hosts.
+        image_digest=d644d203142cd5b54ad2a83a203e1dee68af2229f8fe32f52a30c6e1d3c3a9e0
+        ;;
+    *) printf 'Unsupported Rocky RPM architecture: %s\n' "$target_arch" >&2; exit 2 ;;
+esac
+if [[ $work != /* || ! -d $work ]]; then
+    echo 'Provide an existing absolute evidence directory.' >&2
+    exit 2
+fi
+if ! command -v "$container_runtime" >/dev/null; then
+    printf 'Container runtime unavailable: %s\n' "$container_runtime" >&2
+    exit 127
+fi
+commit=$(git -C "$repo" rev-parse --verify --end-of-options "$revision^{commit}")
 source="$work/build-source"
 mkdir "$source"
-git -C "$repo" archive "$revision" | tar -xf - -C "$source"
-git -C "$repo" rev-parse "$revision^{commit}" > "$work/build-revision.txt"
-image=rockylinux@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6
-docker run --rm --interactive --platform linux/arm64 -v "$source:/src" \
+git -C "$repo" archive "$commit" | tar -xf - -C "$source"
+printf '%s\n' "$commit" > "$work/build-revision.txt"
+signing_fixture="$work/rocky-signing-check.sh"
+cp "$here/signing-check.sh" "$signing_fixture"
+image="docker.io/library/rockylinux@sha256:$image_digest"
+"$container_runtime" run --rm --interactive --platform "$platform" -v "$source:/src:Z" \
     -e "LINKWISE_RPM_FLAGS=$rpm_flags" \
-    -v "$here/signing-check.sh:/signing-check.sh:ro" -w /src "$image" bash -se <<'GUEST' 2>&1 | tee "$work/rocky-rpm-build.log"
+    -e "LINKWISE_BUILD_IMAGE=$image" \
+    -e "LINKWISE_TARGET_ARCH=$target_arch" \
+    -v "$signing_fixture:/signing-check.sh:ro,Z" -w /src "$image" bash -se <<'GUEST' 2>&1 | tee "$work/rocky-rpm-build.log"
+printf 'Pinned builder: %s\n' "$LINKWISE_BUILD_IMAGE"
+cat /etc/rocky-release
+uname -m
+test "$(uname -m)" = "$LINKWISE_TARGET_ARCH"
 dnf -y install curl-minimal gcc gcc-c++ make python3 pkgconf-pkg-config alsa-lib-devel openssl-devel \
-    rpm-build rpm-sign gnupg2 checkpolicy policycoreutils-devel selinux-policy-devel
-export RUSTUP_TOOLCHAIN=1.100.0-aarch64-unknown-linux-gnu
+    rpm-build rpm-sign gnupg2 checkpolicy policycoreutils-devel selinux-policy-devel \
+    systemd-rpm-macros sudo
+export RUSTUP_TOOLCHAIN="1.100.0-${LINKWISE_TARGET_ARCH}-unknown-linux-gnu"
 curl --proto '=https' --tlsv1.2 -fsS https://sh.rustup.rs | sh -s -- -y --default-toolchain "$RUSTUP_TOOLCHAIN" --profile minimal
 export PATH="$HOME/.cargo/bin:$PATH"
 cargo --version
@@ -29,6 +64,12 @@ if [[ -n $LINKWISE_RPM_FLAGS ]]; then flags+=("$LINKWISE_RPM_FLAGS"); fi
 python3 tools/package-modem.py rpm "${flags[@]}" --output-dir installer-artifacts
 rpm=$(find installer-artifacts -maxdepth 1 -name '*.rpm' -print -quit)
 sha256sum "$rpm"
-python3 tools/smoke-test-package.py "$rpm"
+if [[ $LINKWISE_RPM_FLAGS == --mail-tls ]]; then
+    BW500_PROFILE=$(python3 tools/fetch-modem-profile.py)
+    sha256sum "$BW500_PROFILE"
+    python3 tools/smoke-test-package.py "$rpm" --rocky-bw500-profile "$BW500_PROFILE"
+else
+    python3 tools/smoke-test-package.py "$rpm"
+fi
 bash /signing-check.sh
 GUEST

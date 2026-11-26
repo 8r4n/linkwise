@@ -24,7 +24,7 @@ use uuid::Uuid;
 
 type Modem = Handle<SimulatedDevice>;
 
-const USAGE: &str = "Usage: linkwise-modemd --help | --version | --audio-devices | --check-config FILE | --check-station FILE | --serve-station FILE | --simulate | --simulate-audio PROFILE | --serve-bench CALL [CONTROL_PORT DATA_PORT] | --serve-virtual-bw500 CALL PROFILE [CONTROL_PORT DATA_PORT AUDIO_PORT] | --serve-virtual-wide CALL BANDWIDTH [CONTROL_PORT DATA_PORT AUDIO_PORT] | --virtual-audio-device AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE";
+const USAGE: &str = "Usage: linkwise-modemd --help | --version | --audio-devices | --check-config FILE | --check-station FILE | --serve-station FILE | --simulate | --simulate-audio PROFILE | --serve-bench CALL [CONTROL_PORT DATA_PORT] | --serve-virtual-bw500 CALL PROFILE [CONTROL_PORT DATA_PORT AUDIO_PORT] | --serve-virtual-wide CALL BANDWIDTH [CONTROL_PORT DATA_PORT AUDIO_PORT] | --serve-managed-virtual-bw500 CALL PROFILE | --virtual-audio-device AUDIO_PORT INPUT_DEVICE OUTPUT_DEVICE";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -39,7 +39,7 @@ async fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args == ["--help"] || args == ["-h"] {
         println!(
-            "{USAGE}\n\n--audio-devices lists native input and output names.\n--check-config validates the station settings and any configured profile.\n--check-station checks audio input, output format, and local port availability.\n--serve-station runs the configured native modem or receive diagnostics.\n--simulate and --simulate-audio run local modem simulations.\n--serve-bench serves a simulated echo peer over local TCP.\n--serve-virtual-bw500 and --serve-virtual-wide use a loopback waveform cable.\n--virtual-audio-device attaches isolated audio devices to that cable (audio-device build)."
+            "{USAGE}\n\n--audio-devices lists native input and output names.\n--check-config validates the station settings and any configured profile.\n--check-station checks audio input, output format, and local port availability.\n--serve-station runs the configured native modem or receive diagnostics.\n--simulate and --simulate-audio run local modem simulations.\n--serve-bench serves a simulated echo peer over local TCP.\n--serve-virtual-bw500 and --serve-virtual-wide use a loopback waveform cable.\n--serve-managed-virtual-bw500 accepts one capability-bound loopback association.\n--virtual-audio-device attaches isolated audio devices to that cable (audio-device build)."
         );
         return;
     }
@@ -97,6 +97,15 @@ async fn main() {
     {
         if let Err(error) = virtual_host::bridge(&args[1..]).await {
             eprintln!("Virtual audio device failed: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    if let [mode, call, profile] = args.as_slice()
+        && mode == "--serve-managed-virtual-bw500"
+    {
+        if let Err(error) = virtual_host::serve_managed(call, std::path::Path::new(profile)).await {
+            eprintln!("Managed virtual modem failed: {error}");
             std::process::exit(1);
         }
         return;
