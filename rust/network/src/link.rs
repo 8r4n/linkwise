@@ -15,8 +15,13 @@ fn put(s: &mut impl Write, n: usize) -> Result<()> {
     s.flush()?;
     Ok(())
 }
-pub fn send(st: &Station, id: &str, s: &mut (impl Read + Write), now: u64) -> Result<()> {
-    let bytes = st.outgoing(id, now)?;
+pub fn send(
+    st: &Station,
+    id: &str,
+    s: &mut (impl Read + Write),
+    clock: impl FnOnce() -> u64,
+) -> Result<()> {
+    let bytes = st.outgoing(id, clock)?;
     let hash = digest(&bytes);
     s.write_all(MAGIC)?;
     s.write_all(hash.as_bytes())?;
@@ -41,7 +46,7 @@ pub fn send(st: &Station, id: &str, s: &mut (impl Read + Write), now: u64) -> Re
 pub fn receive(
     st: &Station,
     s: &mut (impl Read + Write),
-    clock: impl Fn() -> u64,
+    clock: impl FnOnce() -> u64,
 ) -> Result<String> {
     let mut magic = [0; 4];
     s.read_exact(&mut magic)?;
@@ -66,7 +71,7 @@ pub fn receive(
         st.checkpoint(hash, &[])?;
         anyhow::bail!("wire digest mismatch")
     }
-    let id = st.receive(&data, clock())?;
+    let id = st.receive(&data, clock)?;
     s.write_all(b"SYNC")?;
     s.write_all(&h)?;
     s.flush()?;
