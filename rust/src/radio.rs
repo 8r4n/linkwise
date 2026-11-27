@@ -11,7 +11,7 @@ use std::{collections::BTreeMap, env, sync::Arc, time::Duration};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,
     sync::Mutex,
     time::timeout,
@@ -20,6 +20,7 @@ use uuid::Uuid;
 
 const DEFAULT_RIGCTLD_ADDR: &str = "hamlib:4532";
 const DEFAULT_TIMEOUT_MS: u64 = 2_000;
+const MAX_RIGCTLD_REPLY_BYTES: u64 = 512 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
@@ -306,6 +307,7 @@ pub struct RigctldRadio {
     address: String,
     timeout: Duration,
     command_revision: Arc<Mutex<u64>>,
+    command_connection: Arc<Mutex<Option<BufReader<TcpStream>>>>,
     writes_enabled: bool,
     min_frequency_hz: Option<u64>,
     max_frequency_hz: Option<u64>,
@@ -318,6 +320,11 @@ enum ReplyFormat {
     Values(usize),
     Status,
     CapabilityDump,
+}
+
+struct RigctldReply {
+    lines: Vec<String>,
+    status: i32,
 }
 
 impl RigctldRadio {
@@ -335,6 +342,7 @@ impl RigctldRadio {
                     .unwrap_or(DEFAULT_TIMEOUT_MS),
             ),
             command_revision: Arc::new(Mutex::new(0)),
+            command_connection: Arc::new(Mutex::new(None)),
             writes_enabled: env::var("LINKWISE_RADIO_WRITES")
                 .is_ok_and(|v| v.eq_ignore_ascii_case("true")),
             min_frequency_hz: env::var("LINKWISE_MIN_FREQ_HZ")
@@ -368,64 +376,155 @@ impl RigctldRadio {
         command: &str,
         format: ReplyFormat,
     ) -> Result<Vec<String>, RadioError> {
-        // Normal CAT callers hold command_revision across each transaction.
-        // The release-only safety path uses its own connection without waiting.
+        let mut connection = self.command_connection.lock().await;
+        self.command(&mut connection, command, format).await
+    }
+
+    async fn command(
+        &self,
+        slot: &mut Option<BufReader<TcpStream>>,
+        command: &str,
+        format: ReplyFormat,
+    ) -> Result<Vec<String>, RadioError> {
+        // A timeout or cancellation leaves the slot empty and drops the stream
+        // with any partial response. The next command connects without replaying.
+        let previous = slot.take();
         let operation = async {
-            let mut stream = TcpStream::connect(&self.address)
-                .await
-                .map_err(|e| RadioError::Unavailable(e.to_string()))?;
-            stream
-                .write_all(format!("{command}\n").as_bytes())
-                .await
-                .map_err(|e| RadioError::Unavailable(e.to_string()))?;
-            stream
-                .flush()
-                .await
-                .map_err(|e| RadioError::Unavailable(e.to_string()))?;
-            let mut reader = BufReader::new(stream);
-            let mut lines = Vec::new();
-            loop {
-                let mut line = String::new();
-                let read = reader
-                    .read_line(&mut line)
-                    .await
-                    .map_err(|e| RadioError::Unavailable(e.to_string()))?;
-                if read == 0 {
-                    return Err(RadioError::Protocol(format!(
-                        "incomplete response to {command}"
-                    )));
-                }
-                let line = line.trim().to_owned();
-                if line.is_empty() {
-                    continue;
-                }
-                if line.starts_with("RPRT ") {
-                    if line != "RPRT 0" {
-                        return Err(RadioError::Protocol(format!("{command}: {line}")));
-                    }
-                    return match format {
-                        ReplyFormat::Status => Ok(lines),
-                        ReplyFormat::CapabilityDump if !lines.is_empty() => Ok(lines),
-                        _ => Err(RadioError::Protocol(format!(
-                            "incomplete response to {command}"
-                        ))),
-                    };
-                }
-                if matches!(format, ReplyFormat::Status) {
-                    return Err(RadioError::Protocol(format!(
-                        "{command}: unexpected status {line}"
-                    )));
-                }
-                lines.push(line);
-                // Successful short-protocol getters have a fixed number of lines and no terminator.
-                if matches!(format, ReplyFormat::Values(expected) if lines.len() == expected) {
-                    return Ok(lines);
-                }
-            }
+            let mut stream = match previous {
+                Some(stream) => stream,
+                None => BufReader::new(
+                    TcpStream::connect(&self.address)
+                        .await
+                        .map_err(|e| RadioError::Unavailable(e.to_string()))?,
+                ),
+            };
+            let reply = Self::exchange(&mut stream, command).await?;
+            Ok::<_, RadioError>((stream, reply))
         };
-        timeout(self.timeout, operation)
+        let (stream, reply) = timeout(self.timeout, operation)
             .await
-            .map_err(|_| RadioError::Unavailable(format!("{command} timed out")))?
+            .map_err(|_| RadioError::Unavailable(format!("{command} timed out")))??;
+        *slot = Some(stream);
+        Self::reply_values(command, format, reply)
+    }
+
+    async fn exchange(
+        stream: &mut BufReader<TcpStream>,
+        command: &str,
+    ) -> Result<RigctldReply, RadioError> {
+        let verb = command.split_ascii_whitespace().next().unwrap_or_default();
+        let expected_header = match verb {
+            "1" => "dump_caps",
+            r"\get_info" => "get_info",
+            "e" => "get_mem",
+            "E" => "set_mem",
+            "f" => "get_freq",
+            "F" => "set_freq",
+            "i" => "get_split_freq",
+            "I" => "set_split_freq",
+            "j" => "get_rit",
+            "J" => "set_rit",
+            "l" => "get_level",
+            "L" => "set_level",
+            "m" => "get_mode",
+            "M" => "set_mode",
+            "p" => "get_parm",
+            "s" => "get_split_vfo",
+            "S" => "set_split_vfo",
+            "t" => "get_ptt",
+            "T" => "set_ptt",
+            "u" => "get_func",
+            "U" => "set_func",
+            "v" => "get_vfo",
+            "V" => "set_vfo",
+            "x" => "get_split_mode",
+            "X" => "set_split_mode",
+            "y" => "get_ant",
+            "Y" => "set_ant",
+            "z" => "get_xit",
+            "Z" => "set_xit",
+            _ => return Err(RadioError::Protocol(format!("unknown command {verb}"))),
+        };
+        // Hamlib's extended response protocol terminates even variable-length
+        // replies with RPRT, so the next command starts on a fresh frame.
+        stream
+            .get_mut()
+            .write_all(format!("+{command}\n").as_bytes())
+            .await
+            .map_err(|e| RadioError::Unavailable(e.to_string()))?;
+
+        let mut has_header = false;
+        let mut lines = Vec::new();
+        let mut line = String::new();
+        let mut reader = stream.take(MAX_RIGCTLD_REPLY_BYTES);
+        loop {
+            line.clear();
+            reader
+                .read_line(&mut line)
+                .await
+                .map_err(|e| RadioError::Unavailable(e.to_string()))?;
+            if !line.ends_with('\n') {
+                if reader.limit() == 0 {
+                    return Err(RadioError::Protocol(format!(
+                        "response to {command} exceeded {MAX_RIGCTLD_REPLY_BYTES} bytes"
+                    )));
+                }
+                return Err(RadioError::Protocol(format!(
+                    "incomplete response to {command}"
+                )));
+            }
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if let Some(status) = line.strip_prefix("RPRT ") {
+                let status = status
+                    .parse()
+                    .map_err(|_| RadioError::Protocol(format!("{command}: invalid {line}")))?;
+                if status == 0 && !has_header {
+                    return Err(RadioError::Protocol(format!(
+                        "{command}: missing extended response header"
+                    )));
+                }
+                return Ok(RigctldReply { lines, status });
+            }
+            if !has_header {
+                if line.split_once(':').map(|(name, _)| name) != Some(expected_header) {
+                    return Err(RadioError::Protocol(format!(
+                        "{command}: invalid extended response header {line}"
+                    )));
+                }
+                has_header = true;
+                continue;
+            }
+            lines.push(line.to_owned());
+        }
+    }
+
+    fn reply_values(
+        command: &str,
+        format: ReplyFormat,
+        reply: RigctldReply,
+    ) -> Result<Vec<String>, RadioError> {
+        let RigctldReply { lines, status } = reply;
+        if status != 0 {
+            return Err(RadioError::Protocol(format!("{command}: RPRT {status}")));
+        }
+        match format {
+            ReplyFormat::Status if lines.is_empty() => Ok(lines),
+            ReplyFormat::CapabilityDump if !lines.is_empty() => Ok(lines),
+            ReplyFormat::Values(expected) if lines.len() >= expected => Ok(lines
+                .into_iter()
+                .take(expected)
+                .map(|line| match line.split_once(':') {
+                    Some((_, value)) => value.trim_start().to_owned(),
+                    None => line,
+                })
+                .collect()),
+            _ => Err(RadioError::Protocol(format!(
+                "unexpected response to {command}"
+            ))),
+        }
     }
 
     async fn scalar_unlocked(&self, command: &str) -> Result<String, RadioError> {
@@ -517,8 +616,11 @@ impl RigctldRadio {
     }
 
     async fn read_ptt_unlocked(&self) -> Result<bool, RadioError> {
-        self.scalar_unlocked("t")
-            .await?
+        Self::parse_ptt(&self.scalar_unlocked("t").await?)
+    }
+
+    fn parse_ptt(value: &str) -> Result<bool, RadioError> {
+        value
             .parse::<u8>()
             .map(|value| value != 0)
             .map_err(|error| RadioError::Protocol(error.to_string()))
@@ -1219,8 +1321,15 @@ impl RadioControlPort for RigctldRadio {
                 "PTT key-up is unavailable until the session authorization and one-use permit arbiter is configured".into(),
             ));
         }
-        self.command_unlocked("T 0", ReplyFormat::Status).await?;
-        let observed = self.read_ptt_unlocked().await.ok();
+        // Release owns a separate connection and bypasses ordinary CAT locking.
+        let mut connection = None;
+        self.command(&mut connection, "T 0", ReplyFormat::Status)
+            .await?;
+        let observed = self
+            .command(&mut connection, "t", ReplyFormat::Values(1))
+            .await
+            .ok()
+            .and_then(|reply| Self::parse_ptt(&reply[0]).ok());
         Ok(PttObservation {
             requested_action: PttAction::KeyDown,
             observed_ptt_asserted: observed,
@@ -1427,6 +1536,7 @@ mod tests {
             address: listener.local_addr().unwrap().to_string(),
             timeout: Duration::from_secs(2),
             command_revision: Arc::new(Mutex::new(0)),
+            command_connection: Arc::new(Mutex::new(None)),
             writes_enabled: true,
             min_frequency_hz: Some(7_000_000),
             max_frequency_hz: Some(7_300_000),
@@ -1437,44 +1547,102 @@ mod tests {
         (radio, listener)
     }
 
-    async fn expect_command(listener: &TcpListener, expected: &str) -> TcpStream {
-        let (stream, _) = listener.accept().await.unwrap();
-        let mut stream = BufReader::new(stream);
+    async fn accept(listener: &TcpListener) -> BufReader<TcpStream> {
+        BufReader::new(listener.accept().await.unwrap().0)
+    }
+
+    async fn expect_command(stream: &mut BufReader<TcpStream>, expected: &str) {
         let mut command = String::new();
         stream.read_line(&mut command).await.unwrap();
         assert_eq!(command.trim_end(), expected);
-        stream.into_inner()
     }
 
-    async fn answer(listener: &TcpListener, expected: &str, response: &str) {
-        let mut stream = expect_command(listener, expected).await;
-        stream.write_all(response.as_bytes()).await.unwrap();
-        // rigctld keeps successful GET connections open, even without an RPRT line.
-        assert_eq!(stream.read(&mut [0; 1]).await.unwrap(), 0);
+    async fn expect_disconnect(stream: &mut BufReader<TcpStream>) {
+        let result = stream.read(&mut [0; 1]).await;
+        assert!(
+            matches!(&result, Ok(0))
+                || result.is_err_and(|error| error.kind() == std::io::ErrorKind::ConnectionReset)
+        );
     }
 
-    async fn answer_state(listener: &TcpListener, frequency: &str, mode: &str) {
-        answer(listener, "\\get_info", "Dummy\n").await;
-        answer(listener, "f", frequency).await;
-        answer(listener, "m", mode).await;
-        answer(listener, "t", "0\n").await;
-        answer(listener, "l RFPOWER", "0.25\n").await;
+    async fn answer(stream: &mut BufReader<TcpStream>, expected: &str, response: &str) {
+        expect_command(stream, expected).await;
+        stream
+            .get_mut()
+            .write_all(response.as_bytes())
+            .await
+            .unwrap();
+    }
+
+    async fn answer_mode(stream: &mut BufReader<TcpStream>, width: u32) {
+        answer(
+            stream,
+            "+m",
+            &format!("get_mode:\nMode: USB\nPassband: {width}\nRPRT 0\n"),
+        )
+        .await;
+    }
+
+    async fn answer_frequency(stream: &mut BufReader<TcpStream>, frequency: u64) {
+        answer(
+            stream,
+            "+f",
+            &format!("get_freq:\nFrequency: {frequency}\nRPRT 0\n"),
+        )
+        .await;
+    }
+
+    async fn answer_state(stream: &mut BufReader<TcpStream>, frequency: u64, width: u32) {
+        answer(stream, "+\\get_info", "get_info:\nInfo: Dummy\nRPRT 0\n").await;
+        answer_frequency(stream, frequency).await;
+        answer_mode(stream, width).await;
+        answer(stream, "+t", "get_ptt:\nPTT: 0\nRPRT 0\n").await;
+        answer(stream, "+l RFPOWER", "get_level: RFPOWER\n0.25\nRPRT 0\n").await;
     }
 
     #[tokio::test]
-    async fn rigctld_reads_and_verifies_fixed_length_mode_responses() {
+    async fn rigctld_reuses_one_socket_for_framed_reads_and_writes() {
         let (radio, listener) = test_rig().await;
         let backend = tokio::spawn(async move {
-            answer(&listener, "m", "USB\n2400\n").await;
-            answer(&listener, "s", "1\nVFOB\n").await;
-            answer(&listener, "x", "USB\n1800\n").await;
-            answer(&listener, "t", "0\n").await;
-            answer(&listener, "m", "USB\n2400\n").await;
-            answer(&listener, "M USB 1800", "RPRT 0\n").await;
-            answer(&listener, "m", "USB\n1800\n").await;
-            answer_state(&listener, "7100000\n", "USB\n1800\n").await;
+            let mut stream = accept(&listener).await;
+            answer_mode(&mut stream, 2400).await;
+            answer(
+                &mut stream,
+                "+1",
+                "dump_caps:\nCan get Mode:\tY\nCan set Mode: Y\nRPRT 0\n",
+            )
+            .await;
+            answer(&mut stream, "+t", "get_ptt:\nRPRT -4\n").await;
+            answer_mode(&mut stream, 2400).await;
+            answer(
+                &mut stream,
+                "+s",
+                "get_split_vfo:\nSplit: 1\nTX VFO: VFOB\nRPRT 0\n",
+            )
+            .await;
+            answer(
+                &mut stream,
+                "+x",
+                "get_split_mode:\nTX Mode: USB\nTX Passband: 1800\nRPRT 0\n",
+            )
+            .await;
+            answer(&mut stream, "+t", "get_ptt:\nPTT: 0\nRPRT 0\n").await;
+            answer_mode(&mut stream, 2400).await;
+            answer(&mut stream, "+M USB 1800", "set_mode: USB 1800\nRPRT 0\n").await;
+            answer_mode(&mut stream, 1800).await;
+            answer_state(&mut stream, 7_100_000, 1800).await;
         });
 
+        assert_eq!(
+            radio.control("mode").await.unwrap(),
+            ControlValue::Mode("USB".into())
+        );
+        let caps = radio.capabilities().await.unwrap();
+        assert!(capability_flag(&caps.backend_dump, "Can get Mode"));
+        assert!(matches!(
+            radio.control("ptt").await,
+            Err(RadioError::Protocol(_))
+        ));
         assert_eq!(
             radio.control("passband_hz").await.unwrap(),
             ControlValue::PassbandHz(2400)
@@ -1508,20 +1676,26 @@ mod tests {
         let (radio, listener) = test_rig().await;
         let (reading, readback_started) = oneshot::channel();
         let backend = tokio::spawn(async move {
-            answer(&listener, "t", "0\n").await;
-            answer(&listener, "F 7100000", "RPRT 0\n").await;
-            let mut readback = expect_command(&listener, "f").await;
+            let mut ordinary = accept(&listener).await;
+            answer(&mut ordinary, "+t", "get_ptt:\nPTT: 0\nRPRT 0\n").await;
+            answer(&mut ordinary, "+F 7100000", "set_freq: 7100000\nRPRT 0\n").await;
+            expect_command(&mut ordinary, "+f").await;
             reading.send(()).unwrap();
 
-            answer(&listener, "T 0", "RPRT 0\n").await;
-            answer(&listener, "t", "1\n").await;
-            readback.write_all(b"7100000\n").await.unwrap();
-            answer_state(&listener, "7100000\n", "USB\n2400\n").await;
+            let mut release = accept(&listener).await;
+            answer(&mut release, "+T 0", "set_ptt: 0\nRPRT 0\n").await;
+            answer(&mut release, "+t", "get_ptt:\nPTT: 1\nRPRT 0\n").await;
+            ordinary
+                .get_mut()
+                .write_all(b"get_freq:\nFrequency: 7100000\nRPRT 0\n")
+                .await
+                .unwrap();
+            answer_state(&mut ordinary, 7_100_000, 2400).await;
 
-            answer(&listener, "t", "0\n").await;
-            answer(&listener, "F 7200000", "RPRT 0\n").await;
-            answer(&listener, "f", "7200000\n").await;
-            answer_state(&listener, "7200000\n", "USB\n2400\n").await;
+            answer(&mut ordinary, "+t", "get_ptt:\nPTT: 0\nRPRT 0\n").await;
+            answer(&mut ordinary, "+F 7200000", "set_freq: 7200000\nRPRT 0\n").await;
+            answer_frequency(&mut ordinary, 7_200_000).await;
+            answer_state(&mut ordinary, 7_200_000, 2400).await;
         });
         let first = tokio::spawn({
             let radio = radio.clone();
@@ -1559,8 +1733,13 @@ mod tests {
     async fn rigctld_unacknowledged_write_invalidates_prior_revision() {
         let (radio, listener) = test_rig().await;
         let backend = tokio::spawn(async move {
-            answer(&listener, "t", "0\n").await;
-            drop(expect_command(&listener, "F 7100000").await);
+            let mut stream = accept(&listener).await;
+            answer(&mut stream, "+t", "get_ptt:\nPTT: 0\nRPRT 0\n").await;
+            answer(&mut stream, "+F 7100000", "set_freq: 7100000\nRPRT 0").await;
+            drop(stream);
+
+            let mut next = accept(&listener).await;
+            answer_frequency(&mut next, 7_100_000).await;
         });
         let result = radio
             .set_control(
@@ -1578,6 +1757,82 @@ mod tests {
             )
             .await;
         assert!(matches!(result, Err(RadioError::PolicyDenied(_))));
+        assert_eq!(
+            radio.control("frequency_hz").await.unwrap(),
+            ControlValue::FrequencyHz(7_100_000)
+        );
+        backend.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rigctld_discards_a_socket_after_cancellation_mid_reply() {
+        let (radio, listener) = test_rig().await;
+        let (reply_started, started) = oneshot::channel();
+        let backend = tokio::spawn(async move {
+            let mut stream = accept(&listener).await;
+            answer(&mut stream, "+m", "get_mode:\nMode: USB\n").await;
+            reply_started.send(()).unwrap();
+            expect_disconnect(&mut stream).await;
+
+            let mut next = accept(&listener).await;
+            answer_frequency(&mut next, 7_200_000).await;
+        });
+        let pending = tokio::spawn({
+            let radio = radio.clone();
+            async move { radio.control("mode").await }
+        });
+        started.await.unwrap();
+        pending.abort();
+        assert!(pending.await.unwrap_err().is_cancelled());
+        assert_eq!(
+            radio.control("frequency_hz").await.unwrap(),
+            ControlValue::FrequencyHz(7_200_000)
+        );
+        backend.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rigctld_rejects_a_reply_to_the_wrong_command() {
+        let (radio, listener) = test_rig().await;
+        let backend = tokio::spawn(async move {
+            let mut stream = accept(&listener).await;
+            answer(&mut stream, "+t", "get_freq:\nFrequency: 0\nRPRT 0\n").await;
+            expect_disconnect(&mut stream).await;
+
+            let mut next = accept(&listener).await;
+            answer(&mut next, "+t", "get_ptt:\nPTT: 1\nRPRT 0\n").await;
+        });
+        assert!(matches!(
+            radio.control("ptt").await,
+            Err(RadioError::Protocol(message)) if message.contains("invalid extended response header")
+        ));
+        assert_eq!(
+            radio.control("ptt").await.unwrap(),
+            ControlValue::PttState(true)
+        );
+        backend.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rigctld_reconnects_after_an_unterminated_reply_times_out() {
+        let (mut radio, listener) = test_rig().await;
+        radio.timeout = Duration::from_millis(200);
+        let backend = tokio::spawn(async move {
+            let mut stream = accept(&listener).await;
+            answer(&mut stream, "+m", "get_mode:\nMode: USB\nPassband: 2400\n").await;
+            expect_disconnect(&mut stream).await;
+
+            let mut next = accept(&listener).await;
+            answer_frequency(&mut next, 7_100_000).await;
+        });
+        assert!(matches!(
+            radio.control("mode").await,
+            Err(RadioError::Unavailable(message)) if message == "m timed out"
+        ));
+        assert_eq!(
+            radio.control("frequency_hz").await.unwrap(),
+            ControlValue::FrequencyHz(7_100_000)
+        );
         backend.await.unwrap();
     }
 
